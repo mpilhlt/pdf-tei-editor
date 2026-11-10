@@ -36,7 +36,7 @@ import { isFrozenFile, standOffContributions, userHasRole } from '../modules/acl
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
-import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics } from '../modules/lint-utils.js'
+import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
   setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint
@@ -166,8 +166,9 @@ class UnitReviewPlugin extends Plugin {
     this.#slot = this.#xmlEditor.createExtensionSlot([])
     // the review diagnostics are listed in the diagnostics drawer and the strip shows the state, also
     // while review mode is off: no hover tooltip, which would repeat the context menu's review
-    // buttons, and no lint gutter marker
-    this.#xmlEditor.createExtensionSlot(drawerOnlyDiagnostics(SOURCE))
+    // buttons, and no lint gutter marker. Instead, the lint gutter marker of other diagnostics on the
+    // line (e.g. LLM findings) takes the review's color (see app.css)
+    this.#xmlEditor.createExtensionSlot([drawerOnlyDiagnostics(SOURCE), markClassGutterLines()])
 
     this.#toggle = PanelUtils.createToggleButton({
       name: 'unitReviewToggle',

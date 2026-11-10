@@ -5,10 +5,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EditorState } from '@codemirror/state';
+import { gutterLineClass } from '@codemirror/view';
 import { setDiagnostics } from '@codemirror/lint';
 import {
   addDismissListener, applyMergedDiagnostics, clearDiagnosticsOnChange, collectDiagnostics, diagnosticKey, dismissDiagnostics, fixChanges,
-  mergeDiagnostics, replacesDiagnostics, revealsDiagnostics
+  markClassGutterLines, mergeDiagnostics, replacesDiagnostics, revealsDiagnostics
 } from '../../../app/src/modules/lint-utils.js';
 
 const DOC = 'hello brave new world';
@@ -233,5 +234,38 @@ describe('clearDiagnosticsOnChange', () => {
     const state = editorWith([brave]);
     const tr = state.update({ changes: { from: 7, insert: 'x' }, ...setDiagnostics(state, [{ ...brave, from: 6, to: 12 }]) });
     assert.deepStrictEqual(collectDiagnostics(tr.state).map(d => [d.message, d.from, d.to]), [['brave', 6, 12]]);
+  });
+});
+
+describe('markClassGutterLines', () => {
+  /**
+   * @param {EditorState} state
+   * @returns {[number, string][]}
+   */
+  function lineClasses(state) {
+    /** @type {[number, string][]} */
+    const result = [];
+    for (const set of state.facet(gutterLineClass)) {
+      set.between(0, state.doc.length, (from, _to, marker) => { result.push([from, marker.elementClass]); });
+    }
+    return result;
+  }
+
+  it('gives the line of a diagnostic with markClass the prefixed class, also on later lines', () => {
+    const base = EditorState.create({ doc: 'first\nsecond line', extensions: markClassGutterLines() });
+    const state = base.update(setDiagnostics(base, [
+      { from: 9, to: 12, severity: 'info', message: 'r', markClass: 'cm-unit-review-not-ok' },
+      { from: 0, to: 2, severity: 'info', message: 'plain' }
+    ])).state;
+    assert.deepStrictEqual(lineClasses(state), [[6, 'cm-lint-line-cm-unit-review-not-ok']]);
+  });
+
+  it('maps through document changes and drops the class when the diagnostics are replaced', () => {
+    const base = EditorState.create({ doc: 'first\nsecond', extensions: markClassGutterLines() });
+    let state = base.update(setDiagnostics(base, [{ from: 7, to: 9, severity: 'info', message: 'r', markClass: 'x' }])).state;
+    state = state.update({ changes: { from: 0, insert: 'ab' } }).state;
+    assert.deepStrictEqual(lineClasses(state), [[8, 'cm-lint-line-x']]);
+    state = state.update(setDiagnostics(state, [])).state;
+    assert.deepStrictEqual(lineClasses(state), []);
   });
 });
