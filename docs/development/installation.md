@@ -47,7 +47,14 @@ npm install
 
 Most plugins live in the [pte-plugins](https://github.com/mpilhlt/pte-plugins) repository and are optional dependencies of the editor: `uv sync --extra <name>` installs one (e.g. `--extra kisski`), `--extra default` the default set and `--all-extras` all of them (see the `[project.optional-dependencies]` table in `pyproject.toml`). `uv sync` removes plugins that are not selected, so pass the extras every time; `uv run` (used by the npm scripts) keeps the installed set.
 
-To work on plugins, clone pte-plugins next to the editor and install the plugins as editable packages instead; see its README.
+To work on plugins, clone pte-plugins next to the editor and install its plugins into the editor's environment as editable packages, with their Python dependencies:
+
+```bash
+cd ../pte-plugins
+npm run dev:install    # PTE_ROOT=<editor checkout> if it is not ../pdf-tei-editor
+```
+
+The editor then loads the plugins from the pte-plugins checkout, so changes need neither a release nor a reinstall, and the dev server (`npm run start:dev`) also reloads on changes in their directories (see `get_plugin_reload_dirs()` in `fastapi_app/lib/plugins/plugin_paths.py`). The watched directories are determined when the server starts, so restart it after installing a new plugin. The editable installs also take precedence over versions of the same plugins installed in the Plugin Manager (`data/plugins/site/`); those are not loaded while the editable install exists, which the server log notes at startup. `uv sync` removes the editable installs again, and `uv sync --extra <name>` replaces them with the pinned versions; run `npm run dev:install` again afterwards. See the pte-plugins README for running the plugin tests.
 
 ### Build the Application
 

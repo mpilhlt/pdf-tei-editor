@@ -40,6 +40,8 @@ This schema is used to auto-generate the frontend API client.
 **Authentication**
 
 - `/api/v1/auth/login` - User login
+- `/api/v1/auth/token-login` - Exchange a personal access token (`Authorization: Bearer pte_...`) for a session
+- `/api/v1/auth/tokens` - List, create (`POST`) and revoke (`DELETE /{token_id}`) personal access tokens; `/eligible-users` lists the users the caller may create tokens for
 - `/api/v1/auth/logout` - User logout
 - `/api/v1/auth/session` - Session validation
 
@@ -299,7 +301,9 @@ Removes all generated documentation files.
 All CLI scripts and external tools that access the HTTP API should support these environment variables (from `.env` file):
 
 ```bash
-# API credentials
+# API credentials: a personal access token (preferred) ...
+API_TOKEN=pte_...
+# ... or username and password (used if API_TOKEN is not set)
 API_USER=admin
 API_PASSWORD=admin
 
@@ -310,20 +314,18 @@ API_BASE_URL=http://localhost:8000
 **Example usage:**
 
 ```bash
-# Create .env file with credentials
+# Create .env file with a personal access token (see docs/user-manual/access-tokens.md)
 cat > .env << EOF
-API_USER=admin
-API_PASSWORD=admin
+API_TOKEN=pte_...
 API_BASE_URL=http://localhost:8000
 EOF
 
 # Run CLI script (will read credentials from .env)
 node bin/batch-extract.js /path/to/pdfs --collection my_collection --extractor mock-extractor
 
-# Or override via CLI parameters
+# Or override via CLI parameters (--user/--password work instead of --token)
 node bin/batch-extract.js /path/to/pdfs \
-  --user admin \
-  --password admin \
+  --token pte_... \
   --base-url http://localhost:8000 \
   --collection my_collection \
   --extractor mock-extractor
@@ -331,8 +333,8 @@ node bin/batch-extract.js /path/to/pdfs \
 
 **CLI scripts should:**
 - Accept optional `--env <path>` parameter (default: `./.env`)
-- Support `--user`, `--password`, `--base-url` CLI parameters that override env vars
-- Use SHA-256 password hashing for authentication (matching frontend)
+- Support `--token`, `--user`, `--password`, `--base-url` CLI parameters that override env vars
+- Log in with the shared helper in `bin/lib/api-auth.js`: a token at `/api/v1/auth/token-login`, otherwise the plain text password at `/api/v1/auth/login`
 - Make authenticated requests with `X-Session-ID` header
 
 **Example implementations:**

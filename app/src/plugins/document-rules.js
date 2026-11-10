@@ -30,7 +30,7 @@
  * @import { documentRulesEditorDialogPart } from '../templates/document-rules-editor-dialog.types.js'
  * @import { documentRulesUpdateDialogPart } from '../templates/document-rules-update-dialog.types.js'
  * @import { documentRulesProposeDialogPart } from '../templates/document-rules-propose-dialog.types.js'
- * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse, ProposePatchResponse, ProposePullRequestResponse, UpstreamStatusResponse } from '../modules/api-client-v1.js'
+ * @import { ResourceDescriptorModel, OverrideModel, SelectionInfo, RefreshResourceResponse, SyncStatusResponse, HumanChangeResponse, ProposePatchResponse, ProposePullRequestResponse, UpstreamStatusRequest, UpstreamStatusResponse } from '../modules/api-client-v1.js'
  * @import { ModelChoice } from './inference-settings.js'
  * @import { StatusText } from '../modules/panels/index.js'
  */
@@ -79,6 +79,8 @@ const REPEATED_UPDATE_NOTICE = 'The selected machine rules were already updated 
 const GUIDE_ONLY_PROPOSAL_NOTICE = 'The machine rules will be marked as outdated until they are updated from the guide.'
 const MACHINE_PROPOSAL_NOTICE = 'The sync marker is updated: the machine rules are marked as in sync with the guide.'
 const MACHINE_OUTDATED_PROPOSAL_NOTICE = 'The machine rules were derived from a guide text that differs from the guide upstream; they will be marked as outdated.'
+const PULL_REQUEST_MERGE_INSTRUCTIONS = 'Once the pull request has been merged, close this dialog and use "Update to upstream" to apply the merged rules to this document.'
+const UNSAVED_CHANGES_MESSAGE = 'The selected override has unsaved changes. Save them? Otherwise they are lost.'
 const UNSAVED_PROPOSAL_NOTICE = 'Unsaved changes in the editor are not included. Save them first.'
 
 /**
@@ -105,6 +107,17 @@ function markdownLanguage() {
 }
 
 /**
+ * The action the sync status line links to, by sync status: "update" opens
+ * the "Update machine rules from guide" sub-dialog, "propose" proposes the
+ * pair upstream (which records the sync).
+ * @type {Readonly<Partial<Record<SyncStatusResponse['status'], 'update'|'propose'>>>}
+ */
+const SYNC_STATUS_ACTIONS = Object.freeze({
+  machine_outdated: 'update',
+  both_changed: 'propose'
+})
+
+/**
  * Status-line copy for each sync status of a human/machine layer pair (see
  * POST /document-rules/sync-status).
  * @type {Readonly<Record<SyncStatusResponse['status'], string>>}
@@ -113,7 +126,7 @@ const SYNC_STATUS_TEXT = Object.freeze({
   in_sync: 'In sync with the guide',
   machine_outdated: 'Machine rules outdated: the guide changed since the last sync',
   machine_edited: 'Machine rules edited by hand since the last sync',
-  both_changed: 'Machine rules outdated and edited by hand',
+  both_changed: 'Guide and machine rules both changed since the last sync. If the machine rules already match the guide, propose both upstream to record the sync',
   no_marker: 'No sync marker'
 })
 
@@ -402,6 +415,7 @@ class DocumentRulesPlugin extends Plugin {
           keymap.of([...defaultKeymap, ...historyKeymap]),
           xml(),
           getTheme(themeId).extensions,
+          EditorView.updateListener.of((update) => { if (update.docChanged) this._renderSaveButton() }),
           this._cmReadOnlyCompartment.of([EditorView.editable.of(false), EditorState.readOnly.of(true)])
         ]
       }),
@@ -429,6 +443,7 @@ class DocumentRulesPlugin extends Plugin {
           dialogSearch(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           getTheme(themeId).extensions,
+          EditorView.updateListener.of((update) => { if (update.docChanged) this._renderSaveButton() }),
           this._cmMdReadOnlyCompartment.of([EditorView.editable.of(false), EditorState.readOnly.of(true)])
         ]
       }),
@@ -437,7 +452,14 @@ class DocumentRulesPlugin extends Plugin {
 
     this._refDecorationSlot = this.#xmlEditor.createExtensionSlot([])
 
-    this._editorDialogUi.closeBtn.addEventListener('click', () => this._editorDialogUi.hide())
+    this._editorDialogUi.closeBtn.addEventListener('click', () => this._requestEditorClose())
+    this._editorDialogUi.addEventListener('sl-request-close', (event) => {
+      // Escape, the header's close button or an overlay click; nested Shoelace components may emit their own
+      if (event.target !== this._editorDialogUi || !this._isDirty()) return
+      event.preventDefault()
+      this._requestEditorClose()
+    })
+    this._editorDialogUi.noteInput.addEventListener('sl-input', () => this._renderSaveButton())
     this._editorDialogUi.newOverrideBtn.addEventListener('click', () => this._onNewOverride())
     this._editorDialogUi.saveBtn.addEventListener('click', () => this._onSave())
     this._editorDialogUi.deleteBtn.addEventListener('click', () => this._onDelete())
@@ -882,7 +904,34 @@ class DocumentRulesPlugin extends Plugin {
     let text = SYNC_STATUS_TEXT[response.status] ?? response.status
     if (response.synced_commit) text += ` (last sync: ${response.synced_commit.slice(0, 7)})`
     line.replaceChildren(icon, document.createTextNode(text))
+    const action = this._documentReadOnly ? null : SYNC_STATUS_ACTIONS[response.status]
+    if (action === 'update') {
+      line.append('. ', this._createActionLink('Update from guide', 'syncStatusUpdateLink', () => this._openUpdateDialog()))
+    } else if (action === 'propose') {
+      line.append('. ', this._createActionLink('Propose change upstream', 'syncStatusProposeLink', () => this._onProposeUpstreamClick()))
+    }
     line.style.display = ''
+  }
+
+  /**
+   * A link that runs `action` instead of navigating, for the dialog's status lines.
+   * @param {string} text
+   * @param {string} name - its `name` attribute, for tests and styling
+   * @param {() => Promise<void>} action
+   * @returns {HTMLAnchorElement}
+   */
+  _createActionLink(text, name, action) {
+    const link = document.createElement('a')
+    link.href = '#'
+    link.setAttribute('name', name)
+    link.textContent = text
+    link.addEventListener('click', (event) => {
+      event.preventDefault()
+      action().catch(error => {
+        this.#logger.warn(`document-rules: "${text}" failed: ` + String(error))
+      })
+    })
+    return link
   }
 
   /**
@@ -891,15 +940,20 @@ class DocumentRulesPlugin extends Plugin {
    * which overrides upstream now contains), then re-render the override row,
    * the status line and the buttons. Other kinds, and a failed request,
    * clear the status. Never rejects, so callers need not await it.
+   * @param {{ refetch?: boolean }} [options] - `refetch: true` makes the
+   *   server resolve the upstream branch heads anew instead of from its cache
    * @returns {Promise<void>}
    */
-  async _refreshUpstreamStatus() {
+  async _refreshUpstreamStatus({ refetch = false } = {}) {
     const request = ++this._upstreamStatusRequest
     /** @type {UpstreamStatusResponse|null} */
     let status = null
     if (this._currentResource?.kind === 'interpretation-ref') {
       try {
-        status = await this.#client.apiClient.documentRulesUpstreamStatus({ xml: this.state.xml, url: this._currentResource.url })
+        /** @type {UpstreamStatusRequest} */
+        const body = { xml: this.state.xml, url: this._currentResource.url }
+        if (refetch) body.refetch = true
+        status = await this.#client.apiClient.documentRulesUpstreamStatus(body)
       } catch (error) {
         if (request !== this._upstreamStatusRequest) return
         this.#logger.warn('document-rules: could not load upstream status: ' + String(error))
@@ -917,7 +971,8 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Show `_upstreamStatus` in the line below the sync status: what upstream
-   * changed, with a hint to "Update to upstream", and a line per layer that
+   * changed, with a link that does the same as the "Update to upstream"
+   * button (plain text for a read-only document), and a line per layer that
    * could not be compared. Hidden when there is nothing to say.
    */
   _renderUpstreamStatus() {
@@ -930,13 +985,17 @@ class DocumentRulesPlugin extends Plugin {
       if (status.refs_behind) parts.push('The guide upstream has changed since this document was annotated.')
       const inUpstream = countUpstreamIds(status, 'in_upstream')
       if (inUpstream > 0) parts.push(`${pluralizeOverrides(inUpstream)} now in upstream.`)
-      parts.push('Use "Update to upstream" to apply it.')
       const summary = document.createElement('div')
       const icon = document.createElement('sl-icon')
       icon.setAttribute('name', 'arrow-repeat')
       icon.style.verticalAlign = '-0.125em'
       icon.style.marginRight = '0.25rem'
-      summary.append(icon, document.createTextNode(parts.join(' ')))
+      summary.append(icon, document.createTextNode(parts.join(' ') + ' Use '))
+      // The button is hidden for a read-only document, so is the link
+      summary.append(this._documentReadOnly
+        ? '"Update to upstream"'
+        : this._createActionLink('Update to upstream', 'upstreamStatusUpdateLink', () => this._onUpdateToUpstreamLinkClick()))
+      summary.append(' to apply it.')
       children.push(summary)
     }
     for (const layer of status?.layers ?? []) {
@@ -973,13 +1032,20 @@ class DocumentRulesPlugin extends Plugin {
    * `sl-tab-show` handler of the layer tabs: open the descriptor of the
    * chosen layer in the same dialog. No-op for the layer already shown (the
    * event also fires when _renderLayerTabs() selects a tab).
+   * Unsaved changes of the shown override are offered for saving first.
    * @param {string} layer - the shown tab's panel name ("human"/"machine")
    * @returns {Promise<void>}
    */
   async _onLayerTabShow(layer) {
     if (!this._currentResource || layer === this._currentResource.layer) return
     const resource = this._currentGroup.find(r => r.layer === layer)
-    if (resource) await this._openResourceEditor(resource)
+    if (!resource) return
+    if (!(await this._resolveUnsavedEdits())) {
+      // Saving failed: stay on the shown layer
+      this._renderLayerTabs()
+      return
+    }
+    await this._openResourceEditor(resource)
   }
 
   /**
@@ -1030,6 +1096,7 @@ class DocumentRulesPlugin extends Plugin {
 
     dialogUi.newOverrideBtn.disabled = this._documentReadOnly
     dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
+    this._renderSaveButton()
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
     this._renderResetButtons()
     // A pair proposes both layers together, whatever is selected; a single resource proposes its selected override
@@ -1126,7 +1193,7 @@ class DocumentRulesPlugin extends Plugin {
     originalBtn.setAttribute('size', 'small')
     originalBtn.textContent = this._overrideLabel(null)
     originalBtn.variant = this._currentSelectedId === null ? 'primary' : 'default'
-    originalBtn.addEventListener('click', () => this._selectOverride(null))
+    originalBtn.addEventListener('click', () => this._onOverrideButtonClick(null))
     row.appendChild(originalBtn)
 
     this._currentOverrides.forEach((override) => {
@@ -1149,9 +1216,22 @@ class DocumentRulesPlugin extends Plugin {
       } else if (override.note) {
         btn.title = override.note
       }
-      btn.addEventListener('click', () => this._selectOverride(override.id))
+      btn.addEventListener('click', () => this._onOverrideButtonClick(override.id))
       row.appendChild(btn)
     })
+  }
+
+  /**
+   * Click handler of an override row button: select it, asking first to
+   * save unsaved changes of the shown override (see _resolveUnsavedEdits()).
+   * @param {string|null} overrideId
+   * @returns {Promise<void>}
+   */
+  async _onOverrideButtonClick(overrideId) {
+    if (overrideId === this._currentSelectedId) return
+    const resource = this._currentResource
+    if (!(await this._resolveUnsavedEdits()) || resource !== this._currentResource) return
+    await this._selectOverride(overrideId)
   }
 
   /**
@@ -1218,10 +1298,10 @@ class DocumentRulesPlugin extends Plugin {
    * the shown resource's current original (clears its "outdated" marker),
    * then refresh the sync and upstream status (the saved text may now match
    * upstream or no longer do so).
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>} whether the override was saved
    */
   async _onSave() {
-    if (this._currentSelectedId === null || this._currentResource === null) return
+    if (this._currentSelectedId === null || this._currentResource === null) return false
     const note = this._editorDialogUi.noteInput.value
     const text = this._currentShownText()
     const fragment_url = this._currentResource.url
@@ -1230,7 +1310,7 @@ class DocumentRulesPlugin extends Plugin {
       updated = await this.#client.apiClient.documentRulesUpdateOverrides(this._currentSelectedId, { note, text, fragment_url })
     } catch (error) {
       notify(`Could not save override: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
-      return
+      return false
     }
     const index = this._currentOverrides.findIndex(o => o.id === updated.id)
     if (index !== -1) this._currentOverrides[index] = updated
@@ -1239,9 +1319,11 @@ class DocumentRulesPlugin extends Plugin {
     // per-button tooltip (set from override.note at render time) would
     // otherwise stay stale until some other action forces a re-render.
     this._renderOverrideRow()
+    this._renderSaveButton()
     this._refreshSyncStatus()
     this._refreshUpstreamStatus()
     notify('Override saved.', 'success', 'check-circle')
+    return true
   }
 
   /**
@@ -1420,6 +1502,16 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
+   * The upstream status line's "Update to upstream" link: the same as the
+   * button, unless an update is already running.
+   * @returns {Promise<void>}
+   */
+  async _onUpdateToUpstreamLinkClick() {
+    if (this._editorDialogUi.updateToUpstreamBtn.disabled) return
+    await this._onUpdateToUpstream()
+  }
+
+  /**
    * The work of _onUpdateToUpstream() after its confirmation.
    * @returns {Promise<void>}
    */
@@ -1546,10 +1638,13 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Click handler of the editor dialog's "Propose upstream" button: a
    * human/machine pair is proposed as one patch in the propose sub-dialog,
-   * any other resource through the forge's web editor.
+   * any other resource through the forge's web editor. Unsaved changes of
+   * the shown override are offered for saving first.
    * @returns {Promise<void>}
    */
   async _onProposeUpstreamClick() {
+    // A proposal is built from the stored texts
+    if (!(await this._resolveUnsavedEdits())) return
     if (this._isPairGroup()) {
       await this._openProposeDialog()
     } else {
@@ -1573,8 +1668,25 @@ class DocumentRulesPlugin extends Plugin {
     ui.closeBtn.addEventListener('click', () => ui.hide())
     ui.addEventListener('sl-after-hide', (event) => {
       // Nested Shoelace components may emit their own sl-after-hide
-      if (event.target === ui) this._resetProposeDialog()
+      if (event.target !== ui) return
+      const pullRequestCreated = this._pullRequestCreated
+      this._resetProposeDialog()
+      this._onProposeDialogClosed(pullRequestCreated)
     })
+  }
+
+  /**
+   * After the propose sub-dialog closed, refresh the editor dialog's sync
+   * and upstream status: the pull request may have been merged meanwhile,
+   * so that "Update to upstream" now applies. After a created pull request
+   * the upstream status is fetched bypassing the server's cache of branch
+   * heads, which may still hold the commit before the merge.
+   * @param {boolean} pullRequestCreated
+   */
+  _onProposeDialogClosed(pullRequestCreated) {
+    if (!this._editorDialogUi.open || !this._currentResource) return
+    this._refreshSyncStatus()
+    this._refreshUpstreamStatus({ refetch: pullRequestCreated })
   }
 
   /**
@@ -1623,6 +1735,50 @@ class DocumentRulesPlugin extends Plugin {
   _hasUnsavedEdits() {
     const selected = this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
     return selected !== null && this._currentShownText() !== selected.text
+  }
+
+  /**
+   * Whether the selected override's text or note in the editor dialog
+   * differs from its stored version. False when no resource is shown or the
+   * original is selected (the editor is read-only then), and before
+   * install() created the editor views.
+   * @returns {boolean}
+   */
+  _isDirty() {
+    if (!this._currentResource) return false
+    if (!(this._currentResource.format === 'xml' ? this._cmView : this._cmMdView)) return false
+    const selected = this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
+    if (selected === null) return false
+    return this._currentShownText() !== selected.text || this._editorDialogUi.noteInput.value !== selected.note
+  }
+
+  /**
+   * Enable the "Save" button only while there are unsaved changes (see _isDirty()).
+   */
+  _renderSaveButton() {
+    if (!this._editorDialogUi) return
+    this._editorDialogUi.saveBtn.disabled = !this._isDirty()
+  }
+
+  /**
+   * Before the editor dialog leaves the shown override (layer switch,
+   * another override, a sub-dialog, closing): if it has unsaved changes,
+   * ask whether to save them; declining discards them.
+   * @returns {Promise<boolean>} false if saving failed and the caller should stay
+   */
+  async _resolveUnsavedEdits() {
+    if (!this._isDirty()) return true
+    const save = await this.getDependency('dialog').confirm(UNSAVED_CHANGES_MESSAGE, 'Unsaved changes')
+    if (!save) return true
+    return await this._onSave()
+  }
+
+  /**
+   * Close the editor dialog, asking first to save unsaved changes (see _resolveUnsavedEdits()).
+   * @returns {Promise<void>}
+   */
+  async _requestEditorClose() {
+    if (await this._resolveUnsavedEdits()) await this._editorDialogUi.hide()
   }
 
   /**
@@ -1771,7 +1927,8 @@ class DocumentRulesPlugin extends Plugin {
    * so that the server refuses it if the guide changed upstream since the
    * preview. A missing GitHub token is asked for and the request retried.
    * The button shows a spinner while the request runs. On success the pull
-   * request's number and link are shown and the button stays disabled
+   * request's number and link are shown, scrolled into view, with what to
+   * do once it is merged, and the button stays disabled
    * until the sub-dialog is reset, also across refreshes, so that no
    * duplicate is opened; on an error its message is shown and the button
    * enabled again. A pull request created after the sub-dialog was reset
@@ -1829,7 +1986,15 @@ class DocumentRulesPlugin extends Plugin {
     const created = response.fork
       ? `Pull request #${response.number} created from your fork ${response.fork}. `
       : `Pull request #${response.number} created. `
-    result.append(created, link)
+    const createdLine = document.createElement('div')
+    createdLine.append(created, link)
+    const instructions = document.createElement('div')
+    instructions.setAttribute('name', 'prMergeInstructions')
+    instructions.style.marginTop = '0.25rem'
+    instructions.textContent = PULL_REQUEST_MERGE_INSTRUCTIONS
+    result.append(createdLine, instructions)
+    // The result is below the fold of a long proposal
+    result.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }
 
   /**
@@ -1854,6 +2019,7 @@ class DocumentRulesPlugin extends Plugin {
    * shows as loading meanwhile and ignores further clicks; the sub-dialog
    * is not opened if, by the time the change arrives, the editor dialog was
    * closed, shows another rule category, or a newer request started.
+   * Unsaved changes of the shown override are offered for saving first.
    * Warns if the machine layer's selected override was itself accepted
    * from this dialog, since the sync marker stays unchanged until the
    * change is proposed upstream.
@@ -1863,6 +2029,9 @@ class DocumentRulesPlugin extends Plugin {
     const { human, machine } = this._currentPair()
     const btn = this._editorDialogUi.updateFromGuideBtn
     if (!human || !machine || btn.loading) return
+    // The sub-dialog works on the stored texts. Awaited only when there is
+    // something to save, so that the loading state below is set right away
+    if (this._isDirty() && !(await this._resolveUnsavedEdits())) return
     // The overrides and selection are those of the shown layer, which is the machine layer when the button is clicked
     const selectedMachineOverride = this._currentResource === machine
       ? this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
@@ -1938,7 +2107,7 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Ask the selected model for machine rules updated to the guide change
    * (POST /document-rules/update-from-guide) and show them as a diff against
-   * the current machine rules. If the provider needs an API key the user
+   * the current machine rules, scrolled into view. If the provider needs an API key the user
    * has not stored, asks for it and retries. A response or error that arrives after the
    * sub-dialog was closed or reopened is dropped, leaving the new session's
    * buttons alone (_resetUpdateDialog() has already reset them).
@@ -1982,6 +2151,8 @@ class DocumentRulesPlugin extends Plugin {
     ui.proposedDiff.style.display = ''
     ui.acceptBtn.style.display = ''
     ui.acceptBtn.disabled = false
+    // The proposal is below the guide change, out of view in a short window
+    ui.proposedHeading.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
   }
 
   /**

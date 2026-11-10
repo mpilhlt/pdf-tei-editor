@@ -9,12 +9,16 @@ Each installed plugin version is an unpacked wheel in its own directory::
 The directories of the installed versions (``installed`` in the plugin state) are put at the
 front of ``sys.path`` at startup, so a runtime-installed version takes precedence over a
 version installed into the environment with ``uv sync``, and its ``pte.plugins`` entry point
-is found by the normal discovery (``plugin_paths.get_installed_plugin_dirs()``). The site
+is found by the normal discovery (``plugin_paths.get_installed_plugin_dirs()``). Only an
+editable install of the same distribution (a plugin checkout under development, see
+:func:`without_editable`) takes precedence over a runtime-installed version. The site
 directory lies on the data volume, so it survives container recreation and is not touched by
 ``uv sync``.
 """
 
 import importlib
+import importlib.metadata
+import json
 import logging
 import shutil
 import sys
@@ -69,6 +73,50 @@ def is_site_path(path: Path, site_dir: Path | None = None) -> bool:
     """Whether a path lies inside the site directory."""
     base = (site_dir or get_site_dir()).resolve()
     return base in path.resolve().parents
+
+
+def editable_install(distribution: str) -> str | None:
+    """
+    The source URL of an editable install of a distribution in the environment, or None.
+
+    An editable install (``uv pip install -e``, e.g. ``npm run dev:install`` in a pte-plugins
+    checkout) records ``dir_info.editable`` in its ``direct_url.json`` (PEP 610).
+
+    Args:
+        distribution: Distribution name, e.g. ``pte-plugin-grobid``
+
+    Returns:
+        The ``url`` of the install (``file://...``), or None if the distribution is not installed editable
+    """
+    try:
+        text = importlib.metadata.distribution(distribution).read_text("direct_url.json")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+    if not text:
+        return None
+    try:
+        direct_url = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(direct_url, dict) or not (direct_url.get("dir_info") or {}).get("editable"):
+        return None
+    return str(direct_url.get("url", ""))
+
+
+def without_editable(entries: Iterable[InstalledPlugin]) -> tuple[InstalledPlugin, ...]:
+    """
+    The runtime-installed plugins whose distribution is not installed editable in the environment.
+
+    A plugin a developer installed editable from a checkout takes precedence over a version
+    installed at runtime: the runtime-installed version is neither put on ``sys.path`` nor listed.
+
+    Args:
+        entries: Installed plugins (``installed`` of the plugin state)
+
+    Returns:
+        The entries to activate
+    """
+    return tuple(entry for entry in entries if editable_install(entry.distribution) is None)
 
 
 def activate(entries: Iterable[InstalledPlugin], site_dir: Path | None = None) -> list[Path]:

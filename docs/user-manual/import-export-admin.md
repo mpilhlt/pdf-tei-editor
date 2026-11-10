@@ -241,18 +241,19 @@ Security notes:
 
 ### Scheduled backups with cron
 
-`fastapi_app/plugins/backup_restore/bin/backup-download.js` (shipped with the backup-restore plugin) logs in, downloads a backup to a timestamped file (`pdf-tei-editor_20261003T020000Z.zip`, UTC), verifies it (size, SHA-256, ZIP structure) and prunes old backups. Create a dedicated user with only the `backup` role and store its password in a file readable only by the cron user.
+`fastapi_app/plugins/backup_restore/bin/backup-download.js` (shipped with the backup-restore plugin) logs in, downloads a backup to a timestamped file (`pdf-tei-editor_20261003T020000Z.zip`, UTC), verifies it (size, SHA-256, ZIP structure) and prunes old backups. Create a dedicated user with only the `backup` role, create a [personal access token](access-tokens.md) for it and store the token in a file readable only by the cron user. A password file works too, but a token can be revoked without changing the account.
 
 ```bash
 # /etc/cron.d/pdf-tei-editor-backup: daily at 02:17
-17 2 * * * backup cd /opt/pdf-tei-editor && node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --user backup-cron --password-file /etc/pdf-tei-editor/backup.pw --base-url https://editor.example.org --quiet --ping-url https://hc-ping.com/<uuid>
+17 2 * * * backup cd /opt/pdf-tei-editor && node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/backups/pdf-tei-editor --token-file /etc/pdf-tei-editor/backup.token --base-url https://editor.example.org --quiet --ping-url https://hc-ping.com/<uuid>
 ```
 
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `--dest-dir <dir>` | required | Target directory (created with mode 0700) |
-| `--env <path>` | `./.env` | `.env` with `API_BASE_URL`, `API_USER`, `API_PASSWORD` |
+| `--env <path>` | `./.env` | `.env` with `API_BASE_URL` and `API_TOKEN` (or `API_USER`, `API_PASSWORD`) |
 | `--base-url <url>` | `API_BASE_URL` or `http://localhost:8000` | Server URL |
+| `--token-file <path>` | `API_TOKEN` | File containing a personal access token; used instead of username and password |
 | `--user <name>` | `API_USER` | Username |
 | `--password-file <path>` | `API_PASSWORD` | File containing the password |
 | `--prefix <str>` | `pdf-tei-editor` | File name prefix |
@@ -276,8 +277,9 @@ Recommendations:
 - Copy the backup directory off-host (`rclone`, `restic`, `rsync`): 3 copies, 2 media, 1 off-site. Encrypt off-site copies.
 - Test a restore on a scratch instance regularly.
 - Alert on a missing or stale backup (`--ping-url` or the age of the newest file); a failure mail alone is easily overlooked.
-- Use HTTPS; the password hash sent at login is equivalent to the password.
-- Rotate the password file when staff change.
+- Use HTTPS; the token or password is sent in plain text at login.
+- Renew the token before it expires; an expired token makes the run fail with exit code 2.
+- Revoke the token (or rotate the password file) when staff change.
 
 ---
 

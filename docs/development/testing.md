@@ -156,7 +156,7 @@ Example:
 
 ```python
 import pytest
-from fastapi_app.lib.utils.auth import verify_password, hash_password
+from fastapi_app.lib.utils.password_hash import verify_password, hash_password
 
 def test_password_hashing():
     password = "test123"

@@ -71,7 +71,8 @@ class TeiToolsPlugin extends Plugin {
       name: 'revisionHistoryBtn'
     })
     this.#revisionHistoryBtn.style.display = 'none'
-    xmlEditorApi.addToolbarWidget(this.#revisionHistoryBtn, 1)
+    // first button of the toolbar's history & review section (order 2, left of the review toggle), among the first hidden on overflow
+    xmlEditorApi.addToolbarWidget(this.#revisionHistoryBtn, 1, 'review', 2)
 
     this.#ui = this.createUi(createSingleFromTemplate('tei-revision-history-drawer', document.body))
 
@@ -264,8 +265,8 @@ class TeiToolsPlugin extends Plugin {
       const cellStyle = 'padding: 0.75rem 1rem; color: var(--sl-color-neutral-700);'
 
       const dateCell = document.createElement('td')
-      dateCell.style.cssText = cellStyle + ' font-family: var(--sl-font-mono); font-size: 0.8125rem; white-space: nowrap;'
-      dateCell.textContent = this.#formatDate(changeNode.getAttribute('when'))
+      dateCell.style.cssText = cellStyle + ' font-family: var(--sl-font-mono); font-size: 0.8125rem; white-space: pre;'
+      dateCell.textContent = this.#formatDate(changeNode.getAttribute('when')).replace(' ', '\n')
       row.appendChild(dateCell)
 
       const descCell = document.createElement('td')

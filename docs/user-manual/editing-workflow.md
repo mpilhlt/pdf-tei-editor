@@ -15,29 +15,41 @@ Shows the artifact type prefix (**Gold:** or **Version:**), the artifact label, 
 Contains action buttons grouped by function. What buttons are visible depends on the document state and your role (see [Toolbar buttons](#toolbar-buttons)).
 
 **Statusbar** (bottom strip)
-Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls and the **Focus** toggle. Right side: indentation style and cursor position.
+Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls and the **Focus** toggle. Right side: the review and comment counters (when the document has review marks or comments), indentation style, cursor position and, at the far right, the editor theme picker (palette icon). When the editor is narrow, the theme picker is the first item to be hidden.
 
 ---
 
 ## Toolbar Buttons
 
+The left part of the toolbar holds the editing controls. The right part is divided into three sections: document history and review, import and export, and the buttons that plugins add.
+
 | Button / Control | When visible | What it does |
 | --- | --- | --- |
 | ← diff / → diff | Merge view active | Navigate between changed chunks |
 | Current / Incoming (reject/accept all) | Merge view active | Accept or discard all incoming annotation changes at once |
-| **Wrap** switch | Always | Toggle soft line-wrapping in the editor |
-| **Header** switch | When document has a `<teiHeader>` | Fold or unfold the TEI header section |
+| Strict diff (paragraph icon) | Merge view active | Treat whitespace and line breaks as significant in the diff |
+| **Wrap** toggle | Always | Toggle soft line-wrapping in the editor |
+| **Header** toggle | When document has a `<teiHeader>` | Fold or unfold the TEI header section |
+| Edit header (card icon) | Not shown to annotators; enabled when the document is editable | Edit the metadata in the TEI header in a form |
+| People (group icon) | Document loaded | List the [people of the document](document-people.md), add people (reviewers) and send them messages |
 | Validate (✓ icon) | Always | Trigger a schema validation run and show errors inline |
 | Undo / Redo | Always | Undo or redo editor changes |
-| TEI Wizard (wand icon) | Always | Run TEI-specific utilities (e.g. pretty-print, convert XML comments into [unit comments](unit-comments.md)) |
-| Review (clipboard icon) | Always | Switch [unit review](unit-review.md) mode on or off |
-| People (group icon) | Document loaded | List the [people of the document](document-people.md), add people (reviewers) and send them messages |
 | Revision history (clock icon) | When document has `<revisionDesc>` | Open the revision history panel |
-| XSL viewer | When XSL viewer plugin is active | Preview the document rendered via XSLT |
-| Save revision (floppy disk) | Document loaded, annotator role | Record the current state in the document's revision history |
-| Delete (trash) | Document loaded, permitted | Delete the current version, all versions, or the PDF and all XML |
+| Review (clipboard icon) | Always | Switch [unit review](unit-review.md) mode on or off |
 | Upload / Download | Annotator role | Replace the current XML from a local file, or download a copy |
-| Theme (palette icon) | Always | Open the theme picker dropdown. Available themes: **Default (light)**, **Dark**, **Color-blind friendly**, **High contrast**. The selection is saved per user and restored on the next visit. |
+| XSL viewer (file code icon) | Always; enabled when a plugin provides a stylesheet for the document's namespace | Preview the document rendered via an XSL transformation |
+
+The theme picker sits at the far right of the statusbar. Available themes: **Default (light)**, **Dark**, **Color-blind friendly**, **High contrast**. The selection is saved per user and restored on the next visit.
+
+Plugins can add further buttons to the right-hand section of the toolbar, for example:
+
+| Button | Plugin | What it does |
+| --- | --- | --- |
+| TEI Wizard (wand icon) | TEI Wizard (ships with the application) | Run TEI-specific utilities (e.g. pretty-print, convert XML comments into [unit comments](unit-comments.md)) |
+
+The XSL transformations listed by the XSL viewer are also provided by plugins (for example the GROBID plugin).
+
+Saving a revision and deleting documents are done with the **Document** buttons in the main toolbar, not in the editor toolbar.
 
 Buttons that are greyed out are disabled for the current document state or your role.
 
@@ -146,6 +158,8 @@ Auto-save keeps the document up to date silently. To record a named checkpoint i
 As soon as a new version is saved from a version, the source version is superseded and becomes read-only for everyone, including administrators. This also applies to the Gold Standard. The status bar shows *Read-only (superseded by a newer version)*. To change a superseded version, use **Save revision** with *Save to a new personal version*, which is preselected for such versions. Deleting the newer version makes the source version editable again.
 
 The **Target XML** and **Compare with version** menus group the versions by line: the current versions that were copied from the same version come first, followed by the superseded versions they descend from, joined to them by a line with an arrow pointing up, and a divider separates one line from the next. Superseded versions can be opened (read-only), compared with the current one, or copied into a new version. The file drawer lists only the latest version of each line.
+
+**Delete > Delete current version with its history** deletes the current version together with the superseded versions it descends from, up to the first one that another version also descends from: that version and everything above it are kept, and so is the Gold Standard. For example, if a version was copied from a version that was itself copied from a third one, all three are deleted, unless another version was copied from the second or third. A confirmation lists the versions that will be deleted. The entry is available for current versions that were copied from another version; you need the right to delete each of the versions.
 
 Each saved revision records a short hash of the document text in its `<change xml:id="h-…">`, chained to the hash of the previous revision. This makes it possible to check that the text of a recorded revision has not been changed afterwards.
 

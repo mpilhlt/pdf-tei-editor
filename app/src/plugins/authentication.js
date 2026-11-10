@@ -260,9 +260,8 @@ class AuthenticationPlugin extends Plugin {
         const username = this.#ui.username.value;
         const password = this.#ui.password.value;
         this.#ui.message.textContent = '';
-        const passwd_hash = await this._hashPassword(password);
         try {
-          const authData = await this.#client.login(username, passwd_hash);
+          const authData = await this.#client.login(username, password);
           this.#logger.info(`Login successful for user: ${authData.username}`);
           this.#ui.hide();
           this.#ui.username.value = "";
@@ -277,20 +276,6 @@ class AuthenticationPlugin extends Plugin {
       }, {once: true});
       this.#ui.show();
     });
-  }
-
-  /**
-   * Hashes a password using SHA-256.
-   * @param {string} password
-   * @returns {Promise<string>}
-   * @private
-   */
-  async _hashPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
   /**

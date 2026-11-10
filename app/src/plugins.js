@@ -13,6 +13,7 @@
 // class-based plugins (imported via plugin-registry.js)
 import {
   AccessControlPlugin,
+  AccessTokensPlugin,
   AnnotationGuidePlugin,
   AuthenticationPlugin,
   BackendPluginsPlugin,
@@ -77,6 +78,7 @@ const plugins = [
 
   // Toolbar menu items (order matters - determines menu item order)
   ApiKeysPlugin,       // API Keys
+  AccessTokensPlugin,  // Access Tokens (reviewers and admins), below API Keys
   UserAccountPlugin,   // User Profile + Logout (last)
 
   // Tools menu — Administration section (admin only, order determines item order)

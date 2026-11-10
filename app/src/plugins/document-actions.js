@@ -73,6 +73,10 @@ class DocumentActionsPlugin extends Plugin {
     const da = this.#ui.documentActions
     da.saveRevision.addEventListener('click', () => this.saveRevision())
     da.deleteCurrentVersion.addEventListener('click', () => this.deleteCurrentVersion())
+    da.deleteVersionHistory.addEventListener('click', () => this.deleteVersionHistory().catch(e => {
+      console.error(e)
+      notify(String(e?.message || e), "danger", "exclamation-octagon")
+    }))
     da.deleteAllVersions.addEventListener('click', () => this.deleteAllVersions())
     da.deleteAll.addEventListener('click', () => this.deleteAll().catch(e => {
       console.error(e)
@@ -114,14 +118,16 @@ class DocumentActionsPlugin extends Plugin {
       da.deleteAll.disabled = !Boolean(state.pdf) || (!isReviewer && !isPdfOwner)
       da.deleteAllVersions.disabled = !isReviewer || this.getDependency('file-selection').getOptionValues('xml').length < 2
       da.deleteCurrentVersion.disabled = !state.xml || state.editorReadOnly || (isGoldFile(state.xml) && !isReviewer)
+      da.deleteVersionHistory.disabled = !this.#hasDeletableHistory(state.xml) || state.editorReadOnly
     } else {
-      for (const btn of [da.deleteAll, da.deleteAllVersions, da.deleteCurrentVersion]) {
+      for (const btn of [da.deleteAll, da.deleteAllVersions, da.deleteCurrentVersion, da.deleteVersionHistory]) {
         btn.disabled = true
       }
     }
 
     da.deleteBtn.disabled =
       da.deleteCurrentVersion.disabled &&
+      da.deleteVersionHistory.disabled &&
       da.deleteAllVersions.disabled &&
       da.deleteAll.disabled
 
@@ -170,6 +176,63 @@ class DocumentActionsPlugin extends Plugin {
         console.error(error)
         this.getDependency('dialog').error(String(error))
       }
+    }
+  }
+
+  /**
+   * Whether a file is a version (not gold, not frozen) copied from another version, so that
+   * deleting it with its history can remove more than the version itself
+   * @param {string|null} xml - The file id
+   * @returns {boolean}
+   */
+  #hasDeletableHistory(xml) {
+    if (!xml || isGoldFile(xml) || isFrozenFile(xml)) return false
+    const fileData = getFileDataById(xml)
+    if (fileData?.type !== 'artifact') return false
+    const parentId = /** @type {Artifact} */ (fileData.item).parent_id
+    if (!parentId) return false
+    const parent = getFileDataById(parentId)
+    return parent?.type === 'artifact' && !/** @type {Artifact} */ (parent.item).is_gold_standard
+  }
+
+  /**
+   * Deletes the current version together with its history: the ancestors that no other version
+   * descends from. The server determines the files (it sees versions the user may not see), so
+   * a dry run lists them for the confirmation first.
+   */
+  async deleteVersionHistory() {
+    const state = this.state
+    const xml = state.xml
+    if (!xml) {
+      this.getDependency('dialog').error("No file selected for deletion")
+      return
+    }
+
+    const api = this.#client.apiClient
+    const { files } = await api.filesDeleteHistory({ file_id: xml, dry_run: true })
+    const labels = this.getDependency('file-selection').getOptionValues('xml')
+    const describe = (/** @type {string} */ id) =>
+      labels.find(o => o.value === id)?.label || getFileDataById(id)?.item?.label || id
+    const list = files.map(id => `- ${describe(id)}`).join('\n')
+    const msg = files.length > 1
+      ? `Are you sure you want to delete the current version and ${files.length - 1} earlier version(s) that no other version is based on? This cannot be undone.\n\n${list}`
+      : `No other version would be deleted with "${describe(xml)}": its earlier versions are shared with other versions. Delete the current version?`
+    if (!confirm(msg)) return
+
+    this.#services.removeMergeView()
+    const result = await api.filesDeleteHistory({ file_id: xml })
+    try {
+      await this.dispatchStateChange({ xml: null })
+      await this.getDependency('file-selection').reload()
+      const next = this.getDependency('file-selection').getOptionValues('xml')[0]?.value
+      await this.#services.load({ xml: next })
+      notify(`${result.files.length} version(s) have been deleted.`)
+      this.context.invokePluginEndpoint(ep.sync.syncFiles, state)
+        .then(summary => summary && console.debug(summary))
+        .catch(e => console.error(e))
+    } catch (error) {
+      console.error(error)
+      this.getDependency('dialog').error(String(error))
     }
   }
 

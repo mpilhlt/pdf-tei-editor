@@ -94,6 +94,49 @@ describe('InferenceSettingsPlugin construction', () => {
   });
 });
 
+describe('InferenceSettingsPlugin copy model id button', () => {
+  beforeEach(() => { notifyCalls.length = 0; });
+
+  const provider = { id: 'kisski', label: 'KISSKI', models: [] };
+  const model = { id: 'gemma-3-27b-it', label: 'Gemma 3', capabilities: ['chat'], status: null };
+
+  it('is not shown to non-admins', () => {
+    const plugin = makePlugin();
+    plugin._isAdmin = () => false;
+    const item = plugin._buildModelItem(provider, model, null);
+    assert.strictEqual(item.querySelector('sl-icon-button'), null);
+  });
+
+  it('is shown to admins in the suffix slot, carrying the full provider/model id', () => {
+    const plugin = makePlugin();
+    plugin._isAdmin = () => true;
+    const item = plugin._buildModelItem(provider, model, null);
+    const button = item.querySelector('sl-icon-button');
+    assert.ok(button);
+    assert.strictEqual(button.slot, 'suffix');
+    assert.strictEqual(button.name, 'clipboard');
+    assert.strictEqual(button.dataset.copyModelId, 'kisski/gemma-3-27b-it');
+    assert.strictEqual(item.textContent, 'Gemma 3');
+  });
+
+  it('copies the id without letting the click reach the menu', async () => {
+    const plugin = makePlugin();
+    plugin._isAdmin = () => true;
+    const writeText = mock.fn(async () => {});
+    Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText } }, configurable: true });
+    const menu = document.createElement('sl-menu');
+    const onMenuClick = mock.fn();
+    menu.addEventListener('click', onMenuClick);
+    const item = plugin._buildModelItem(provider, model, null);
+    menu.appendChild(item);
+    item.querySelector('sl-icon-button').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await flushMicrotasks();
+    assert.strictEqual(onMenuClick.mock.callCount(), 0);
+    assert.deepStrictEqual(writeText.mock.calls[0].arguments, ['kisski/gemma-3-27b-it']);
+    assert.match(notifyCalls[0][0], /kisski\/gemma-3-27b-it/);
+  });
+});
+
 describe('InferenceSettingsPlugin admin confirmation', () => {
   beforeEach(() => { notifyCalls.length = 0; });
 

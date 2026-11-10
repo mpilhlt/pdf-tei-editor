@@ -330,6 +330,18 @@
  */
 
 /**
+ * @typedef {Object} DeleteHistoryRequest
+ * @property {string} file_id - Stable ID or hash of the version to delete
+ * @property {boolean=} dry_run - Only return the files that would be deleted
+ */
+
+/**
+ * @typedef {Object} DeleteHistoryResponse
+ * @property {Array<string>} files - Stable IDs, the version first, then its ancestors
+ * @property {boolean} deleted - False for a dry run
+ */
+
+/**
  * @typedef {Object} DocumentGroupModel
  * @property {string} doc_id
  * @property {Array<string>} collections
@@ -543,7 +555,7 @@
 /**
  * @typedef {Object} LoginRequest
  * @property {string} username
- * @property {string} passwd_hash
+ * @property {string} password - Plain text password
  */
 
 /**
@@ -557,6 +569,47 @@
 /**
  * @typedef {Object} LogoutResponse
  * @property {string} status
+ */
+
+/**
+ * @typedef {Object} TokenLoginRequest
+ * @property {string} token - Personal access token (`pte_...`)
+ */
+
+/**
+ * @typedef {Object} AccessTokenInfo
+ * @property {string} token_id - Public id of the token, part of the token string
+ * @property {string} label
+ * @property {string} username - The user the token authenticates as
+ * @property {string} created_by - The user who created the token
+ * @property {number} created_at - Epoch seconds
+ * @property {number|null=} expires_at - Epoch seconds; null if the token does not expire
+ * @property {number|null=} last_used_at - Epoch seconds of the last token login
+ * @property {boolean} expired
+ */
+
+/**
+ * @typedef {Object} CreateAccessTokenRequest
+ * @property {string} label
+ * @property {string|null=} username - The user the token authenticates as (default: the current user)
+ * @property {number|null=} expires_in_days - Days until the token expires (default 90); null for no expiry (admins only, if allowed by config)
+ */
+
+/**
+ * @typedef {Object} CreateAccessTokenResponse
+ * @property {string} token - The full token; returned only by this call
+ * @property {AccessTokenInfo} info
+ */
+
+/**
+ * @typedef {Object} EligibleUser
+ * @property {string} username
+ * @property {string|null=} fullname
+ */
+
+/**
+ * @typedef {Object} RevokeAccessTokenResponse
+ * @property {boolean} revoked
  */
 
 /**
@@ -894,6 +947,7 @@
  * @typedef {Object} UpstreamStatusRequest
  * @property {string} xml - Stable id of the open document
  * @property {string} url - One of the document's refs
+ * @property {boolean} [refetch] - Ignore cached upstream lookups such as branch heads (upstream-status only)
  */
 
 /**
@@ -1271,7 +1325,7 @@
  *
  * @example
  * const client = new ApiClientV1(callApi);
- * const { sessionId } = await client.authLogin({ username: 'admin', passwd_hash: '...' });
+ * const { sessionId } = await client.authLogin({ username: 'admin', password: '...' });
  */
 export class ApiClientV1 {
   /**
@@ -1313,6 +1367,61 @@ export class ApiClientV1 {
    */
   async authStatus() {
     const endpoint = `/auth/status`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Exchange a personal access token for a session. Scripts send the token as
+   * `Authorization: Bearer pte_...`; this method sends it in the body.
+   *
+   * @param {TokenLoginRequest} requestBody
+   * @returns {Promise<LoginResponse>}
+   */
+  async authTokenLogin(requestBody) {
+    const endpoint = `/auth/token-login`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List the access tokens the current user may see and revoke (all tokens for admins).
+   * Revoked tokens are not listed; the tokens themselves are never returned.
+   *
+   * @returns {Promise<Array<AccessTokenInfo>>}
+   */
+  async authListTokens() {
+    const endpoint = `/auth/tokens`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Create an access token (reviewers and admins). The full token is only in this response.
+   *
+   * @param {CreateAccessTokenRequest} requestBody
+   * @returns {Promise<CreateAccessTokenResponse>}
+   */
+  async authCreateToken(requestBody) {
+    const endpoint = `/auth/tokens`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Revoke an access token and end the sessions created from it.
+   *
+   * @param {string} tokenId
+   * @returns {Promise<RevokeAccessTokenResponse>}
+   */
+  async authRevokeToken(tokenId) {
+    const endpoint = `/auth/tokens/${encodeURIComponent(tokenId)}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * The users the current user may create access tokens for (reviewers and admins).
+   *
+   * @returns {Promise<Array<EligibleUser>>}
+   */
+  async authTokenEligibleUsers() {
+    const endpoint = `/auth/tokens/eligible-users`
     return this.callApi(endpoint);
   }
 
@@ -2401,6 +2510,22 @@ export class ApiClientV1 {
    */
   async filesDelete(requestBody) {
     const endpoint = `/files/delete`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Delete a version together with its history: the ancestors that no other version descends
+   * from. The walk stops before the first ancestor that has another descendant or is a gold
+   * standard. Permissions are checked for all files before any is deleted. With `dry_run`, only
+   * the files that would be deleted are returned.
+   * Errors: 404 file not found, 400 gold standard or non-TEI file, 409 other versions were copied
+   * from the file, 403 a file may not be deleted.
+   *
+   * @param {DeleteHistoryRequest} requestBody
+   * @returns {Promise<DeleteHistoryResponse>}
+   */
+  async filesDeleteHistory(requestBody) {
+    const endpoint = `/files/delete_history`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

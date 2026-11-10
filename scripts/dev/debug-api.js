@@ -9,6 +9,8 @@
  * Options:
  *   --env-path <file>  Path to a custom .env file (default: .env)
  *
+ * Authentication: API_TOKEN (personal access token) if set, otherwise API_USER and API_PASSWORD.
+ *
  * Examples:
  *   node scripts/dev/debug-api.js GET /api/v1/plugins
  *   node scripts/dev/debug-api.js POST /api/v1/extract '{"extractor":"grobid","file_id":"abc123"}'
@@ -16,44 +18,8 @@
  *   node scripts/dev/debug-api.js --env-path .env.remote GET /api/plugins/grobid/diagnostics
  */
 
-import { createHash } from 'crypto';
 import dotenv from 'dotenv';
-
-/**
- * Hash password using SHA-256
- */
-function hashPassword(password) {
-  return createHash('sha256').update(password).digest('hex');
-}
-
-/**
- * Login and get session ID
- */
-async function login(baseUrl, username, password) {
-  const passwdHash = hashPassword(password);
-
-  const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ username, passwd_hash: passwdHash }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Login failed: ${response.status} ${error}`);
-  }
-
-  const data = await response.json();
-
-  const sessionId = data.sessionId || data.session_id;
-  if (!sessionId) {
-    throw new Error(`Login response missing sessionId: ${JSON.stringify(data)}`);
-  }
-
-  return sessionId;
-}
+import { login, resolveCredentials } from '../../bin/lib/api-auth.js';
 
 /**
  * Call API endpoint
@@ -135,16 +101,15 @@ async function main() {
   dotenv.config({ path: envPath });
 
   const baseUrl = process.env.API_BASE_URL || 'http://localhost:8000';
-  const username = process.env.API_USER;
-  const password = process.env.API_PASSWORD;
+  const credentials = resolveCredentials({});
 
-  if (!username || !password) {
-    console.error('Error: API_USER and API_PASSWORD must be set in .env file');
+  if (!credentials.token && (!credentials.username || !credentials.password)) {
+    console.error('Error: API_TOKEN, or API_USER and API_PASSWORD, must be set in .env file');
     process.exit(1);
   }
 
-  console.log(`Authenticating as ${username}...`);
-  const sessionId = await login(baseUrl, username, password);
+  console.log(credentials.token ? 'Authenticating with access token...' : `Authenticating as ${credentials.username}...`);
+  const sessionId = await login(baseUrl, credentials);
   console.log(`Session ID: ${sessionId.substring(0, 10)}...\n`);
 
   console.log(`Calling: ${method} ${path}`);

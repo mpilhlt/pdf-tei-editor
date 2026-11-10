@@ -351,6 +351,8 @@ test.describe('Unit review', () => {
       await expect(entry.getByText('Open review')).toHaveCount(1);
       await expect(entry.getByText('✓ OK')).toHaveCount(0);
       await expect(entry.getByText('✕ Not OK')).toHaveCount(0);
+      // its stripe has the not-OK color of the review gutter
+      await expect(page.locator('.diagnostics-drawer-item.cm-unit-review-not-ok')).toHaveCount(1);
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);
@@ -493,6 +495,8 @@ test.describe('Unit review', () => {
       await expect.poll(async () => (await summary(page)).notOk, { timeout: 5000 }).toBe(0);
       const entry = page.locator('.diagnostics-drawer-list', { hasText: 'Changed after a not-OK review' });
       await expect(entry).toContainText(`Line ${firstIbid}`);
+      // its stripe is dotted grey, like the stale unit in the review gutter
+      await expect(page.locator('.diagnostics-drawer-item.cm-unit-review-changed')).toHaveCount(1);
       await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Marked not OK');
     } finally {
       await releaseAllLocks(page);

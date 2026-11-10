@@ -61,8 +61,12 @@ from fastapi_app.lib.llm import (
     LLMProvider,
     LLMProviderError,
     LLMProviderRegistry,
+    LLMRateLimitError,
     ModelStatus,
     OpenAICompatibleProvider,
+    get_completion_session,
+    post_completion,
+    rate_limit_http_error,
 )
 from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
@@ -98,6 +102,10 @@ __all__ = [
     "LLMProvider",
     "LLMProviderError",
     "LLMProviderRegistry",
+    "LLMRateLimitError",
+    "get_completion_session",
+    "post_completion",
+    "rate_limit_http_error",
     "ModelStatus",
     "OpenAICompatibleProvider",
     "Plugin",

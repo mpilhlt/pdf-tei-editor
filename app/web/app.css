@@ -359,6 +359,12 @@ sl-menu-item::part(label) {
   font-size: smaller;
 }
 
+/* Inference model submenu: the admin-only copy button must not make the rows taller
+   (sl-icon-button's default padding would, see inference-settings.js) */
+sl-icon-button.inference-copy-model-id::part(base) {
+  padding: 0;
+}
+
 /* "Target XML" and "Compare with version" menus: superseded ancestors of a lineage are connected
    to the current versions above them by a line with an arrow pointing up (see file-selection.js) */
 #toolbar sl-select[name="xml"],
@@ -833,6 +839,18 @@ sl-drawer.diagnostics-drawer::part(footer) {
 .diagnostics-drawer-info { border-left-color: #999; }
 .diagnostics-drawer-hint { border-left-color: #66d; }
 
+/* unit review entries mirror the review gutter strip (unit-review-gutter.js) */
+.diagnostics-drawer-item.cm-unit-review-not-ok { border-left-color: #d64545; }
+.diagnostics-drawer-item.cm-unit-review-changed { border-left-style: dotted; border-left-color: #8a8f98; }
+.diagnostics-drawer-item.cm-unit-review-disputed {
+  border-left-color: transparent;
+  background-image: linear-gradient(180deg, #d64545 0 50%, #2f9e57 50% 100%);
+  background-size: 4px 100%;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-position: left top;
+}
+
 .diagnostics-drawer-item sl-checkbox {
   margin-top: 2px;
 }
@@ -917,4 +935,63 @@ sl-drawer.diagnostics-drawer::part(footer) {
 
 .diagnostics-drawer-button:hover {
   background: #2b333b;
+}
+
+/* Access tokens dialog (access-tokens plugin) */
+.access-tokens-list {
+  max-height: 40vh;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.access-tokens-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sl-font-size-small);
+}
+
+.access-tokens-table th,
+.access-tokens-table td {
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--sl-color-neutral-200);
+  vertical-align: middle;
+}
+
+.access-tokens-table th {
+  font-weight: var(--sl-font-weight-semibold);
+  color: var(--sl-color-neutral-600);
+}
+
+.access-tokens-table tr.expired td:not(:last-child) {
+  color: var(--sl-color-neutral-400);
+}
+
+.access-tokens-empty {
+  font-size: var(--sl-font-size-small);
+  color: var(--sl-color-neutral-600);
+}
+
+.access-tokens-new {
+  margin-bottom: 1rem;
+}
+
+.access-tokens-form-row {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr;
+  gap: 10px;
+}
+
+.access-tokens-form .help-text {
+  margin-left: 0;
+}
+
+.access-tokens-once {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--sl-color-warning-500);
+  background: var(--sl-color-warning-50);
+  font-size: var(--sl-font-size-small);
 }

@@ -10,6 +10,7 @@
  *
  * Global Options:
  *   --env <path>          Path to .env file (default: ./.env)
+ *   --token <token>       Personal access token (default: from .env API_TOKEN); preferred over --user/--password
  *   --user <username>     Username for authentication (default: from .env API_USER)
  *   --password <password> Password for authentication (default: from .env API_PASSWORD)
  *   --base-url <url>      API base URL (default: from .env API_BASE_URL or http://localhost:8000)
@@ -20,28 +21,24 @@
  *   collection  Manage collections
  *   role        List roles
  *   config      Manage configuration
+ *   token       Manage personal access tokens
  *   diagnostic  Diagnostic utilities
  *   maintenance Maintenance mode controls (spinner, reload, repopulate, gc)
  */
 
 import { Command } from 'commander';
 import { resolve } from 'path';
-import { createHash } from 'crypto';
 import { createInterface } from 'readline';
 import dotenv from 'dotenv';
+import { login, resolveCredentials } from './lib/api-auth.js';
+
+/**
+ * @import { ApiCredentials } from './lib/api-auth.js'
+ */
 
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Hash password using SHA-256 (matching frontend authentication)
- * @param {string} password - Plain text password
- * @returns {string} - Hex hash
- */
-function hashPassword(password) {
-  return createHash('sha256').update(password).digest('hex');
-}
 
 /**
  * Prompt for password interactively
@@ -90,33 +87,6 @@ async function promptPassword(prompt = 'Password: ') {
 }
 
 /**
- * Login to the API and get session ID
- * @param {string} baseUrl - API base URL
- * @param {string} username - Username
- * @param {string} password - Plain text password
- * @returns {Promise<string>} - Session ID
- */
-async function login(baseUrl, username, password) {
-  const passwdHash = hashPassword(password);
-
-  const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ username, passwd_hash: passwdHash }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Login failed: ${response.status} ${error}`);
-  }
-
-  const data = await response.json();
-  return data.sessionId;
-}
-
-/**
  * Make an authenticated API request
  * @param {string} baseUrl - API base URL
  * @param {string} sessionId - Session ID
@@ -160,8 +130,8 @@ async function apiRequest(baseUrl, sessionId, method, path, body = null) {
 
 /**
  * Initialize environment and get credentials
- * @param {object} options - Command options with env, user, password, baseUrl
- * @returns {{baseUrl: string, username: string, password: string}}
+ * @param {object} options - Command options with env, token, user, password, baseUrl
+ * @returns {{baseUrl: string, credentials: ApiCredentials}}
  */
 function initEnv(options) {
   const envFile = resolve(options.env || './.env');
@@ -172,11 +142,10 @@ function initEnv(options) {
     throw envConfig.error;
   }
 
-  const username = options.user || process.env.API_USER;
-  const password = options.password || process.env.API_PASSWORD;
+  const credentials = resolveCredentials(options);
   const baseUrl = options.baseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
 
-  return { baseUrl, username, password };
+  return { baseUrl, credentials };
 }
 
 /**
@@ -186,18 +155,18 @@ function initEnv(options) {
  */
 async function runAuthenticated(options, action) {
   try {
-    const { baseUrl, username, password } = initEnv(options);
+    const { baseUrl, credentials } = initEnv(options);
 
-    if (!username) {
-      throw new Error('Username required. Use --user or set API_USER in .env');
+    if (!credentials.token) {
+      if (!credentials.username) {
+        throw new Error('Access token or username required. Use --token or --user, or set API_TOKEN or API_USER in .env');
+      }
+      if (!credentials.password) {
+        credentials.password = await promptPassword('Password: ');
+      }
     }
 
-    let pwd = password;
-    if (!pwd) {
-      pwd = await promptPassword('Password: ');
-    }
-
-    const sessionId = await login(baseUrl, username, pwd);
+    const sessionId = await login(baseUrl, credentials);
     await action(baseUrl, sessionId);
   } catch (error) {
     console.error(`Error: ${error.message}`);
@@ -699,6 +668,67 @@ async function configSet(baseUrl, sessionId, key, jsonValue) {
 }
 
 // ============================================================================
+// Access Token Commands
+// ============================================================================
+
+/**
+ * Format epoch seconds for display
+ * @param {number|null} timestamp - Epoch seconds
+ * @returns {string}
+ */
+function formatTime(timestamp) {
+  return timestamp ? new Date(timestamp * 1000).toISOString().slice(0, 16).replace('T', ' ') : '-';
+}
+
+/**
+ * List the access tokens the current user may see
+ * @param {string} baseUrl - API base URL
+ * @param {string} sessionId - Session ID
+ */
+async function tokenList(baseUrl, sessionId) {
+  const tokens = await apiRequest(baseUrl, sessionId, 'GET', '/api/v1/auth/tokens');
+  if (!tokens.length) {
+    console.log('No access tokens.');
+    return;
+  }
+  console.log('ID'.padEnd(10), 'User'.padEnd(16), 'Created by'.padEnd(16), 'Expires'.padEnd(17), 'Last used'.padEnd(17), 'Label');
+  for (const t of tokens) {
+    const expires = t.expired ? 'expired' : formatTime(t.expires_at);
+    console.log(t.token_id.padEnd(10), t.username.padEnd(16), t.created_by.padEnd(16), expires.padEnd(17), formatTime(t.last_used_at).padEnd(17), t.label);
+  }
+}
+
+/**
+ * Create an access token and print it
+ * @param {string} baseUrl - API base URL
+ * @param {string} sessionId - Session ID
+ * @param {string} label - Token label
+ * @param {{for?: string, days?: string, expiry?: boolean}} cmdOptions - Command options (`expiry` is false with --no-expiry)
+ */
+async function tokenCreate(baseUrl, sessionId, label, cmdOptions) {
+  const body = {
+    label,
+    username: cmdOptions.for || null,
+    expires_in_days: cmdOptions.expiry === false ? null : parseInt(cmdOptions.days || '90', 10),
+  };
+  const { token, info } = await apiRequest(baseUrl, sessionId, 'POST', '/api/v1/auth/tokens', body);
+  console.log(`Created access token ${info.token_id} ('${info.label}') for ${info.username}, expires: ${formatTime(info.expires_at)}`);
+  console.log('This token will not be shown again:');
+  console.log(token);
+}
+
+/**
+ * Revoke an access token
+ * @param {string} baseUrl - API base URL
+ * @param {string} sessionId - Session ID
+ * @param {string} tokenId - Token id
+ */
+async function tokenRevoke(baseUrl, sessionId, tokenId) {
+  const { revoked } = await apiRequest(baseUrl, sessionId, 'DELETE', `/api/v1/auth/tokens/${encodeURIComponent(tokenId)}`);
+  console.log(revoked ? `Revoked access token ${tokenId}.` : `Access token ${tokenId} was already revoked.`);
+}
+
+// ============================================================================
 // Diagnostic Commands
 // ============================================================================
 
@@ -953,6 +983,7 @@ program
   .description('Remote management CLI for PDF-TEI-Editor')
   .version('1.0.0')
   .option('--env <path>', 'Path to .env file', './.env')
+  .option('--token <token>', 'Personal access token (overrides .env API_TOKEN); preferred over --user/--password')
   .option('--user <username>', 'Username for authentication (overrides .env API_USER)')
   .option('--password <password>', 'Password for authentication (overrides .env API_PASSWORD)')
   .option('--base-url <url>', 'API base URL (overrides .env API_BASE_URL)');
@@ -1211,6 +1242,33 @@ configCmd
   .description('Set a configuration value (value must be valid JSON)')
   .action(async (key, value) => {
     await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => configSet(baseUrl, sessionId, key, value));
+  });
+
+// --- Access Token Commands ---
+const tokenCmd = program.command('token').description('Manage personal access tokens');
+
+tokenCmd
+  .command('list')
+  .description('List the access tokens you may see (all tokens for admins)')
+  .action(async () => {
+    await runAuthenticated(getGlobalOptions(), tokenList);
+  });
+
+tokenCmd
+  .command('create <label>')
+  .description('Create an access token (reviewers and admins); the token is printed once')
+  .option('--for <username>', 'The user the token authenticates as (default: you)')
+  .option('--days <n>', 'Days until the token expires', '90')
+  .option('--no-expiry', 'Create a token that does not expire (admins, if auth.access-tokens.allow-no-expiry is true)')
+  .action(async (label, cmdOptions) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => tokenCreate(baseUrl, sessionId, label, cmdOptions));
+  });
+
+tokenCmd
+  .command('revoke <token_id>')
+  .description('Revoke an access token and end its sessions')
+  .action(async (tokenId) => {
+    await runAuthenticated(getGlobalOptions(), (baseUrl, sessionId) => tokenRevoke(baseUrl, sessionId, tokenId));
   });
 
 // --- Diagnostic Commands ---

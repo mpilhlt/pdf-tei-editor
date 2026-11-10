@@ -384,6 +384,9 @@ def delete_user_endpoint(
         from ..lib.messages.service import get_message_store
         get_message_store(settings.db_dir).delete_recipient(username)
 
+        from ..lib.core.access_tokens import revoke_user_tokens
+        revoke_user_tokens(settings.db_dir, username)
+
         logger.info(f"User '{username}' deleted by admin '{current_user.get('username')}'")
 
         return {"success": True, "message": f"User '{username}' deleted successfully"}

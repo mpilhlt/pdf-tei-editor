@@ -1,13 +1,16 @@
 """
 Authentication API endpoints for FastAPI.
 
-Provides login, logout, and session status checking.
+Provides login (with a password or a personal access token), logout, and session status checking.
 """
 
-from typing import Optional, List
-from pydantic import BaseModel
-from fastapi import APIRouter, Request, HTTPException, Response
-from fastapi.responses import JSONResponse
+from typing import Any, Optional, List
+from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, Request, HTTPException
+from starlette.concurrency import run_in_threadpool
+
+from ..lib.core.access_tokens import AccessTokenStore, get_access_token_store
+from ..lib.core.login_rate_limit import check_login_allowed, client_ip, login_rate_limiter
 
 from ..config import get_settings
 from ..lib.utils.auth import AuthManager
@@ -23,9 +26,15 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 # Pydantic Models
 
 class LoginRequest(BaseModel):
-    """Request model for user login"""
+    """Request model for user login. Send the plain text password; HTTPS protects it in transit."""
     username: str
-    passwd_hash: str
+    password: Optional[str] = None
+    passwd_hash: Optional[str] = Field(None, description="Removed: the SHA-256 hash of the password is no longer accepted. Send `password` instead.")
+
+
+class TokenLoginRequest(BaseModel):
+    """Request model for token login with the token in the body instead of the Authorization header"""
+    token: str
 
 
 class LoginResponse(BaseModel):
@@ -71,16 +80,24 @@ async def login(request_data: LoginRequest, request: Request):
 
     Returns user data and session ID for client to store in state.
     """
-    if not request_data.username or not request_data.passwd_hash:
-        raise HTTPException(status_code=400, detail="Missing username or password hash")
+    if request_data.passwd_hash is not None and request_data.password is None:
+        raise HTTPException(status_code=400, detail="Login with a password hash (passwd_hash) is no longer supported: send the plain text password as 'password', or log in with an access token at /api/v1/auth/token-login")
+    if not request_data.username or not request_data.password:
+        raise HTTPException(status_code=400, detail="Missing username or password")
 
     auth_manager = get_auth_manager()
     session_manager = get_session_manager()
 
+    rate_key = f"password:{client_ip(request)}:{request_data.username}"
+    check_login_allowed(rate_key)
+
     # Verify credentials
-    user = auth_manager.verify_password(request_data.username, request_data.passwd_hash)
+    # scrypt takes tens of milliseconds of CPU time, so keep it off the event loop
+    user = await run_in_threadpool(auth_manager.verify_password, request_data.username, request_data.password)
     if not user:
+        login_rate_limiter.record_failure(rate_key)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    login_rate_limiter.reset(rate_key)
 
     # Clean up expired sessions (using default timeout from config)
     settings = get_settings()
@@ -89,24 +106,76 @@ async def login(request_data: LoginRequest, request: Request):
     # Create new session
     session_id = session_manager.create_session(request_data.username)
 
-    # Normalize roles field (legacy data may have "role" as string)
-    roles = user.get("roles")
-    if roles is None:
-        # Handle legacy "role" field (singular string)
-        role = user.get("role")
-        roles = [role] if role else []
-
-    # Build response
-    response_data = {
-        "username": user.get("username"),
-        "fullname": user.get("fullname"),
-        "roles": roles,
-        "sessionId": session_id
-    }
-
     logger.info(f"User {request_data.username} logged in with session {session_id[:8]}...")
 
-    return LoginResponse(**response_data)
+    return _login_response(user, session_id)
+
+
+def _login_response(user: dict[str, Any], session_id: str) -> LoginResponse:
+    """Build the login response, normalizing the legacy single "role" field."""
+    roles = user.get("roles")
+    if roles is None:
+        role = user.get("role")
+        roles = [role] if role else []
+    return LoginResponse(
+        username=user["username"],
+        fullname=user.get("fullname"),
+        roles=roles,
+        sessionId=session_id,
+    )
+
+
+@router.post("/token-login", response_model=LoginResponse)
+async def token_login(
+    request: Request,
+    body: Optional[TokenLoginRequest] = None,
+    authorization: Optional[str] = Header(None),
+    token_store: AccessTokenStore = Depends(get_access_token_store),
+) -> LoginResponse:
+    """
+    Exchange a personal access token for a session.
+
+    Send the token as `Authorization: Bearer pte_...` (preferred) or as `{"token": "pte_..."}` in the
+    body. Returns the same response as `/auth/login`; use the session ID as `X-Session-ID` in later
+    requests. The session ends when the token is revoked or expires, or after the usual inactivity timeout.
+    """
+    rate_key = f"token:{client_ip(request)}"
+    check_login_allowed(rate_key)
+
+    scheme, _, header_token = (authorization or "").partition(" ")
+    token = header_token.strip() if scheme.lower() == "bearer" else ""
+    if not token and body is not None:
+        token = body.token.strip()
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing access token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    info = token_store.verify(token)
+    user = get_auth_manager().get_user_by_username(info["username"]) if info else None
+    if info is None or user is None:
+        login_rate_limiter.record_failure(rate_key)
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid, expired or revoked access token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    session_manager = get_session_manager()
+    settings = get_settings()
+    session_manager.cleanup_expired_sessions(settings.session_timeout)
+    session_id = session_manager.create_session(
+        info["username"], token_id=info["token_id"], expires_at=info["expires_at"]
+    )
+
+    logger.info(
+        f"User {info['username']} logged in with access token {info['token_id']} ('{info['label']}'), "
+        f"session {session_id[:8]}..."
+    )
+
+    return _login_response(user, session_id)
 
 
 @router.post("/logout", response_model=LogoutResponse)
@@ -162,7 +231,7 @@ async def status(request: Request):
         roles = [role] if role else []
 
     return StatusResponse(
-        username=user.get("username"),
+        username=user["username"],
         fullname=user.get("fullname"),
         roles=roles
     )

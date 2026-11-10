@@ -1,9 +1,9 @@
 """User management utilities for PDF-TEI-Editor."""
 
-import hashlib
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi_app.lib.permissions.role_utils import validate_role
+from fastapi_app.lib.utils import password_hash
 from fastapi_app.lib.utils.data_utils import load_entity_data, save_entity_data
 
 
@@ -37,15 +37,15 @@ def user_exists(username: str, users_data: List[Dict[str, Any]]) -> bool:
 
 
 def hash_password(password: str) -> str:
-    """Hashes a password using SHA256.
+    """Hashes a password for storage in users.json (salted scrypt, see `password_hash`).
 
     Args:
-        password: The password to hash
+        password: The plain text password
 
     Returns:
-        The hashed password
+        The encoded password hash
     """
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    return password_hash.hash_password(password)
 
 
 def create_user(username: str, password: str, fullname: str = "", email: str = "",
@@ -108,7 +108,7 @@ def add_user(db_dir: Path, username: str, password: str, fullname: str = "",
 
 
 def remove_user(db_dir: Path, username: str) -> tuple[bool, str]:
-    """Removes a user from the users.json file.
+    """Removes a user from the users.json file and revokes the user's access tokens.
 
     Args:
         db_dir: Path to the db directory
@@ -124,7 +124,11 @@ def remove_user(db_dir: Path, username: str) -> tuple[bool, str]:
 
     users_data = [user for user in users_data if user.get('username') != username]
     save_entity_data(db_dir, 'users', users_data)
-    return True, f"User '{username}' removed successfully."
+
+    from fastapi_app.lib.core.access_tokens import revoke_user_tokens
+    revoked = revoke_user_tokens(db_dir, username)
+    suffix = f" Revoked {revoked} access token(s)." if revoked else ""
+    return True, f"User '{username}' removed successfully.{suffix}"
 
 
 def update_user_password(db_dir: Path, username: str, password: str) -> tuple[bool, str]:

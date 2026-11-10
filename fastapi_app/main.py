@@ -8,6 +8,9 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
+import os
+from os import PathLike
+from starlette.types import Scope
 
 from .config import get_settings
 from .lib.utils.logging_utils import setup_logging, get_logger
@@ -61,6 +64,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error initializing database from config: {e}")
         raise
+
+    # Wrap legacy SHA-256 password hashes in scrypt, so users.json holds no hash that works as a credential
+    from .lib.utils.password_hash import upgrade_stored_hashes
+    upgraded_hashes = upgrade_stored_hashes(settings.db_dir / 'users.json')
+    if upgraded_hashes:
+        logger.info(f"Upgraded {upgraded_hashes} legacy SHA-256 password hash(es) to scrypt")
 
     # Now load config and sync settings between environment and config
     # Priority: Environment variables > config.json
@@ -251,6 +260,7 @@ app.add_middleware(CancelledRequestMiddleware)
 # Import API routers
 from .api import auth, config
 from .routers import (
+    access_tokens,
     plugins,
     plugins_admin,
     files_list,
@@ -288,6 +298,7 @@ from .routers import (
 # Note: No unversioned compatibility routes - frontend uses client shim (app/src/plugins/client.js)
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
 api_v1.include_router(auth.router)
+api_v1.include_router(access_tokens.router)  # Personal access tokens (/auth/tokens)
 api_v1.include_router(config.router)
 api_v1.include_router(collections.router)
 api_v1.include_router(users.router)
@@ -381,10 +392,25 @@ if is_dev_mode:
                 return Response(content=content, media_type='application/javascript')
             return FileResponse(str(file_path))
 
+    class _RevalidatingStaticFiles(StaticFiles):
+        """Static files that the browser must revalidate on every use (cheap 304 via ETag), so
+        that source files and templates are never served from a stale heuristic cache."""
+
+        def file_response(
+            self,
+            full_path: "PathLike[str] | str",
+            stat_result: os.stat_result,
+            scope: Scope,
+            status_code: int = 200,
+        ) -> Response:
+            response = super().file_response(full_path, stat_result, scope, status_code)
+            response.headers["Cache-Control"] = "no-cache"
+            return response
+
     # Mount source files
     src_root = project_root / 'app' / 'src'
     if src_root.exists():
-        app.mount("/src", StaticFiles(directory=str(src_root)), name="src")
+        app.mount("/src", _RevalidatingStaticFiles(directory=str(src_root)), name="src")
 
     # Mount tests (for test utilities)
     tests_root = project_root / 'tests'

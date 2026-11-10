@@ -90,7 +90,7 @@ class MyPlugin extends Plugin {
    * Extension point handler for `ep.toolbar.contentItems`.
    * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
    * Delegates to {@link MyPlugin#getToolbarContentItems}.
-   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   * @returns {PanelContribution[]}
    */
   [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
 
@@ -109,17 +109,17 @@ Extension point handler methods MUST be documented with JSDoc: state the EP bein
 ### Invoking an extension point (host side)
 
 ```javascript
-// ToolbarPlugin.start() collects all contributions
+// ToolbarPlugin.start() collects all contributions and puts them into display order
 const results = await this.context.invokePluginEndpoint(
   ep.toolbar.contentItems, [], { result: 'values', throws: false }
 )
-for (const items of results) {
-  if (!Array.isArray(items)) continue
-  for (const { element, priority = 0, position = 'center' } of items) {
-    ui.toolbar.add(element, priority, position)
-  }
+const contributions = results.flatMap(items => Array.isArray(items) ? items : [])
+for (const { element, priority = 0 } of resolveContributions(contributions)) {
+  ui.toolbar.add(element, priority)
 }
 ```
+
+A `PanelContribution` (`app/src/modules/panels/base-panel.js`) has `element`, `position` (`'left'`, `'center'`, `'right'` or an absolute slot such as `1` or `-1`), `order` (position within the zone, defaults to `priority`) and `priority` (overflow: higher stays visible longer). Use `order` when an item should sit far left but be hidden early, e.g. the Collection selector.
 
 ### Dashboard contributions
 

@@ -7,7 +7,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 
-def get_retry_session(retries=5, backoff_factor=1.0, status_forcelist=None, read_retries: int | None = None) -> requests.Session:
+def get_retry_session(retries=5, backoff_factor=1.0, status_forcelist=None, read_retries: int | None = None, respect_retry_after: bool = True) -> requests.Session:
     """
     Create a requests Session with retry logic.
 
@@ -16,6 +16,7 @@ def get_retry_session(retries=5, backoff_factor=1.0, status_forcelist=None, read
         backoff_factor: Factor for exponential backoff (delay = backoff_factor * (2 ** (retry_count - 1)))
         status_forcelist: HTTP status codes to retry on (default: [429, 500, 502, 503, 504])
         read_retries: Retries after a read timeout; None uses `retries`, 0 disables (for slow, billed requests)
+        respect_retry_after: Wait as long as a Retry-After header asks, without limit; False uses the backoff instead
 
     Returns:
         Configured requests.Session with retry adapter
@@ -33,6 +34,7 @@ def get_retry_session(retries=5, backoff_factor=1.0, status_forcelist=None, read
         read=read_retries,
         backoff_factor=backoff_factor,
         status_forcelist=status_forcelist,
+        respect_retry_after_header=respect_retry_after,
         allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)

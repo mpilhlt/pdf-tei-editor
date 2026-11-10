@@ -9,7 +9,7 @@ Usage:
     python tests/unit-test-runner.py [options] [test-path-or-files...]
 
 Options:
-    --tap               Output in TAP format (via pytest-tap)
+    --tap               Output in TAP format (via tap.py)
     --verbose, -v       Verbose output
     --grep PATTERN      Only run tests matching pattern (in test file names)
     --inverse-grep PAT  Exclude tests matching pattern (in test file names)

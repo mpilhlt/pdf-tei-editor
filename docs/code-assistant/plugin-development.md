@@ -158,7 +158,7 @@ class MyPlugin extends Plugin {
    * Extension point handler for `ep.toolbar.contentItems`.
    * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
    * Delegates to {@link MyPlugin#getToolbarContentItems}.
-   * @returns {Array<{element: HTMLElement, priority: number, position: string}>}
+   * @returns {PanelContribution[]}
    */
   [ep.toolbar.contentItems](...args) { return this.getToolbarContentItems(...args) }
 
@@ -191,6 +191,26 @@ class DocumentActionsPlugin extends Plugin {
 ```
 
 Only add a plugin to `deps` when it must be fully installed before this plugin's own `install()` runs. Plugins only needed at action time don't need a `deps` entry.
+
+## Adding Buttons to the XML Editor
+
+The `xmleditor` dependency adds widgets to the editor's bars: `addToolbarWidget(widget, priority, section, order)`, `addStatusbarWidget(widget, position, priority)` and `addHeaderbarWidget(widget, position, priority)`. The priority decides which widgets stay visible longest when the bar runs out of space.
+
+The right-hand side of the toolbar has three sections (ToolBar sections, see `app/src/modules/panels/README.md`), separated by separators that are only shown while both neighbouring sections have a visible button:
+
+```text
+[document history & review] | [import & export] | [plugin additions]
+```
+
+- `section = 'review'` - document history and review (`tei-tools` revision history at order 2, `unit-review` toggle at order 1).
+- `section = 'import-export'` - upload and download, owned by the `xmleditor` plugin.
+- `section = 'plugins'` (default) - everything else a plugin adds (TEI Wizard at 51.5, XSL viewer at 50.5).
+
+Within a section, widgets are sorted by `order` (default: the priority), highest leftmost, independent of the order in which the plugins are installed. Pass an explicit `order` when the position and the overflow priority should differ, e.g. the revision history button sits leftmost but has priority 1 and is hidden first. The editor theme picker (at the far right of the statusbar) belongs to the `xmleditor` plugin itself.
+
+```javascript
+this.getDependency('xmleditor').addToolbarWidget(button, 51.5, 'plugins')
+```
 
 ## Common Patterns
 

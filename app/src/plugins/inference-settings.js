@@ -13,7 +13,8 @@
  * models and the configured default), so every listed model is selectable.
  * Adds a Tools menu entry (new "inference" category) listing every available provider's models,
  * fetched from GET /api/v1/llm/providers, with a warning icon when a
- * model's live status isn't "available". The entry's own label reads
+ * model's live status isn't "available", and, for admins only, a button that
+ * copies the model's full "<provider id>/<model id>" for use in scripts. The entry's own label reads
  * "Default Model" until a selection is made, then "<provider>/<model>";
  * selecting a model also toasts a confirmation naming it.
  *
@@ -378,7 +379,49 @@ export class InferenceSettingsPlugin extends Plugin {
       tooltip.appendChild(icon);
       item.appendChild(tooltip);
     }
+    if (this._isAdmin()) {
+      item.appendChild(this._buildCopyButton(`${provider.id}/${model.id}`));
+    }
     return item;
+  }
+
+  /**
+   * Build the admin-only button that copies a model's full
+   * "<provider id>/<model id>" - the form scripts such as the auto-annotation
+   * probe (`--model`) accept - to the clipboard. Its click is stopped from
+   * reaching the menu, so copying does not select the model.
+   * @param {string} fullId
+   * @returns {HTMLElement}
+   */
+  _buildCopyButton(fullId) {
+    const button = /** @type {HTMLElement & {name: string, label: string, slot: string}} */
+      (document.createElement('sl-icon-button'));
+    button.name = 'clipboard';
+    button.label = `Copy model id ${fullId}`;
+    button.title = `Copy "${fullId}"`;
+    button.slot = 'suffix';
+    button.classList.add('inference-copy-model-id');
+    button.dataset.copyModelId = fullId;
+    button.style.fontSize = 'var(--sl-font-size-small)';
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      this._copyModelId(fullId);
+    });
+    return button;
+  }
+
+  /**
+   * @param {string} fullId
+   * @returns {Promise<void>}
+   */
+  async _copyModelId(fullId) {
+    try {
+      await navigator.clipboard.writeText(fullId);
+      notify(`Copied model id: ${fullId}`, 'success', 'clipboard-check');
+    } catch (error) {
+      notify(`Could not copy the model id: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon');
+    }
   }
 
   /**

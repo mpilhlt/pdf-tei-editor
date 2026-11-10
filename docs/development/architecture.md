@@ -367,9 +367,9 @@ See `app/src/state.js` for complete typedef:
 ### Authentication Flow
 
 1. **User enters credentials** in login dialog
-2. **Password hashed** client-side with SHA-256
-3. **API call** to `/api/v1/auth/login` with username, passwd_hash
-4. **Backend** validates credentials, creates session
+2. **API call** to `/api/v1/auth/login` with username and plain text password (protected in transit by HTTPS)
+3. **Backend** checks the password against the salted scrypt hash in `users.json` (`fastapi_app/lib/utils/password_hash.py`) and creates a session
+4. Scripts can log in with a personal access token at `/api/v1/auth/token-login` instead
 5. **Session ID** returned and stored
 6. **State updated** with user object
 7. **All plugins** react to user state change (show/hide UI, enable features)

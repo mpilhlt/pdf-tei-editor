@@ -129,6 +129,16 @@ toolBar.addButton({
 toolBar.add(customButton, 5);
 ```
 
+#### Sections
+
+`defineSections(names, separatorPriority)` appends named sections, separated by `<status-separator>`s. `addToSection(section, widget, priority, order)` adds a widget to a section; within the section, widgets are sorted by `order` (default: `priority`), highest leftmost, whatever the order of the calls. A section separator is hidden while one of its sides has no visible widget (hidden via `display: none`, `hidden` or overflow), so empty sections leave no stray separators.
+
+```javascript
+toolBar.defineSections(['review', 'transfer', 'plugins']);
+toolBar.addToSection('transfer', uploadButton, 3);
+toolBar.addToSection('review', historyButton, 1, 2); // leftmost in its section, hidden first on overflow
+```
+
 ### MenuBar
 Menu dropdown panel with hamburger overflow.
 
@@ -317,6 +327,8 @@ Widgets are assigned priorities (higher = more important):
 - **Priority 10**: Critical information (always visible)
 - **Priority 5-9**: Important features  
 - **Priority 1-4**: Nice-to-have features (hidden first)
+
+The priority only decides what is hidden first. Where a widget is placed is decided separately: by the call order for `add()`, by `order` for `addToSection()` and for `resolveContributions()` (which falls back to `priority` when no `order` is given).
 
 ## Styling
 

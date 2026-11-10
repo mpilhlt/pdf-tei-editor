@@ -39,14 +39,33 @@ class TestPerUserProviderKeys(unittest.TestCase):
         self.assertTrue(provider.is_available())
         self.assertFalse(provider.has_shared_key())
 
-    def test_shared_key_is_used_for_everyone(self):
+    def test_shared_key_is_used_for_users_without_own_key(self):
         registry = LLMProviderRegistry.get_instance()
         shared = make_provider("shared")
         registry.register(shared)
-        with patch("fastapi_app.lib.llm.registry.require_user_secret") as lookup:
+        with patch("fastapi_app.lib.llm.registry.require_user_secret", side_effect=MissingSecretError("test-svc", "alice")):
             self.assertIs(registry.get_provider_for_user("test", "alice"), shared)
-            lookup.assert_not_called()
         self.assertFalse(shared.uses_user_key)
+
+    def test_own_key_takes_precedence_over_shared_key(self):
+        registry = LLMProviderRegistry.get_instance()
+        shared = make_provider("shared")
+        registry.register(shared)
+        with patch("fastapi_app.lib.llm.registry.require_user_secret", return_value="user-key"):
+            resolved = registry.get_provider_for_user("test", "alice")
+        self.assertIsNot(resolved, shared)
+        assert isinstance(resolved, OpenAICompatibleProvider)
+        self.assertEqual(resolved._api_key, "user-key")
+        self.assertTrue(resolved.uses_user_key)
+        self.assertFalse(shared.uses_user_key)
+
+    def test_provider_without_secret_service_ignores_user_keys(self):
+        registry = LLMProviderRegistry.get_instance()
+        provider = OpenAICompatibleProvider(id="test", label="Test", base_url="https://example.invalid/v1", api_key="shared")
+        registry.register(provider)
+        with patch("fastapi_app.lib.llm.registry.require_user_secret") as lookup:
+            self.assertIs(registry.get_provider_for_user("test", "alice"), provider)
+            lookup.assert_not_called()
 
     def test_user_key_is_used_without_shared_key(self):
         registry = LLMProviderRegistry.get_instance()

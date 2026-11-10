@@ -6,20 +6,9 @@
  * as the frontend application will use.
  */
 
-import { createHash } from 'crypto';
-
 // Get base URL from environment
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:8000';
 const API_BASE = `${BASE_URL}/api/v1`;
-
-/**
- * Hash a password using SHA-256 (matches frontend implementation)
- * @param {string} password - Plain text password
- * @returns {string} Hex-encoded SHA-256 hash
- */
-function hashPassword(password) {
-  return createHash('sha256').update(password, 'utf8').digest('hex');
-}
 
 /**
  * Login with username and password, returns session ID for subsequent API calls
@@ -30,7 +19,6 @@ function hashPassword(password) {
  */
 async function login(username, password, baseUrl = null) {
   const apiBase = baseUrl ? `${baseUrl}/api/v1` : API_BASE;
-  const passwd_hash = hashPassword(password);
 
   const response = await fetch(`${apiBase}/auth/login`, {
     method: 'POST',
@@ -39,7 +27,7 @@ async function login(username, password, baseUrl = null) {
     },
     body: JSON.stringify({
       username,
-      passwd_hash
+      password
     })
   });
 
@@ -362,7 +350,6 @@ async function loginAsBasicUser(baseUrl = null) {
 }
 
 export {
-  hashPassword,
   login,
   logout,
   checkStatus,

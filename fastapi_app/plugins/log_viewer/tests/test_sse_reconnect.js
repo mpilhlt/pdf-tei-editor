@@ -33,21 +33,6 @@ http.globalAgent.maxSockets = 50;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Hash password using SHA-256 (matches auth API)
- * @param {string} password
- * @returns {string}
- */
-function hashPassword(password) {
-  const { createHash } = await_import_crypto();
-  return createHash('sha256').update(password, 'utf8').digest('hex');
-}
-
-// Workaround: import crypto at module level
-import { createHash } from 'node:crypto';
-/** @returns {{ createHash: typeof createHash }} */
-function await_import_crypto() { return { createHash }; }
-
-/**
  * Login and return session ID
  * @param {string} baseUrl
  * @param {string} username
@@ -55,11 +40,10 @@ function await_import_crypto() { return { createHash }; }
  * @returns {Promise<string>}
  */
 async function loginSession(baseUrl, username, password) {
-  const passwd_hash = hashPassword(password);
   const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, passwd_hash })
+    body: JSON.stringify({ username, password })
   });
   if (!response.ok) {
     throw new Error(`Login failed: ${response.status}`);

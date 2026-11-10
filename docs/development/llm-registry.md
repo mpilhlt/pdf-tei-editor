@@ -9,6 +9,7 @@ Code: `fastapi_app/lib/llm/`. HTTP API: `fastapi_app/routers/llm.py`. Frontend: 
 | Module | Purpose |
 | --- | --- |
 | `base.py` | `LLMProvider` ABC, `LLMModel` and `ModelStatus` TypedDicts, `LLMProviderError` |
+| `rate_limit.py` | `LLMRateLimitError`, `post_completion()`, per-key rate-limit state |
 | `registry.py` | `LLMProviderRegistry` singleton |
 | `openai_compatible.py` | `OpenAICompatibleProvider` for endpoints speaking the OpenAI `chat/completions` format; `chat_completion_sync()` |
 | `default_model.py` | Installation-wide default model (stored in config) |
@@ -29,7 +30,7 @@ The [inference-endpoints](https://github.com/mpilhlt/pte-plugins/tree/main/plugi
 The bundled providers always register, with or without a configured key. Providers are not registered when `FASTAPI_APPLICATION_MODE=testing`.
 
 - **Per-user keys (default)**: without a configured key, each user supplies their own through Tools > API Keys (secret services `kisski`, `google`, `anthropic`; see [User API Keys](../code-assistant/backend-plugins.md#user-api-keys)). `GET /api/v1/llm/providers` lists such a provider with `key_required: true` and no models until the user stored a key; the model picker then shows "Add your API key…". A provider whose models cannot be listed (rejected key, network or API error, or a stored key that cannot be decrypted after `SECRETS_ENCRYPTION_KEY` changed) is listed with an `error` and no models; the picker shows "Models unavailable" with the error as tooltip, and for per-user-key providers opens the key dialog with the error when selected.
-- **Shared key (shared infrastructure)**: if a key is set in `.env` or `config.json` (`config.json` wins), it is used for all users and no key prompt appears. The providers read the shared key from config on every use, so a key set or removed in `config.json` takes effect without a restart (`kisski`, `google_llm` and `anthropic_llm` from [pte-plugins#10](https://github.com/mpilhlt/pte-plugins/pull/10) on; older versions read it once at startup and need `POST /api/v1/plugins/admin/restart`). A provider written for this registry should do the same rather than copying the key in `initialize()`.
+- **Shared key (shared infrastructure)**: if a key is set in `.env` or `config.json` (`config.json` wins), it is used for all users who have not stored a key of their own and no key prompt appears. A user's own key takes precedence over the shared key (usage is then billed to the user, see `uses_user_key`). The providers read the shared key from config on every use, so a key set or removed in `config.json` takes effect without a restart (`kisski`, `google_llm` and `anthropic_llm` from [pte-plugins#10](https://github.com/mpilhlt/pte-plugins/pull/10) on; older versions read it once at startup and need `POST /api/v1/plugins/admin/restart`). A provider written for this registry should do the same rather than copying the key in `initialize()`.
 
 ## Writing a provider
 
@@ -51,8 +52,9 @@ class MyProvider(LLMProvider):
 - `LLMModel.free`: `True` if using the model costs the operator nothing. Non-free models are restricted (see [Access control](#access-control)).
 - `LLMModel.status`: optional live load state (`availability`: `available`, `busy` or `very_busy`, plus a free-text `detail`); the frontend shows a warning icon when not `available`.
 - `is_available()` (default `True`) may be overridden to hide a provider that cannot currently be used. It is not about API keys.
-- Per-user keys: set `secret_service` to the id of a registered secret service, return `has_shared_key()` `True` only if a configured key exists, and implement `with_api_key(key)` returning a copy that uses the given key. Consumers get a provider for the requesting user with `LLMProviderRegistry.get_instance().get_provider_for_user(provider_id, username)`, which raises `MissingSecretError` when the user has no key (map it to HTTP 428 with `secret_required_detail(error)`; the extraction endpoint does this already). Do not use `get_provider()` for requests made on behalf of a user.
-- Raise `LLMProviderError` with a user-presentable message for upstream failures (rate limit, overload, bad request); routes map it to HTTP 502.
+- Per-user keys: set `secret_service` to the id of a registered secret service, return `has_shared_key()` `True` only if a configured key exists, and implement `with_api_key(key)` returning a copy that uses the given key. Consumers get a provider for the requesting user with `LLMProviderRegistry.get_instance().get_provider_for_user(provider_id, username)`, which prefers the user's own key over a shared one and raises `MissingSecretError` when there is neither (map it to HTTP 428 with `secret_required_detail(error)`; the extraction endpoint does this already). Do not use `get_provider()` for requests made on behalf of a user.
+- Raise `LLMProviderError` with a user-presentable message for upstream failures (overload, bad request); routes map it to HTTP 502.
+- Raise `LLMRateLimitError` (a subclass, with `available_at`) when a rate limit or quota is reached; routes map it to HTTP 429 with `rate_limit_http_error()`, and must check for it before treating an error as retryable. Providers making their own HTTP requests get this from `post_completion()`, with a session from `get_completion_session()`, so that urllib3 does not retry the 429.
 - Multimodal input is optional: override `supports_pdf_input(model_id)` and `chat_completion_with_pdf()` to accept a PDF file, and `supports_image_input(model_id)` and `chat_completion_with_images(model_id, system_prompt, user_prompt, images)` to accept a list of `LLMImage` (`{"data": bytes, "media_type": "image/png"}`), sent in order ahead of the prompt. Consumers check the `supports_*` method before calling. The Anthropic provider implements both.
 - Only offer chat models in `list_models()`. Commercial APIs mostly expose no machine-readable modality field, so the Google provider filters non-chat models (image, embedding, etc.) by name markers.
 
@@ -95,7 +97,7 @@ The admin-chosen default is stored under `llm.default-model.provider` / `llm.def
 
 Pass the provider returned by `get_provider_for_user()`, not the registered one, so that `uses_user_key` is set.
 
-A model is free if its provider sets `LLMModel.free`, or if its `<Provider label>/<Model label>` matches a pattern in `llm.free-models` (env `LLM_FREE_MODELS`, same syntax as the model filter). Use this for models on a provider's free tier, e.g. `"^Google Gemini/Gemini Flash"`.
+A model is free if its provider sets `LLMModel.free`, or if its `<Provider label>/<Model label>` (as shown in the picker) or `<provider id>/<model id>` matches a pattern in `llm.free-models` (env `LLM_FREE_MODELS`, same syntax as the model filter). Patterns are case-sensitive regular expressions. Use this for models on a provider's free tier, e.g. `"^Google Gemini/.*Flash"` or `"^google/gemini-.*flash"`. A pattern that matches nothing silently hides the models from non-admins, so check it against the labels returned by `GET /api/v1/llm/providers`.
 
 `GET /api/v1/llm/providers` lists only the models the current user may use, so non-admins never see models they cannot pick.
 

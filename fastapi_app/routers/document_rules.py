@@ -70,7 +70,7 @@ from ..lib.doc_rules.rules_refresh import (
     resolve_refresh_target,
 )
 from ..lib.doc_rules.storage import DocumentRulesStore, OverrideRow
-from ..lib.llm import LLMProviderError, LLMProviderRegistry
+from ..lib.llm import LLMProviderError, LLMProviderRegistry, LLMRateLimitError, rate_limit_http_error
 from ..lib.llm.model_access import ModelAccessDenied, check_model_access
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
@@ -580,8 +580,10 @@ def _upstream_error_message(error: requests.RequestException) -> str:
 
 
 def _llm_request_error(provider_id: str, error: LLMProviderError | requests.RequestException) -> HTTPException:
-    """The 502 for a failed request to the language model provider (logged)."""
+    """The HTTP error for a failed request to the language model provider (logged): 429 for a rate limit, otherwise 502."""
     logger.warning(f"document-rules: provider '{provider_id}' failed: {error}")
+    if isinstance(error, LLMRateLimitError):
+        return rate_limit_http_error(error)
     message = _upstream_error_message(error) if isinstance(error, requests.RequestException) else str(error)
     return HTTPException(status_code=502, detail=f"LLM provider request failed: {message}")
 
@@ -815,9 +817,12 @@ def get_upstream_status(
     db: DatabaseManager = Depends(get_db),
     file_storage: FileStorage = Depends(get_file_storage),
 ) -> UpstreamStatusResponse:
-    """Which of the caller's overrides of the rule category of `url` the upstream guide already contains."""
+    """
+    Which of the caller's overrides of the rule category of `url` the upstream guide already contains. With `refetch`, every cached lookup counts as expired (a TTL of 0), so a branch head that moved since it was cached, e.g. by a merged pull request, is resolved anew and cached for the requests that follow ("Update to upstream").
+    """
     tei_content = _document_tei_or_http_error(FileRepository(db), file_storage, request.xml, user)
-    cache = UrlCache(get_settings().annotation_rules_cache_dir)
+    cache_dir = get_settings().annotation_rules_cache_dir
+    cache = UrlCache(cache_dir, ttl_seconds=0) if request.refetch else UrlCache(cache_dir)
     try:
         status = upstream_status(tei_content, request.url, store, user["username"], cache)
     except CategoryNotFoundError as e:
