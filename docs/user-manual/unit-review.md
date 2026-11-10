@@ -65,7 +65,7 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 
 ## LLM reviewer
 
-When review mode is on and you run **Review Annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
+When review mode is on and you run **Review document annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
 
 ### Adjusting the rules the model uses
 
