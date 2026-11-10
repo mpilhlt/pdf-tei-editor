@@ -207,28 +207,11 @@ export class PDFJSViewer {
           // Create event bus
           this.eventBus = new pdfjsViewer.EventBus();
 
-          // Create link service
-          // External links (e.g. URLs in the PDF text) open in a new tab instead of
-          // navigating away from the application.
+          // Create link service (used for page navigation; links in the PDF are not
+          // interactive, see annotationMode below)
           this.linkService = new pdfjsViewer.PDFLinkService({
-            eventBus: this.eventBus,
-            externalLinkTarget: pdfjsViewer.LinkTarget.BLANK
+            eventBus: this.eventBus
           });
-
-          // PDF.js sets a native `title` attribute on link annotations (both actual PDF
-          // links and plain-text URLs it auto-linkifies) showing the raw URL. Native
-          // title tooltips are rendered by the browser above all page content, ignoring
-          // CSS z-index/overflow, so they bleed through other UI (e.g. the diagnostics
-          // drawer). The title is set directly on the annotation container by pdf.js
-          // internals (not only via linkService.addLinkAttributes), so strip it from
-          // the whole annotation layer after each render pass, including the delayed
-          // pass that injects auto-linked plain-text URLs.
-          const stripTooltipTitles = (event) => {
-            const layerDiv = event.source?.annotationLayer?.div;
-            layerDiv?.querySelectorAll('[title]').forEach(el => el.removeAttribute('title'));
-          };
-          this.eventBus.on('annotationlayerrendered', stripTooltipTitles);
-          this.eventBus.on('linkannotationsadded', stripTooltipTitles);
 
           // Create find controller
           this.findController = new pdfjsViewer.PDFFindController({
@@ -245,7 +228,13 @@ export class PDFJSViewer {
             linkService: this.linkService,
             findController: this.findController,
             textLayerMode: 1, // Enable text layer (0=disabled, 1=enabled, 2=enabled+respects PDF copy restrictions)
-            annotationMode: 2, // Enable annotations (0=disabled, 1=enabled, 2=enabled+forms)
+            // Annotations are drawn onto the canvas, without interactive forms (0=disabled,
+            // 1=enabled, 2=enabled+forms). Their HTML layer (links, popups) is hidden in
+            // pdfjs-viewer.css: links in the PDF need not be clickable, and the layer showed
+            // through overlays such as the diagnostics drawer. Auto-linking of plain-text
+            // URLs is disabled since it only adds links to that layer.
+            annotationMode: 1,
+            enableAutoLinking: false,
             removePageBorders: false
             // Use default zoom behavior (omit useOnlyCssZoom)
           });
