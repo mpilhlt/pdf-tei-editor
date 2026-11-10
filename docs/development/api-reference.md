@@ -296,6 +296,72 @@ Removes all generated documentation files.
 
 ## Programmatic API Access
 
+Scripts and other programs call the same HTTP API as the web interface. They authenticate with a [personal access token](../user-manual/access-tokens.md) (`pte_...`), which they exchange for a session at `POST /api/v1/auth/token-login` (sending the token as `Authorization: Bearer <token>`), and then send the session ID in the `X-Session-ID` header of every request. The REST endpoints are listed in the Swagger UI at `/docs` of a running instance (see [FastAPI REST API](#1-fastapi-rest-api)).
+
+### Calling the API with an access token
+
+The examples below read the token from the `API_TOKEN` environment variable, list the collections the token's user can access and end the session. Run them with `API_TOKEN=pte_... API_BASE_URL=https://pdf-tei-editor.example.org` set.
+
+**Node.js** (18 or later, no dependencies; save as `list-collections.mjs` and run `node list-collections.mjs`):
+
+```javascript
+const baseUrl = process.env.API_BASE_URL || 'http://localhost:8000';
+const token = process.env.API_TOKEN;
+
+// Exchange the token for a session
+const login = await fetch(`${baseUrl}/api/v1/auth/token-login`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}` },
+});
+if (!login.ok) {
+  throw new Error(`Login failed: ${login.status} ${await login.text()}`);
+}
+const { username, sessionId } = await login.json();
+const headers = { 'X-Session-ID': sessionId };
+
+try {
+  // Call any endpoint with the session ID
+  const response = await fetch(`${baseUrl}/api/v1/collections`, { headers });
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${await response.text()}`);
+  }
+  const collections = await response.json();
+  console.log(`Collections of ${username}:`, collections.map(c => c.id).join(', '));
+} finally {
+  // End the session
+  await fetch(`${baseUrl}/api/v1/auth/logout`, { method: 'POST', headers });
+}
+```
+
+**Python** (3.9 or later, with [requests](https://pypi.org/project/requests/); run `python list_collections.py`):
+
+```python
+import os
+
+import requests
+
+base_url = os.environ.get("API_BASE_URL", "http://localhost:8000")
+token = os.environ["API_TOKEN"]
+
+with requests.Session() as http:
+    # Exchange the token for a session
+    login = http.post(f"{base_url}/api/v1/auth/token-login", headers={"Authorization": f"Bearer {token}"})
+    login.raise_for_status()
+    user = login.json()
+    http.headers["X-Session-ID"] = user["sessionId"]
+
+    try:
+        # Call any endpoint with the session ID
+        response = http.get(f"{base_url}/api/v1/collections")
+        response.raise_for_status()
+        print(f"Collections of {user['username']}:", ", ".join(c["id"] for c in response.json()))
+    finally:
+        # End the session
+        http.post(f"{base_url}/api/v1/auth/logout")
+```
+
+A session created from a token ends when the token is revoked or expires, or after the usual inactivity timeout, so long-running scripts should log in again on a `401` response.
+
 ### Environment Variables for CLI Scripts
 
 All CLI scripts and external tools that access the HTTP API should support these environment variables (from `.env` file):

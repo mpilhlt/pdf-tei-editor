@@ -1,16 +1,24 @@
 <sl-drawer name="infoDrawer" label="User Manual" style="--size: 80ch;">
+  <div slot="header-actions" style="display: flex; align-items: center; gap: 4px;">
+    <span name="versionInfo" style="font-size: 0.875rem; color: var(--sl-color-neutral-600); margin-right: 4px;">
+      <!-- Version will be injected here -->
+    </span>
+    <sl-tooltip content="Edit on GitHub">
+      <sl-icon-button data-name="editGitHubBtn" name="github" label="Edit on GitHub" style="font-size: 1.25rem;"></sl-icon-button>
+    </sl-tooltip>
+  </div>
   <div name="content" class="markdown-body" data-theme="light" style="color-scheme: light !important;">
     <!-- content will be dynamically updated-->
   </div>
-  <div slot="footer" style="display: flex; width: 100%; justify-content: space-between; align-items: center;">
-    <div style="display: flex; align-items: center; gap: 16px;">
-      <sl-button name="editGitHubBtn" variant="default">
-        <sl-icon name="github" slot="prefix"></sl-icon>Edit on GitHub</sl-button>
-      <span name="versionInfo" style="font-size: 0.875rem; color: var(--sl-color-neutral-600);">
-        <!-- Version will be injected here -->
-      </span>
-    </div>
-    <div style="display: flex; gap: 8px;">
+  <div slot="footer" style="display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px;">
+    <sl-dropdown name="tocDropdown" placement="top-start" hoist hidden>
+      <sl-button name="tocBtn" variant="default" slot="trigger" caret>
+        <sl-icon slot="prefix" name="list-nested"></sl-icon>
+        Contents
+      </sl-button>
+      <sl-menu name="tocMenu" style="overflow-y: auto; text-align: left;"></sl-menu>
+    </sl-dropdown>
+    <div style="display: flex; gap: 8px; margin-left: auto;">
       <sl-button name="backBtn" variant="default" disabled>
         <sl-icon name="arrow-left" slot="prefix"></sl-icon>Back</sl-button>
       <sl-button name="homeBtn" variant="default">
