@@ -793,7 +793,7 @@ For every request under `/api/plugins/` that brings no session id of its own, th
 
 - In page JavaScript, call plugin routes with plain same-origin `fetch()`, `EventSource`, links or `navigator.sendBeacon()`. Do not read `session_id` from `location.search` and do not build URLs with `session_id`, neither in JavaScript nor in Python.
 - Non-GET requests authenticated by the cookie are rejected if their `Origin` header names another host.
-- The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page decides which session it carries. A page that has to act for the session of the application tab that opened it (for example to receive that tab's SSE events) takes the id from `(await sandbox.getCurrentState()).sessionId` and sends it as `X-Session-ID` header, as the log viewer does.
+- The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page decides which session it carries. So that two tabs logged in as different users can both use plugin pages, the sandbox client script (injected by `load_plugin_html()` / `wrap_html_with_sandbox_client()`) asks the application tab that opened the page for its session and adds it as `X-Session-ID` header to every same-origin `fetch()` and `XMLHttpRequest` to `/api/`, unless the request sets a non-empty one itself. Plain navigations (reload, links, `window.location` downloads), `navigator.sendBeacon()` and `EventSource` cannot carry the header and use the cookie, so with parallel sessions in one browser they act for the session of the most recently opened plugin page.
 - Logout clears the cookie.
 
 ## Key Files

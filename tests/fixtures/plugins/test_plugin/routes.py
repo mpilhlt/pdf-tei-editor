@@ -6,6 +6,8 @@ beyond the generic /api/plugins/{id}/execute endpoint.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
 from fastapi_app.lib.core.dependencies import get_current_user, require_authenticated_user
@@ -228,3 +230,10 @@ async def whoami(user: dict = Depends(require_authenticated_user)) -> dict[str, 
 async def whoami_post(user: dict = Depends(require_authenticated_user)) -> dict[str, str]:
     """POST variant of :func:`whoami`, for the cross-origin check of cookie-authenticated requests."""
     return {"username": user["username"]}
+
+
+
+@router.get("/whoami-page", response_class=HTMLResponse)
+async def whoami_page(user: dict = Depends(require_authenticated_user)) -> HTMLResponse:
+    """Page whose own requests report the user they authenticate as (launch token E2E test)."""
+    return HTMLResponse(load_plugin_html(__file__, "whoami.html"))

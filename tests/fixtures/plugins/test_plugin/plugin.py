@@ -284,7 +284,7 @@ class TestPlugin(Plugin):
 
     async def open_page(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
         """Return the URL of a plugin route for the result dialog's iframe."""
-        return {"outputUrl": "/api/plugins/test-plugin/whoami?source=dialog"}
+        return {"outputUrl": "/api/plugins/test-plugin/whoami-page?source=dialog"}
 
     async def info(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
         """

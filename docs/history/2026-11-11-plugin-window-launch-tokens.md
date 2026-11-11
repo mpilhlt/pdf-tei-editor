@@ -17,10 +17,11 @@ Backend plugin pages (result dialog iframe, "open in window", `sandbox.navigateI
 - Logout deletes the cookie.
 - Frontend: `PluginSandbox.createLaunchUrl()` replaces `session_id` with a launch token for same-origin `/api/plugins/` URLs. It is used by `displayResultInIframe`, the open-window button, `configureExecuteButton`, `navigateIframe` and `openControlledWindow`. Windows open as `about:blank` synchronously and are navigated once the token is there, to keep the user activation. `triggerDownload` authenticates with the header only.
 - Core plugin pages (active-sessions, backup-restore, document-search, log-viewer) no longer read `session_id` from the URL. The log viewer takes the id of the opening tab from `sandbox.getCurrentState()` and sends it as header, because its log events reach the page through that tab's SSE stream.
+- Sandbox client script (`_SESSION_HEADER_SCRIPT` in `fastapi_app/lib/plugins/plugin_tools.py`): asks the opening tab for its session (`getCurrentState()`, 3 s timeout) and adds it as `X-Session-ID` to same-origin `fetch()` and `XMLHttpRequest` calls to `/api/` that bring no non-empty header of their own.
 
 ## Decision
 
-The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page decides which session plugin pages without their own session id use. Christian accepted this by choosing option C (2026-11-11).
+The cookie belongs to the browser profile, not to a tab. With an admin session in one tab and a user session in another, the cookie carries the session of the most recently opened plugin page. Christian chose the hybrid (2026-11-11): page requests via fetch/XHR carry the opening tab's session through the sandbox script, and only plain navigations (reload, links, downloads), `sendBeacon()` and `EventSource` fall back to the cookie. That drawback is acceptable because parallel sessions in one browser are not the default use case. A fully per-tab variant (no cookie; fresh launch tokens for every navigation) was rejected as too invasive for plugin pages.
 
 ## Follow-up
 

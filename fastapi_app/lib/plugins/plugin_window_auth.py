@@ -15,7 +15,10 @@ legacy ``session_id`` query parameter), the middleware copies the cookie's sessi
 changes.
 
 The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page
-decides which session plugin pages without their own session id use.
+decides which session it carries. The sandbox client script therefore adds the session of the tab
+that opened a page as ``X-Session-ID`` header to the page's same-origin ``fetch()`` and
+``XMLHttpRequest`` calls (see ``_SESSION_HEADER_SCRIPT`` in ``plugin_tools.py``); only plain
+navigations, ``sendBeacon()`` and ``EventSource`` rely on the cookie.
 """
 
 from http.cookies import CookieError, SimpleCookie
