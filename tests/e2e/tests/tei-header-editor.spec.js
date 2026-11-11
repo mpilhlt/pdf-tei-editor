@@ -54,9 +54,17 @@ test.describe('TEI Header Editor', () => {
 
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const t0 = Date.now(); const dbg = []; const step = (m) => dbg.push(`${Date.now()-t0} STEP ${m}`);
+    page.on('console', m => dbg.push(`${Date.now()-t0} CONSOLE ${m.text().slice(0,250)}`));
+    page.on('request', r => { if (/api/.test(r.url())) dbg.push(`${Date.now()-t0} REQ ${r.method()} ${r.url().replace(/.*\/api/,'')}`) });
+    page.on('response', r => { if (/api/.test(r.url())) dbg.push(`${Date.now()-t0} RES ${r.status()} ${r.url().replace(/.*\/api/,'')}`) });
+    test.info().attach = test.info().attach;
+    globalThis.__DEBUG_DUMP = () => console.log('DEBUG TEIH\n' + dbg.join('\n'));
+    setTimeout(() => globalThis.__DEBUG_DUMP(), 57000);
 
     try {
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      step('logged in');
 
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
@@ -83,7 +91,9 @@ test.describe('TEI Header Editor', () => {
       expect(titleStmtBefore, 'fixture must have a titleStmt to make this test meaningful').not.toBeNull();
       expect(titleStmtBefore, 'fixture must have nested author structure to make this test meaningful').toContain('<persName>');
 
+      step('open editor 1');
       await openHeaderEditor(page);
+      step('opened 1');
 
       const publisherInput = page.locator('sl-input[data-field="publisher"]');
       await expect(publisherInput).toBeVisible();
@@ -93,7 +103,9 @@ test.describe('TEI Header Editor', () => {
       await dialog.locator('sl-button[name="saveBtn"]').click();
       await expect(dialog).not.toBeVisible({ timeout: 10000 });
 
+      step('saved; reload');
       await page.reload();
+      step('reloaded');
       await page.waitForSelector('#codemirror-container .cm-editor');
       await page.waitForFunction(() => {
         const app = /** @type {any} */ (window).app;
@@ -104,7 +116,9 @@ test.describe('TEI Header Editor', () => {
       await page.waitForTimeout(500);
 
       // The edited field persisted...
+      step('open editor 2');
       await openHeaderEditor(page);
+      step('opened 2');
       await expect(page.locator('sl-input[data-field="publisher"] input')).toHaveValue('Test Publisher E2E');
 
       // ...and the untouched titleStmt is byte-identical to before.
@@ -116,9 +130,12 @@ test.describe('TEI Header Editor', () => {
       });
       expect(titleStmtAfter).toBe(titleStmtBefore);
     } finally {
+      step('finally');
       stopErrorMonitoring();
       await releaseAllLocks(page);
+      step('released');
       await performLogout(page);
+      step('logged out');
     }
   });
 
