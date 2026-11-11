@@ -153,6 +153,16 @@ Auto-save keeps the document up to date silently. To record a named checkpoint i
 - **Keep comments** — shown with *Save to a new personal version* when the document has [unit comments](unit-comments.md); uncheck it to start the new version without them.
 - **Save as gold version** — marks this document as the authoritative Gold Standard (reviewers only).
 
+### Documents opened by someone else
+
+Only one window can edit a document at a time. When the document is already open for editing elsewhere, it opens read-only, and a notice says why:
+
+- *This document is being edited by &lt;user&gt;*: another user has it open.
+- *You have this document open for editing in another window or session*: you have it open yourself, in another tab, browser or after logging in again.
+- A notice of a plugin, e.g. while a background job changes the document.
+
+When the other window closes the document, it becomes editable here and *You can now edit this document* appears.
+
 ### Superseded versions
 
 As soon as a new version is saved from a version, the source version is superseded and becomes read-only for everyone, including administrators. This also applies to the Gold Standard. The status bar shows *Read-only (superseded by a newer version)*. To change a superseded version, use **Save revision** with *Save to a new personal version*, which is preselected for such versions. Deleting the newer version makes the source version editable again.
