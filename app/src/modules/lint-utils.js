@@ -18,7 +18,7 @@
  * range when the user applies its fix from the drawer.
  *
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { StateEffectType, Extension, Range } from '@codemirror/state'
+ * @import { StateEffectType, Extension, Range, ChangeSet, Text } from '@codemirror/state'
  * @import { EditorView, ViewUpdate } from '@codemirror/view'
  */
 
@@ -296,6 +296,48 @@ export function fixChanges(diagnostics) {
     end = d.to;
   }
   return { changes, applied };
+}
+
+/**
+ * Checks whether a document change applied the fix (`replacement`) of a
+ * diagnostic: the changes touch the diagnostic's range, and the changed text
+ * around it now reads as if only the fix had been applied. This holds for the
+ * fix applied as one change (diagnostics drawer) as well as for a change the
+ * diff split up or widened (accepting a chunk of the merge view). Differences
+ * in whitespace between tags are ignored.
+ * @param {ChangeSet} changes - The changes, from `startDoc` to `newDoc`
+ * @param {Text} startDoc - The document before the changes
+ * @param {Text} newDoc - The document after the changes
+ * @param {{from: number, to: number, replacement: string}} fix - Positions in `startDoc`
+ * @returns {{from: number, to: number}|null} The range in `newDoc` that the fix
+ *   and the changes overlapping it now cover, or null if the fix was not applied
+ */
+export function appliedFixRange(changes, startDoc, newDoc, fix) {
+  let lo = fix.from;
+  let hi = fix.to;
+  let touched = false;
+  changes.iterChangedRanges((fromA, toA) => {
+    if (fromA <= hi && toA >= lo) {
+      lo = Math.min(lo, fromA);
+      hi = Math.max(hi, toA);
+      touched = true;
+    }
+  });
+  if (!touched || hi > startDoc.length) return null;
+  const from = changes.mapPos(lo, -1);
+  const to = changes.mapPos(hi, 1);
+  const expected = startDoc.sliceString(lo, fix.from) + fix.replacement + startDoc.sliceString(fix.to, hi);
+  return normalizeXmlWhitespace(newDoc.sliceString(from, to)) === normalizeXmlWhitespace(expected) ? { from, to } : null;
+}
+
+/**
+ * Collapses whitespace runs and removes whitespace between tags, which the
+ * merge view may change when it applies a chunk.
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeXmlWhitespace(text) {
+  return text.replace(/\s+/g, ' ').replace(/> </g, '><').trim();
 }
 
 /**
