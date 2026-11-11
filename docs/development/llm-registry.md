@@ -8,7 +8,7 @@ Code: `fastapi_app/lib/llm/`. HTTP API: `fastapi_app/routers/llm.py`. Frontend: 
 
 | Module | Purpose |
 | --- | --- |
-| `base.py` | `LLMProvider` ABC, `LLMModel` and `ModelStatus` TypedDicts, `LLMProviderError` |
+| `base.py` | `LLMProvider` ABC, `LLMModel` and `ModelStatus` TypedDicts, `LLMProviderError`, `ProviderNotAvailableError` |
 | `rate_limit.py` | `LLMRateLimitError`, `post_completion()`, per-key rate-limit state |
 | `registry.py` | `LLMProviderRegistry` singleton |
 | `openai_compatible.py` | `OpenAICompatibleProvider` for endpoints speaking the OpenAI `chat/completions` format; `chat_completion_sync()` |
@@ -53,6 +53,7 @@ class MyProvider(LLMProvider):
 - `LLMModel.status`: optional live load state (`availability`: `available`, `busy` or `very_busy`, plus a free-text `detail`); the frontend shows a warning icon when not `available`.
 - `is_available()` (default `True`) may be overridden to hide a provider that cannot currently be used. It is not about API keys.
 - Per-user keys: set `secret_service` to the id of a registered secret service, return `has_shared_key()` `True` only if a configured key exists, and implement `with_api_key(key)` returning a copy that uses the given key. Consumers get a provider for the requesting user with `LLMProviderRegistry.get_instance().get_provider_for_user(provider_id, username)`, which prefers the user's own key over a shared one and raises `MissingSecretError` when there is neither (map it to HTTP 428 with `secret_required_detail(error)`; the extraction endpoint does this already). Do not use `get_provider()` for requests made on behalf of a user.
+- Per-user models (plugin API 1.3): a provider whose models belong to individual users (e.g. endpoints a user started with their own account at an inference service) overrides `for_user(username)`. It returns a copy bound to that user, with `uses_user_key = True` if the user pays for the requests themselves, or `None` if the provider offers nothing to that user. `username` is `None` for calls without a user. `get_provider_for_user()` calls the hook before the key lookup and raises `ProviderNotAvailableError` on `None`; it is a `KeyError`, so routes that map an unknown provider to 404 need no change. `GET /api/v1/llm/providers` omits the provider for that user. The hook runs on every listing, so it must not make network requests. The default returns the provider itself.
 - Raise `LLMProviderError` with a user-presentable message for upstream failures (overload, bad request); routes map it to HTTP 502.
 - Raise `LLMRateLimitError` (a subclass, with `available_at`) when a rate limit or quota is reached; routes map it to HTTP 429 with `rate_limit_http_error()`, and must check for it before treating an error as retryable. Providers making their own HTTP requests get this from `post_completion()`, with a session from `get_completion_session()`, so that urllib3 does not retry the 429.
 - Multimodal input is optional: override `supports_pdf_input(model_id)` and `chat_completion_with_pdf()` to accept a PDF file, and `supports_image_input(model_id)` and `chat_completion_with_images(model_id, system_prompt, user_prompt, images)` to accept a list of `LLMImage` (`{"data": bytes, "media_type": "image/png"}`), sent in order ahead of the prompt. Consumers check the `supports_*` method before calling. The Anthropic provider implements both.
@@ -107,7 +108,7 @@ Consuming routes must call it before invoking a provider; see `pte-plugins/plugi
 
 | Endpoint | Access | Description |
 | --- | --- | --- |
-| `GET /api/v1/llm/providers` | authenticated | Available providers with the (filtered) models the current user may use; a provider whose `list_models()` fails is skipped |
+| `GET /api/v1/llm/providers` | authenticated | Available providers with the (filtered) models the current user may use; a provider whose `list_models()` fails is listed with an `error`, a provider whose `for_user()` returns `None` is omitted |
 | `GET /api/v1/llm/default-model` | authenticated | Configured default `{provider_id, model_id}` or `null` |
 | `PUT /api/v1/llm/default-model` | admin | Set the default; model must exist and pass the filter |
 

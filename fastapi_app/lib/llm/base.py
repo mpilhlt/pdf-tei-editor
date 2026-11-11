@@ -77,6 +77,22 @@ class LLMProvider(ABC):
     #: Usage is then billed to that user, so model_access lets them use any model.
     uses_user_key: bool = False
 
+    def for_user(self, username: str | None) -> "LLMProvider | None":
+        """The provider to use on behalf of `username`, or None if it offers nothing to that user.
+
+        Default: the provider itself, for every user. Override for providers whose
+        models belong to individual users (e.g. endpoints a user started with their
+        own account): return a copy bound to the user, or None to hide the provider
+        from that user. `username` is None for calls without a user (e.g. background
+        jobs started without one). A copy that runs on the user's own account sets
+        `uses_user_key`, like a copy with the user's own API key.
+
+        Called by LLMProviderRegistry.get_provider_for_user() and on every
+        `GET /api/v1/llm/providers` request, so it must be fast and must not make
+        network requests.
+        """
+        return self
+
     def is_available(self) -> bool:
         """Whether this provider instance is usable at all.
 
@@ -161,6 +177,21 @@ class LLMProvider(ABC):
         Only called when supports_image_input() is True.
         """
         raise NotImplementedError(f"LLM provider '{self.id}' does not accept image input")
+
+
+class ProviderNotAvailableError(KeyError):
+    """The provider is registered but offers nothing to the requesting user (see LLMProvider.for_user()).
+
+    A KeyError, so code that maps an unknown provider to "not found" handles it
+    the same way. The message is user-presentable.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message
 
 
 class LLMProviderError(Exception):
