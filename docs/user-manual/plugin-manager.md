@@ -50,7 +50,7 @@ The **Available** tab lists the plugins of the plugin repositories: [mpilhlt/pte
 
 ### Upgrading and removing
 
-**Upgrade to v…** in the **Available** tab installs a newer release, also of plugins that were installed with the editor. **Remove** in the **Installed** tab disables a plugin installed in the plugin manager and deletes its files at the next restart.
+**Upgrade to v…** in the **Available** tab installs a newer release, also of plugins that were installed with the editor. **Remove** in the **Installed** tab disables a plugin installed in the plugin manager and deletes its files at the next restart. Installing it again before the restart replaces the files that are still there.
 
 Python code that is already loaded cannot be replaced in a running server. After an upgrade or removal of a plugin that is in use, the plugin shows **Restart pending** and the dialog shows **Apply plugin changes**, which restarts the server processes one after the other. Requests are still answered during the restart, but jobs running in a restarting process (for example a batch extraction) are interrupted, and open pages reload once all processes run the new code. The button is offered when the server was started with `bin/start-prod` (as in the Docker image); otherwise restart the server.
 

@@ -268,18 +268,23 @@ def plugin_dependencies(requires: tuple[str, ...] | list[str], plugins: dict[str
     return result
 
 
-def extract_wheel(path: Path, dest: Path) -> None:
+def extract_wheel(path: Path, dest: Path, replace: bool = False) -> None:
     """
-    Unpack a wheel into a new directory.
+    Unpack a wheel into a directory.
 
     The files are written to a temporary sibling directory that is renamed to ``dest``, so an
     interrupted extraction leaves no partial version directory.
 
+    Args:
+        path: The wheel
+        dest: Directory to unpack into
+        replace: Replace ``dest`` if it exists; it is kept if the extraction fails
+
     Raises:
-        WheelError: If the wheel is unsafe or ``dest`` exists
+        WheelError: If the wheel is unsafe, or ``dest`` exists and ``replace`` is False
         OSError: If writing fails
     """
-    if dest.exists():
+    if dest.exists() and not replace:
         raise WheelError(f"Directory exists already: {dest}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.parent / f".{dest.name}.partial"
@@ -295,7 +300,15 @@ def extract_wheel(path: Path, dest: Path) -> None:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(info) as src, open(target, "wb") as out:
                     shutil.copyfileobj(src, out)
-        tmp.rename(dest)
+        if dest.exists():
+            old = dest.parent / f".{dest.name}.replaced"
+            if old.exists():
+                shutil.rmtree(old)
+            dest.rename(old)
+            tmp.rename(dest)
+            shutil.rmtree(old, ignore_errors=True)
+        else:
+            tmp.rename(dest)
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
