@@ -12,9 +12,11 @@ Key changes from Flask:
 - Otherwise identical to Flask (reuses lib/locking.py)
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..lib.core.locking import acquire_lock, release_lock, check_lock, get_locked_file_ids
+from ..lib.core.locking import acquire_lock, release_lock, check_lock, get_locked_file_ids, get_lock_holder_notice
 from ..lib.repository.file_repository import FileRepository
 from ..lib.models.models_files import (
     GetLocksResponse,
@@ -22,7 +24,8 @@ from ..lib.models.models_files import (
     ReleaseLockRequest,
     ReleaseLockResponse,
     CheckLockRequest,
-    CheckLockResponse
+    CheckLockResponse,
+    LockedDetail
 )
 from ..lib.core.dependencies import (
     get_file_repository,
@@ -47,6 +50,38 @@ router = APIRouter(prefix="/files", tags=["files"])
 def _emit_lock_changed(stable_id: str) -> None:
     """Notify listeners (e.g. sync plugins) that the lock state of a file changed."""
     get_event_bus().emit_from_thread("file.lock_changed", stable_id=stable_id)
+
+
+def describe_lock_holder(
+    holder_id: Optional[str],
+    current_username: Optional[str],
+    session_manager: SessionManager
+) -> LockedDetail:
+    """
+    Describe who holds a lock, for the 423 response of acquire_lock.
+
+    Args:
+        holder_id: The session id under which the lock is held, None if it is not known
+        current_username: The user requesting the lock
+        session_manager: Session manager to look up the user of the holding session
+
+    Returns:
+        LockedDetail with the kind of holder and the notice to show
+    """
+    if holder_id:
+        notice = get_lock_holder_notice(holder_id)
+        if notice:
+            return LockedDetail(holder="process", message=notice)
+        username = session_manager.get_username_by_session_id(holder_id)
+        if username and username == current_username:
+            return LockedDetail(
+                holder="own_session",
+                username=username,
+                message="You have this document open for editing in another window or session, so it opens read-only here"
+            )
+        if username:
+            return LockedDetail(holder="user", username=username, message=f"This document is being edited by {username}")
+    return LockedDetail(holder="user", message="This document is being edited by another user")
 
 
 @router.get("/locks", response_model=GetLocksResponse)
@@ -123,7 +158,8 @@ def acquire_lock_endpoint(
         "OK" string on success (matches Flask API)
 
     Raises:
-        HTTPException: 403 if insufficient permissions, 404 if file not found, 423 if cannot acquire lock
+        HTTPException: 403 if insufficient permissions, 404 if file not found, 423 if cannot acquire lock,
+            with a LockedDetail that says who holds the lock
     """
     session_id_short = session_id[:8] if session_id else "unknown"
     logger.debug(f"[LOCK API] Session {session_id_short}... requesting lock for {request.file_id}")
@@ -173,11 +209,13 @@ def acquire_lock_endpoint(
         return "OK"
 
     # Could not acquire lock
-    logger.warning(f"[LOCK API] Session {session_id_short}... FAILED to acquire lock (423) for file {file_metadata.stable_id}...")
-    raise HTTPException(
-        status_code=423,
-        detail=f'Could not acquire lock for {request.file_id}'
+    holder_id = check_lock(file_metadata.stable_id, session_id, settings.db_dir, logger)["locked_by"]
+    logger.warning(
+        f"[LOCK API] Session {session_id_short}... FAILED to acquire lock (423) for file {file_metadata.stable_id}..., held by {holder_id[:8] if holder_id else 'unknown'}..."
     )
+    current_username = current_user.get("username") if current_user else None
+    detail = describe_lock_holder(holder_id, current_username, session_manager)
+    raise HTTPException(status_code=423, detail=detail.model_dump())
 
 
 @router.post("/release_lock", response_model=ReleaseLockResponse)

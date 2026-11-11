@@ -166,7 +166,7 @@ class StartPlugin extends Plugin {
       this.#configureFindNodeInPdf()
 
       // Heartbeat mechanism for file locking and offline detection
-      HeartbeatPlugin.getInstance().start(await this.#config.get('heartbeat.interval', 10))
+      HeartbeatPlugin.getInstance().startHeartbeat(await this.#config.get('heartbeat.interval', 10))
 
       // finish initialization
       ui.spinner.hide()

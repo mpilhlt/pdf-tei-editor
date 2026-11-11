@@ -13,10 +13,20 @@ import threading
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, TypedDict
 import logging
 
 LOCK_TIMEOUT_SECONDS = 90
+
+
+class LockStatus(TypedDict):
+    """Result of check_lock()"""
+    is_locked: bool
+    locked_by: Optional[str]  # session id holding the lock, if it is locked by another session
+
+# Notices for locks that are not held by a user session, by the prefix of their holder id
+# (see register_lock_holder)
+_lock_holder_notices: Dict[str, str] = {}
 
 # Track if locks database has been initialized (to avoid redundant init calls)
 _locks_db_initialized: set[str] = set()
@@ -510,7 +520,7 @@ def get_locked_file_ids(db_dir: Path, logger: logging.Logger, session_id: Option
     return locked_file_ids
 
 
-def check_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logger) -> Dict[str, any]:
+def check_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logger) -> LockStatus:
     """
     Checks if a single file is locked by another session.
 
@@ -521,7 +531,7 @@ def check_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logg
         logger: Logger instance
 
     Returns:
-        dict: {"is_locked": bool, "locked_by": Optional[str]}
+        LockStatus: whether another session holds the lock, and its session id
     """
     # Ensure database is initialized
     try:
@@ -539,6 +549,50 @@ def check_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Logg
             return {"is_locked": True, "locked_by": lock_owner}
 
     return {"is_locked": False, "locked_by": None}
+
+
+def register_lock_holder(prefix: str, notice: str) -> None:
+    """
+    Register a notice for locks that are held by a process instead of a user session.
+
+    Code that locks a file under its own holder id (for example a background job that uses
+    ``auto-annotation:<job id>`` as the session id of ``acquire_lock()``) registers the prefix of
+    that id with a notice, which `POST /api/v1/files/acquire_lock` returns when it refuses the lock,
+    e.g. "This document is locked while its annotations are corrected automatically".
+
+    Args:
+        prefix: Prefix of the holder ids, e.g. ``"auto-annotation:"``
+        notice: Message shown to users who open a file locked by such a holder
+    """
+    if not prefix:
+        raise ValueError("The prefix of a lock holder must not be empty")
+    _lock_holder_notices[prefix] = notice
+
+
+def unregister_lock_holder(prefix: str) -> None:
+    """
+    Remove a notice registered with register_lock_holder() (e.g. in a plugin's cleanup()).
+
+    Args:
+        prefix: Prefix passed to register_lock_holder()
+    """
+    _lock_holder_notices.pop(prefix, None)
+
+
+def get_lock_holder_notice(holder_id: str) -> Optional[str]:
+    """
+    Return the notice registered for a lock holder id with register_lock_holder().
+
+    Args:
+        holder_id: The session id under which the lock is held
+
+    Returns:
+        The notice of the longest registered prefix of holder_id, or None if no prefix matches
+    """
+    matches = [prefix for prefix in _lock_holder_notices if holder_id.startswith(prefix)]
+    if not matches:
+        return None
+    return _lock_holder_notices[max(matches, key=len)]
 
 
 def reset_locks_db_initialized() -> None:

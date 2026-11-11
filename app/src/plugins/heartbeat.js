@@ -28,28 +28,27 @@ class HeartbeatPlugin extends Plugin {
   }
 
   /**
-   * Starts the heartbeat mechanism.
-   * @param {any} [_state] - Ignored; present for backward compatibility
-   * @param {number} [timeoutSeconds=60]
+   * Starts the heartbeat mechanism, or restarts it with a new interval. Called by the start plugin
+   * once the initial documents are loaded. This is deliberately not the `start` lifecycle method:
+   * restarting must not release the lock of the open document.
+   * @param {number} [intervalSeconds=60] - Seconds between two heartbeats
    */
-  start(_state, timeoutSeconds = 60) {
-    if (!Number.isInteger(timeoutSeconds)) {
-      throw new Error(`Invalid timeout value: ${timeoutSeconds}`)
+  startHeartbeat(intervalSeconds = 60) {
+    if (!Number.isInteger(intervalSeconds)) {
+      throw new Error(`Invalid heartbeat interval: ${intervalSeconds}`)
     }
 
     const logger = this.getDependency('logger')
 
     if (this.#heartbeatInterval) {
-      logger.debug('Heartbeat already running, stopping previous instance')
+      logger.debug('Heartbeat already running, restarting it')
       this.stop()
     }
 
-    this.#lockTimeoutSeconds = timeoutSeconds
+    this.#lockTimeoutSeconds = intervalSeconds
     logger.debug(`Starting heartbeat with ${this.#lockTimeoutSeconds} second interval`)
 
     const heartbeatFrequency = this.#lockTimeoutSeconds * 1000
-
-    window.addEventListener('beforeunload', () => this.stop())
 
     this.#heartbeatInterval = setInterval(async () => {
       if (!this.state) {
@@ -137,19 +136,14 @@ class HeartbeatPlugin extends Plugin {
   }
 
   /**
-   * Stops the heartbeat mechanism.
+   * Stops the heartbeat mechanism. It does not release the lock of the open document: the
+   * services and authentication plugins do that when the document is closed or the page unloads.
    */
   stop() {
-    const logger = this.getDependency('logger')
     if (this.#heartbeatInterval) {
       clearInterval(this.#heartbeatInterval)
       this.#heartbeatInterval = null
-      logger.debug('Heartbeat stopped.')
-    }
-
-    const filePath = this.state.xml
-    if (filePath) {
-      this.getDependency('client').releaseLock(filePath).catch(() => {})
+      this.getDependency('logger').debug('Heartbeat stopped.')
     }
   }
 }

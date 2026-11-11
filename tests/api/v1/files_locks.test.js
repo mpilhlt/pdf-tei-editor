@@ -188,6 +188,36 @@ describe('File Locks API E2E Tests', { concurrency: 1 }, () => {
     logger.success('Lock refresh handled correctly');
   });
 
+  test('POST /api/files/acquire_lock should say who holds the lock when it refuses it', async () => {
+    // file 1 is locked by the global reviewer session (previous tests)
+    const ownSecondSession = await login('reviewer', 'reviewer', BASE_URL);
+    const otherUserSession = await login('admin', 'admin', BASE_URL);
+    try {
+      const ownResponse = await authenticatedRequest(ownSecondSession.sessionId, '/files/acquire_lock', 'POST', {
+        file_id: testState.testFileHash
+      }, BASE_URL);
+      assert.strictEqual(ownResponse.status, 423, 'Another session of the same user should get 423');
+      const ownDetail = (await ownResponse.json()).detail;
+      assert.strictEqual(ownDetail.code, 'locked');
+      assert.strictEqual(ownDetail.holder, 'own_session');
+      assert.strictEqual(ownDetail.username, 'reviewer');
+      assert(ownDetail.message.includes('another window'), `Unexpected message: ${ownDetail.message}`);
+
+      const otherResponse = await authenticatedRequest(otherUserSession.sessionId, '/files/acquire_lock', 'POST', {
+        file_id: testState.testFileHash
+      }, BASE_URL);
+      assert.strictEqual(otherResponse.status, 423, 'Another user should get 423');
+      const otherDetail = (await otherResponse.json()).detail;
+      assert.strictEqual(otherDetail.holder, 'user');
+      assert.strictEqual(otherDetail.username, 'reviewer');
+      assert.strictEqual(otherDetail.message, 'This document is being edited by reviewer');
+      logger.success('423 responses name the lock holder');
+    } finally {
+      await logout(ownSecondSession.sessionId, BASE_URL);
+      await logout(otherUserSession.sessionId, BASE_URL);
+    }
+  });
+
   test('POST /api/files/release_lock should successfully release lock', async () => {
     const session = await getSession();
 

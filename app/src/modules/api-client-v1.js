@@ -195,6 +195,16 @@
  */
 
 /**
+ * `detail` of the 423 response of `filesAcquireLock`: who holds the lock
+ * @typedef {Object} LockedDetail
+ * @property {'locked'} code
+ * @property {'user'|'own_session'|'process'} holder - A session of another (or an unknown) user,
+ *   another session of the requesting user, or a non-session holder such as a background job
+ * @property {string=} username - The user holding the lock, if `holder` is 'user' or 'own_session'
+ * @property {string} message - Notice to show to the user
+ */
+
+/**
  * @typedef {Object} CheckLockResponse
  * @property {boolean} is_locked
  * @property {string=} locked_by
@@ -2669,7 +2679,8 @@ export class ApiClientV1 {
    * Returns:
    * "OK" string on success (matches Flask API)
    * Raises:
-   * HTTPException: 403 if insufficient permissions, 404 if file not found, 423 if cannot acquire lock
+   * HTTPException: 403 if insufficient permissions, 404 if file not found, 423 if cannot acquire lock,
+   * with a LockedDetail that says who holds the lock
    *
    * @param {AcquireLockRequest} requestBody
    * @returns {Promise<string>}
