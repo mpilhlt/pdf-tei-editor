@@ -6,7 +6,8 @@
  * checks the stand-off storage, the status bar meter, the diagnostics and undo, the
  * carry-over of marks of an edited unit, and the "Clear reviews" option of the Save Revision
  * dialog, the automatic review mode for documents with not-OK units, and the reload of a
- * read-only document after another user saved it, and the keyboard shortcuts in visual mode.
+ * read-only document after another user saved it, the keyboard shortcuts in visual mode, and
+ * the OK mark of units in which a reviewer applied an LLM fix (removing the LLM mark).
  *
  * @testCovers app/src/plugins/unit-review.js
  * @testCovers app/src/modules/unit-review.js
@@ -19,6 +20,7 @@
  * @testCovers app/src/plugins/tei-tools.js
  * @testCovers app/src/modules/xmleditor.js
  * @testCovers app/src/templates/save-document-dialog.html
+ * @testCovers app/src/modules/lint-utils.js
  */
 
 /**
@@ -108,6 +110,45 @@ async function cursorTo(page, needle) {
  */
 async function summary(page) {
   return page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').getSummary());
+}
+
+/**
+ * Marks the unit containing `unitText` not OK by the LLM Reviewer and adds an LLM Reviewer
+ * diagnostic whose fix replaces `old` with `fixed` inside that unit.
+ * @param {Page} page
+ * @param {string} unitText
+ * @param {string} old
+ * @param {string} fixed
+ * @returns {Promise<void>}
+ */
+async function addLlmFinding(page, unitText, old, fixed) {
+  await page.evaluate(async ({ unitText, old, fixed }) => {
+    const app = (/** @type {any} */ (window)).app;
+    const review = app.getDependency('unit-review');
+    const view = app.getDependency('xmleditor').getView();
+    const text = view.state.doc.toString();
+    const unit = review.getUnits().find((/** @type {any} */ u) => text.slice(u.from, u.to).includes(unitText));
+    await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: unit.fingerprint, state: 'not-ok', comment: 'Tag the year' }]);
+    const lintUtils = app.getDependency('lint-utils');
+    // like the LLM Reviewer, merge the finding in again whenever another source replaces the
+    // diagnostics, while its text is still there
+    let rendering = false;
+    const render = () => {
+      const doc = view.state.doc.toString();
+      const at = doc.indexOf(unitText);
+      const own = at === -1 ? [] : [{ from: at + unitText.indexOf(old), to: at + unitText.indexOf(old) + old.length, severity: 'info', message: `LLM: tag ${old}`, replacement: fixed }];
+      rendering = true;
+      try {
+        lintUtils.applyMergedDiagnostics(view, 'annotation-review', own);
+      } finally {
+        rendering = false;
+      }
+    };
+    app.getDependency('xmleditor').addUpdateListener((/** @type {any} */ update) => {
+      if (lintUtils.replacesDiagnostics(update) && !rendering && view.state.doc.toString().includes(unitText)) setTimeout(render, 0);
+    });
+    render();
+  }, { unitText, old, fixed });
 }
 
 test.describe('Unit review', () => {
@@ -500,6 +541,69 @@ test.describe('Unit review', () => {
       // its stripe is dotted grey, like the stale unit in the review gutter
       await expect(page.locator('.diagnostics-drawer-item.cm-unit-review-changed')).toHaveCount(1);
       await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Marked not OK');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('marks a unit OK when a reviewer applies an LLM fix to it', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, STAND_OFF);
+
+      // fix applied from the diagnostics drawer
+      await addLlmFinding(page, 'Beta 2002', '2002', '<date>2002</date>');
+      expect((await summary(page)).notOk).toBe(1);
+      await expect(page.locator('.diagnostics-drawer-item', { hasText: 'LLM: tag 2002' }).locator('sl-checkbox')).toHaveJSProperty('checked', true);
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('diagnostics-drawer').applyChecked());
+      expect(await editorText(page)).toContain('<bibl>Beta <date>2002</date></bibl>');
+      await expect.poll(async () => (await summary(page)).ok, { timeout: 5000 }).toBe(1);
+      expect((await summary(page)).notOk).toBe(0);
+
+      // fix accepted in the merge view of "Propose fix": marked OK once the merge view is closed
+      await addLlmFinding(page, 'Gamma 2003', '2003', '<date>2003</date>');
+      await page.evaluate(async () => {
+        const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        const doc = xmleditor.getView().state.doc.toString();
+        await xmleditor.showMergeView(doc.replace('Gamma 2003', 'Gamma <date>2003</date>'));
+        xmleditor.acceptAllDiffs();
+      });
+      expect(await editorText(page)).toContain('<bibl>Gamma <date>2003</date>');
+      await expect.poll(async () => (await summary(page)).ok, { timeout: 5000 }).toBe(2);
+      await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Changed after a not-OK review');
+      // the reviewer agreed with the LLM Reviewer: its marks are removed, so nothing is disputed
+      expect((await summary(page)).disputed).toBe(0);
+      expect(await editorText(page)).not.toContain('ur-llm-probe');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('asks for a new review when an annotator applies an LLM fix', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, STAND_OFF);
+      await addLlmFinding(page, 'Beta 2002', '2002', '<date>2002</date>');
+      expect((await summary(page)).notOk).toBe(1);
+      await expect(page.locator('.diagnostics-drawer-item', { hasText: 'LLM: tag 2002' }).locator('sl-checkbox')).toHaveJSProperty('checked', true);
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('diagnostics-drawer').applyChecked());
+      await expect.poll(async () => (await summary(page)).notOk, { timeout: 5000 }).toBe(0);
+      await expect(page.locator('.diagnostics-drawer-list')).toContainText('Changed after a not-OK review (Probe LLM: Tag the year)');
+      expect((await summary(page)).ok).toBe(0);
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);
