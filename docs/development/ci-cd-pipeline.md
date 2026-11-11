@@ -110,6 +110,18 @@ validated the identical tree.
 3. Build the `production` target and push `cboulanger/pdf-tei-editor:<version>`
    and `:latest` to Docker Hub.
 
+### Plugin Pin Bump Workflow ([.github/workflows/merge-plugin-bumps.yml](../../.github/workflows/merge-plugin-bumps.yml))
+
+The `[tool.uv.sources]` pins of the first-party plugins in `pyproject.toml` move automatically. After every run of [pte-plugins](https://github.com/mpilhlt/pte-plugins)' release workflow that released at least one plugin, its `bump-core` job moves **all** pins to the last release commit of that run, relocks `uv.lock`, pushes the branch `bump/pte-plugins-<run-id>` and opens a PR against `devel`. All pins move together because plugins that depend on each other (e.g. `metadata-extraction` on `grobid`) declare `{ workspace = true }` sources: a plugin installed from a git subdirectory resolves its sibling plugins from the same commit, so two coupled plugins with different pins cannot be locked.
+
+The PR is opened with a fine-grained personal access token (secret `PDF_TEI_EDITOR_BUMP_TOKEN` in pte-plugins, scoped to this repository with Contents and Pull requests read/write), so that it triggers the Tests workflow; PRs opened with a `GITHUB_TOKEN` trigger no workflows. Since `pyproject.toml` and `uv.lock` select the whole suite (see [Test Filtering](#test-filtering)), the PR runs all tests with all plugins installed.
+
+**Trigger:** `workflow_run` of the Tests workflow, completed.
+
+**Behavior:** if the run succeeded for a PR from a `bump/pte-plugins-*` branch of this repository into `devel`, and the PR still points at the tested commit and only changes `pyproject.toml` and `uv.lock`, it is squash-merged. `devel` has no required status checks, so `gh pr merge --auto` would merge it untested. A failing PR stays open: it means core and the latest plugin releases are incompatible.
+
+**Note:** `workflow_run` only fires for workflow files on the default branch, so changes to this workflow take effect after the next `devel -> main` merge.
+
 ### Documentation Workflow ([.github/workflows/pages.yml](../../.github/workflows/pages.yml))
 
 **Trigger:**
@@ -194,6 +206,7 @@ The test workflow uses smart filtering to minimize test execution time:
 - **Changed file analysis**: Uses `git diff` to identify modified files
 - **Test mapping**: [tests/smart-test-runner.js](../../tests/smart-test-runner.js) maps files to tests
 - **Always-run tests**: Some tests (marked with `alwaysRun: true`) run on every PR
+- **Dependency changes**: a change to `pyproject.toml` or `uv.lock` selects all tests, since it can break any part of the app but matches no import
 - **E2E detection**: Automatically switches to container mode if E2E tests are needed
 
 ## Key Configuration
@@ -219,6 +232,7 @@ The test workflow uses smart filtering to minimize test execution time:
 - `DOCKERHUB_USERNAME`: Docker Hub username
 - `DOCKERHUB_TOKEN`: Docker Hub access token
 - `GITHUB_TOKEN`: Automatically provided by GitHub Actions (used for creating releases)
+- `PDF_TEI_EDITOR_BUMP_TOKEN` (in pte-plugins, not here): fine-grained PAT that opens the plugin pin bump PRs, see [Plugin Pin Bump Workflow](#plugin-pin-bump-workflow-githubworkflowsmerge-plugin-bumpsyml)
 - No `NPM_TOKEN` is needed - `@semantic-release/npm` runs with `npmPublish: false`.
 
 ## Modifying the CI Pipeline

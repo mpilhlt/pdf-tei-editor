@@ -1,0 +1,54 @@
+name: Merge plugin pin bumps
+
+# pte-plugins' release workflow opens a PR against devel (branch bump/pte-plugins-<run>) that
+# moves the [tool.uv.sources] pins of the plugins it just released and relocks uv.lock. devel
+# has no required status checks, so `gh pr merge --auto` would merge it untested; instead this
+# workflow merges the PR once the Tests workflow has passed on exactly its current head commit.
+# A failing Tests run leaves the PR open for manual triage: it means core and the latest plugin
+# release are incompatible.
+#
+# workflow_run only fires for workflow files on the default branch (main), so changes to this
+# file take effect after the next devel -> main merge.
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'bump/pte-plugins-')
+    steps:
+      - name: Merge the tested bump PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --base devel --state open --json number,headRefOid,files --jq '.[0] // empty')
+          if [ -z "$pr" ]; then
+            echo "No open PR from $BRANCH into devel; nothing to merge."
+            exit 0
+          fi
+          number=$(jq -r .number <<<"$pr")
+          if [ "$(jq -r .headRefOid <<<"$pr")" != "$SHA" ]; then
+            echo "PR #$number has moved past the tested commit $SHA; leaving it for the next Tests run."
+            exit 0
+          fi
+          unexpected=$(jq -r '.files[].path | select(. != "pyproject.toml" and . != "uv.lock")' <<<"$pr")
+          if [ -n "$unexpected" ]; then
+            echo "::warning::PR #$number changes files other than pyproject.toml/uv.lock, not auto-merging: $unexpected"
+            exit 0
+          fi
+          gh pr merge "$number" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA"
