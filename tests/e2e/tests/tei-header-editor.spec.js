@@ -93,6 +93,13 @@ test.describe('TEI Header Editor', () => {
       await dialog.locator('sl-button[name="saveBtn"]').click();
       await expect(dialog).not.toBeVisible({ timeout: 10000 });
 
+      // A dirty editor makes the reload show the "Leave site?" prompt, which Playwright
+      // dismisses, so the reload would never finish
+      await page.waitForFunction(() => {
+        const app = /** @type {any} */ (window).app;
+        return !app.getDependency('xmleditor').isDirty();
+      }, { timeout: 10000 });
+
       await page.reload();
       await page.waitForSelector('#codemirror-container .cm-editor');
       await page.waitForFunction(() => {
