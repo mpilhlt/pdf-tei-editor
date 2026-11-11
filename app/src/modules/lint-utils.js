@@ -157,6 +157,9 @@ export function clearDiagnosticsOnChange() {
 /** @type {Set<(dismissed: Diagnostic[]) => void>} */
 const dismissListeners = new Set();
 
+/** @type {Set<(deleted: Diagnostic[]) => void>} */
+const deleteListeners = new Set();
+
 /**
  * Returns the diagnostics currently stored in the editor state.
  * @param {EditorState} state
@@ -256,6 +259,32 @@ export function diagnosticKey(state, diagnostic) {
 export function addDismissListener(listener) {
   dismissListeners.add(listener);
   return () => dismissListeners.delete(listener);
+}
+
+/**
+ * Registers a listener called with the diagnostics the user deleted, so that a
+ * plugin can remove the data its diagnostics show (e.g. review marks or
+ * comments). Delete listeners are called after the dismiss listeners.
+ * @param {(deleted: Diagnostic[]) => void} listener
+ * @returns {() => void} Function removing the listener
+ */
+export function addDeleteListener(listener) {
+  deleteListeners.add(listener);
+  return () => deleteListeners.delete(listener);
+}
+
+/**
+ * Dismisses the given diagnostics (see {@link dismissDiagnostics}) and
+ * notifies the delete listeners, which remove the data behind them.
+ * Diagnostics no plugin handles are only dismissed.
+ * @param {EditorView} view
+ * @param {Diagnostic[]} deleted - With positions in the current state
+ * @returns {void}
+ */
+export function deleteDiagnostics(view, deleted) {
+  if (!deleted.length) return;
+  dismissDiagnostics(view, deleted);
+  for (const listener of deleteListeners) listener(deleted);
 }
 
 /**

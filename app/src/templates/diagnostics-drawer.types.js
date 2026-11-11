@@ -18,6 +18,7 @@
  * @property {import('../ui.js').SlCheckbox} selectAll
  * @property {import('../ui.js').SlButton} applyBtn
  * @property {import('../ui.js').SlButton} dismissBtn
+ * @property {import('../ui.js').SlButton} deleteBtn
  */
 
 /**

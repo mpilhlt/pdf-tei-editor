@@ -7,7 +7,8 @@
  * carry-over of marks of an edited unit, and the "Clear reviews" option of the Save Revision
  * dialog, the automatic review mode for documents with not-OK units, and the reload of a
  * read-only document after another user saved it, the keyboard shortcuts in visual mode, and
- * the OK mark of units in which a reviewer applied an LLM fix (removing the LLM mark).
+ * the OK mark of units in which a reviewer applied an LLM fix (removing the LLM mark), and the
+ * diagnostics dismissed or deleted by reviewers.
  *
  * @testCovers app/src/plugins/unit-review.js
  * @testCovers app/src/modules/unit-review.js
@@ -21,6 +22,7 @@
  * @testCovers app/src/modules/xmleditor.js
  * @testCovers app/src/templates/save-document-dialog.html
  * @testCovers app/src/modules/lint-utils.js
+ * @testCovers app/src/plugins/diagnostics-drawer.js
  */
 
 /**
@@ -604,6 +606,157 @@ test.describe('Unit review', () => {
       await expect.poll(async () => (await summary(page)).notOk, { timeout: 5000 }).toBe(0);
       await expect(page.locator('.diagnostics-drawer-list')).toContainText('Changed after a not-OK review (Probe LLM: Tag the year)');
       expect((await summary(page)).ok).toBe(0);
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  for (const { role, user, password, hidden } of [
+    { role: 'reviewer', user: 'testreviewer', password: 'reviewerpass', hidden: true },
+    { role: 'annotator', user: 'testannotator', password: 'annotatorpass', hidden: false }
+  ]) {
+    test(`${hidden ? 'removes' : 'keeps'} review diagnostics dismissed by ${role === 'reviewer' ? 'a' : 'an'} ${role}`, async ({ page }) => {
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+      try {
+        await navigateAndLogin(page, user, password);
+        const loadResult = await selectFirstDocuments(page);
+        expect(loadResult.success).toBe(true);
+        await loadReviewDocument(page, STAND_OFF);
+        await page.evaluate(async () => {
+          const review = (/** @type {any} */ (window)).app.getDependency('unit-review');
+          const [, beta, gamma] = review.getUnits();
+          await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: beta.fingerprint, state: 'not-ok', comment: 'Wrong year' }]);
+          await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: gamma.fingerprint, state: 'not-ok', comment: 'Wrong name' }]);
+        });
+        const list = page.locator('.diagnostics-drawer-list');
+        await expect(list).toContainText('Marked not OK (Probe LLM: Wrong year)');
+
+        await page.locator('sl-checkbox[name="selectAll"]').click();
+        await page.locator('sl-button[name="dismissBtn"]').click();
+        // another change of the review data recomputes the diagnostics
+        await page.evaluate(async () => {
+          const review = (/** @type {any} */ (window)).app.getDependency('unit-review');
+          await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: review.getUnits()[0].fingerprint, state: 'ok' }]);
+        });
+        if (hidden) {
+          await page.waitForTimeout(500);
+          await expect(list).not.toContainText('Marked not OK');
+          // a changed message shows the entry again
+          await page.evaluate(async () => {
+            const review = (/** @type {any} */ (window)).app.getDependency('unit-review');
+            await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: review.getUnits()[1].fingerprint, state: 'not-ok', comment: 'Year missing' }]);
+          });
+          await expect(list).toContainText('Marked not OK (Probe LLM: Year missing)');
+          await expect(list).not.toContainText('Wrong name');
+        } else {
+          await expect(page.locator('.diagnostics-drawer-footer sl-button[name="deleteBtn"]')).toBeHidden();
+          await expect(list).toContainText('Marked not OK (Probe LLM: Wrong year)');
+          await expect(list).toContainText('Marked not OK (Probe LLM: Wrong name)');
+        }
+      } finally {
+        await releaseAllLocks(page);
+        await performLogout(page);
+        stopErrorMonitoring();
+      }
+    });
+  }
+
+  test('removes comment diagnostics dismissed by a reviewer until the thread changes', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, STAND_OFF);
+      await page.evaluate(() => {
+        const app = (/** @type {any} */ (window)).app;
+        const view = app.getDependency('xmleditor').getView();
+        app.getDependency('unit-comments').addComment(view.state.doc.toString().indexOf('Beta'));
+      });
+      const prompt = page.getByTestId('unit-comment-prompt');
+      await prompt.locator('input').fill('check the year');
+      await prompt.locator('input').press('Enter');
+      await waitForTestMessage(consoleLogs, 'UNIT_COMMENT_ADDED');
+      const list = page.locator('.diagnostics-drawer-list');
+      await expect(list).toContainText('check the year');
+
+      await page.locator('sl-checkbox[name="selectAll"]').click();
+      await page.locator('sl-button[name="dismissBtn"]').click();
+      // an edit recomputes the diagnostics
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const pos = view.state.doc.toString().indexOf('Gamma');
+        view.dispatch({ changes: { from: pos, insert: 'X' } });
+      });
+      await page.waitForTimeout(800);
+      await expect(list).not.toContainText('check the year');
+      expect(await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-comments').getThreads()[0]?.status)).toBe('open');
+
+      // a reply changes the entry: it is listed again
+      await page.locator('.cm-uc-open').click();
+      const popover = page.getByTestId('unit-comment-popover');
+      await popover.getByTestId('unit-comment-reply').fill('looked at it');
+      await popover.getByTestId('unit-comment-reply-save').click();
+      await expect(list).toContainText('check the year (+1 reply)');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('deletes the review marks and comments of the entries a reviewer deletes in the drawer', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, STAND_OFF);
+      await page.evaluate(async () => {
+        const app = (/** @type {any} */ (window)).app;
+        const review = app.getDependency('unit-review');
+        const [alpha, beta, gamma] = review.getUnits();
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: beta.fingerprint, state: 'not-ok', comment: 'Wrong year' }]);
+        // disputed: the reviewer's OK against the LLM's not OK
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, [{ fingerprint: gamma.fingerprint, state: 'not-ok', comment: 'Wrong name' }]);
+        await review.markUnits([gamma.fingerprint, alpha.fingerprint], 'ok');
+      });
+      await page.evaluate(() => {
+        const app = (/** @type {any} */ (window)).app;
+        app.getDependency('unit-comments').addComment(app.getDependency('xmleditor').getView().state.doc.toString().indexOf('Alpha'));
+      });
+      const prompt = page.getByTestId('unit-comment-prompt');
+      await prompt.locator('input').fill('check the year');
+      await prompt.locator('input').press('Enter');
+      await waitForTestMessage(consoleLogs, 'UNIT_COMMENT_ADDED');
+      const list = page.locator('.diagnostics-drawer-list');
+      await expect(list).toContainText('Marked not OK (Probe LLM: Wrong year)');
+      await expect(list).toContainText('Review disputed');
+      await expect(list).toContainText('check the year');
+
+      // the entries must have settled: a re-render after the click would uncheck them
+      await page.waitForTimeout(500);
+      await page.locator('sl-checkbox[name="selectAll"]').click();
+      await expect(page.locator('sl-checkbox[name="selectAll"]')).toHaveJSProperty('checked', true);
+      const deleteBtn = page.locator('.diagnostics-drawer-footer sl-button[name="deleteBtn"]');
+      await expect(deleteBtn).toBeVisible();
+      await expect(deleteBtn).toHaveJSProperty('disabled', false);
+      await deleteBtn.click();
+      await expect.poll(async () => summary(page)).toMatchObject({ ok: 2, notOk: 0, disputed: 0, open: 1 });
+      await expect.poll(async () => page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-comments').getThreads().length)).toBe(0);
+      const text = await editorText(page);
+      expect(text).not.toContain('Wrong year');
+      expect(text).not.toContain('check the year');
+      await expect(list).not.toContainText('Marked not OK');
+      await expect(list).not.toContainText('check the year');
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);
