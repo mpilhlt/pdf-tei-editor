@@ -79,7 +79,7 @@ const REPEATED_UPDATE_NOTICE = 'The selected machine rules were already updated 
 const GUIDE_ONLY_PROPOSAL_NOTICE = 'The machine rules will be marked as outdated until they are updated from the guide.'
 const MACHINE_PROPOSAL_NOTICE = 'The sync marker is updated: the machine rules are marked as in sync with the guide.'
 const MACHINE_OUTDATED_PROPOSAL_NOTICE = 'The machine rules were derived from a guide text that differs from the guide upstream; they will be marked as outdated.'
-const PULL_REQUEST_MERGE_INSTRUCTIONS = 'Once the pull request has been merged, close this dialog and use "Update to upstream" to apply the merged rules to this document.'
+const PULL_REQUEST_MERGE_INSTRUCTIONS = 'Once the pull request has been merged, close the "Propose upstream" dialog and use "Update to upstream" to apply the merged rules to this document.'
 const UNSAVED_CHANGES_MESSAGE = 'The selected override has unsaved changes. Save them? Otherwise they are lost.'
 const UNSAVED_PROPOSAL_NOTICE = 'Unsaved changes in the editor are not included. Save them first.'
 
@@ -802,7 +802,8 @@ class DocumentRulesPlugin extends Plugin {
       return
     }
     // A layer-tab switch keeps the upstream status: it covers both layers
-    const sameGroup = this._editorDialogUi.open && this._currentGroup.includes(resource)
+    const opening = !this._editorDialogUi.open
+    const sameGroup = !opening && this._currentGroup.includes(resource)
     this._currentResource = resource
     this._currentGroup = this._groupOf(resource)
     this._renderLayerTabs()
@@ -811,8 +812,10 @@ class DocumentRulesPlugin extends Plugin {
       // Don't show another group's marks while this one's status loads
       this._upstreamStatus = null
       this._renderUpstreamStatus()
-      this._refreshUpstreamStatus()
     }
+    /** @type {Promise<void>|null} */
+    const statusLoaded = sameGroup ? null : this._refreshUpstreamStatus()
+    const statusRequest = this._upstreamStatusRequest
     this._currentOverrides = response.overrides
     this._currentSelectedId = response.selected_override_id
     this._currentOriginalText = response.original_text
@@ -846,6 +849,12 @@ class DocumentRulesPlugin extends Plugin {
       tabs.show('edit')
       await tabs.editPanel.updateComplete
       this._scrollMarkdownBodyToAnchor(this._currentShownText())
+    }
+    // Not awaited: the warning waits for the status, the caller need not
+    if (opening && statusLoaded) {
+      statusLoaded
+        .then(() => this._promptUpdateToUpstream(statusRequest))
+        .catch(error => { this.#logger.warn('document-rules: update to upstream failed: ' + String(error)) })
     }
   }
 
@@ -1482,14 +1491,31 @@ class DocumentRulesPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   async _onUpdateToUpstream() {
+    const confirmed = await this.getDependency('dialog').confirm(this._updateToUpstreamText(), 'Update to upstream')
+    if (!confirmed) return
+    await this._runUpdateToUpstream()
+  }
+
+  /**
+   * What "Update to upstream" does, with the counts of the last upstream
+   * status, for its confirmation.
+   * @returns {string}
+   */
+  _updateToUpstreamText() {
     const inUpstream = countUpstreamIds(this._upstreamStatus, 'in_upstream')
     const kept = countUpstreamIds(this._upstreamStatus, 'kept')
     let text = 'This updates the document to the current upstream rules'
     text += inUpstream > 0 ? ` and removes ${pluralizeOverrides(inUpstream)} that upstream now contains.` : '.'
     if (kept > 0) text += ` ${kept} other ${kept === 1 ? 'override is' : 'overrides are'} kept.`
-    const confirmed = await this.getDependency('dialog').confirm(text, 'Update to upstream')
-    if (!confirmed) return
+    return text
+  }
 
+  /**
+   * Run _updateToUpstream() with the "Update to upstream" button disabled
+   * and showing its spinner.
+   * @returns {Promise<void>}
+   */
+  async _runUpdateToUpstream() {
     const btn = this._editorDialogUi.updateToUpstreamBtn
     btn.disabled = true
     btn.loading = true
@@ -1506,6 +1532,31 @@ class DocumentRulesPlugin extends Plugin {
    * button, unless an update is already running.
    * @returns {Promise<void>}
    */
+  /**
+   * After the editor dialog was opened: if `_upstreamStatus` (loaded by
+   * request number `request`) says that the document's rules are behind
+   * upstream, warn about it and, if the user agrees, update to upstream.
+   * Skipped once the dialog was closed, another status was requested
+   * meanwhile, an update is already running, or the document is read-only.
+   * @param {number} request - the _refreshUpstreamStatus() request whose status to check
+   * @returns {Promise<void>}
+   */
+  async _promptUpdateToUpstream(request) {
+    if (request !== this._upstreamStatusRequest || !this._editorDialogUi.open) return
+    if (this._currentResource?.kind !== 'interpretation-ref' || this._documentReadOnly) return
+    if (!this._upstreamActionable() || this._editorDialogUi.updateToUpstreamBtn.disabled) return
+    const status = this._upstreamStatus
+    const parts = []
+    if (status.refs_behind) parts.push('The guide upstream has changed since this document was annotated.')
+    const inUpstream = countUpstreamIds(status, 'in_upstream')
+    if (inUpstream > 0) parts.push(`${pluralizeOverrides(inUpstream)} now in upstream.`)
+    const text = `The document rules are outdated. ${parts.join(' ')} Update to upstream? ${this._updateToUpstreamText()}`
+    const confirmed = await this.getDependency('dialog').confirm(text, 'Document rules outdated', 'warning')
+    if (!confirmed || request !== this._upstreamStatusRequest || !this._editorDialogUi.open) return
+    if (this._editorDialogUi.updateToUpstreamBtn.disabled) return
+    await this._runUpdateToUpstream()
+  }
+
   async _onUpdateToUpstreamLinkClick() {
     if (this._editorDialogUi.updateToUpstreamBtn.disabled) return
     await this._onUpdateToUpstream()
@@ -1978,23 +2029,11 @@ class DocumentRulesPlugin extends Plugin {
     ui.createPrBtn.loading = false
     this._pullRequestPending = false
     this._pullRequestCreated = true
-    const link = document.createElement('a')
-    link.href = response.url
-    link.target = '_blank'
-    link.rel = 'noopener'
-    link.textContent = 'Open on GitHub'
     const created = response.fork
-      ? `Pull request #${response.number} created from your fork ${response.fork}. `
-      : `Pull request #${response.number} created. `
-    const createdLine = document.createElement('div')
-    createdLine.append(created, link)
-    const instructions = document.createElement('div')
-    instructions.setAttribute('name', 'prMergeInstructions')
-    instructions.style.marginTop = '0.25rem'
-    instructions.textContent = PULL_REQUEST_MERGE_INSTRUCTIONS
-    result.append(createdLine, instructions)
-    // The result is below the fold of a long proposal
-    result.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+      ? `Pull request #${response.number} created from your fork ${response.fork}: ${response.url}`
+      : `Pull request #${response.number} created: ${response.url}`
+    // A dialog, not a line in the long proposal, so that it is not missed
+    this.getDependency('dialog').info(`${created} ${PULL_REQUEST_MERGE_INSTRUCTIONS}`)
   }
 
   /**

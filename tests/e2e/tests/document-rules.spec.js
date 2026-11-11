@@ -729,14 +729,19 @@ test.describe('Document rules registry', () => {
         await title.locator('input').fill('Edited title');
         await createBtn.click();
 
-        const result = proposeDialog.locator('[name="prResult"]');
-        await expect(result).toContainText('Pull request #42 created from your fork testreviewer/guides. Open on GitHub');
-        await expect(result.locator('a')).toHaveAttribute('href', 'https://github.com/example/guides/pull/42');
-        await expect(result.locator('a')).toHaveText('Open on GitHub');
+        const infoDialog = page.locator('sl-dialog[name="dialog"]');
+        await expect(infoDialog).toHaveAttribute('open', '', { timeout: 5000 });
+        await expect(infoDialog).toContainText('Pull request #42 created from your fork testreviewer/guides: https://github.com/example/guides/pull/42');
+        await expect(infoDialog).toContainText('Once the pull request has been merged');
+        await expect(infoDialog.locator('a')).toHaveAttribute('href', 'https://github.com/example/guides/pull/42');
+        await expect(proposeDialog.locator('[name="prResult"]')).toHaveText('');
         expect(prRequests).toHaveLength(1);
         expect(prRequests[0]).toMatchObject({ include_human: true, include_machine: true, label: 'Data correction', title: 'Edited title', base_hashes: { 'docs/guidelines.md': 'h1', 'docs/guidelines-llm.md': 'h2' } });
         await expect(createBtn).toHaveAttribute('disabled', '');
 
+        await page.waitForTimeout(500);
+        await infoDialog.locator('sl-button[name="closeBtn"]').click();
+        await expect(infoDialog).not.toHaveAttribute('open', '');
         await proposeDialog.locator('sl-button[name="closeBtn"]').click();
         await dialog.locator('sl-button[name="closeBtn"]').click();
       } finally {
@@ -801,7 +806,7 @@ test.describe('Document rules registry', () => {
       /** @type {any[]} */
       const removalRequests = [];
       const status = () => ({
-        refs_behind: true,
+        refs_behind: false,
         refresh_message: null,
         layers: [{ layer: 'machine', url: TWO_LAYER_RULE_URLS[1], error: null, in_upstream: inUpstream, kept: [] }]
       });
@@ -832,6 +837,14 @@ test.describe('Document rules registry', () => {
         await page.waitForTimeout(500);
         await page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"] sl-menu-item:has-text("Data correction")').click();
         await expect(dialog).toHaveAttribute('open', '');
+
+        // Opening the editor warns about the outdated rules; declined here
+        const warningDialog = page.locator('sl-dialog[name="dialog"]');
+        await expect(warningDialog).toHaveAttribute('open', '', { timeout: 5000 });
+        await expect(warningDialog).toContainText('The document rules are outdated. 1 override now in upstream. Update to upstream?');
+        await page.waitForTimeout(500);
+        await warningDialog.locator('sl-button[name="cancelBtn"]').click();
+        await expect(warningDialog).not.toHaveAttribute('open', '');
         await dialog.locator('sl-tab[name="machineLayerTab"]').click();
 
         await expect(dialog.locator('[name="upstreamStatus"]')).toContainText('now in upstream');
