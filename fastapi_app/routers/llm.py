@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..lib.core.dependencies import require_admin_user, require_authenticated_user
-from ..lib.llm import LLMProviderError, LLMProviderRegistry, get_default_model, is_model_allowed, set_default_model
+from ..lib.llm import LLMProviderError, LLMProviderRegistry, ProviderNotAvailableError, get_default_model, is_model_allowed, set_default_model
 from ..lib.secrets import MissingSecretError, SecretsError, secret_required_detail
 from ..lib.llm.model_access import is_free_model, passes_model_filter, user_may_use_model
 
@@ -74,13 +74,16 @@ def list_providers(
 
     Providers without a shared key use the current user's stored key; when
     there is none, the provider is listed with `key_required` and no models
-    so the frontend can offer to add the key.
+    so the frontend can offer to add the key. Providers whose for_user() hook
+    offers nothing to the current user are omitted.
     """
     result: list[ProviderResponse] = []
     registry = LLMProviderRegistry.get_instance()
     for registered in registry.list_providers(available_only=True):
         try:
             provider = registry.get_provider_for_user(registered.id, current_user.get("username"))
+        except ProviderNotAvailableError:
+            continue
         except MissingSecretError:
             result.append(ProviderResponse(
                 id=registered.id, label=registered.label, models=[], key_required=True,
