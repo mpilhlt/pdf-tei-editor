@@ -2666,6 +2666,7 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
    */
   function setup({ api = {}, promptForKey = async () => false } = {}) {
     const plugin = makePlugin(['reviewer']);
+    const infos = [];
     plugin._editorDialogUi = makeDialogUi();
     plugin._editorDialogUi.open = true;
     plugin._updateDialogUi = { open: false };
@@ -2691,9 +2692,10 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       if (name === 'client') return { apiClient };
       if (name === 'logger') return { warn: () => {}, debug: () => {} };
       if (name === 'api-keys') return { withKeyPrompt: (action, blocker) => withKeyPrompt(action, promptForKey, blocker) };
+      if (name === 'dialog') return { info: (message) => { infos.push(message); } };
       throw new Error(`unexpected dependency: ${name}`);
     };
-    return { plugin, apiClient, requests, mergeViews };
+    return { plugin, apiClient, requests, mergeViews, infos };
   }
 
   /**
@@ -3099,40 +3101,29 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       });
     });
 
-    it('shows the created pull request with a link and keeps the button disabled', async () => {
+    it('shows the created pull request in an info dialog and keeps the button disabled', async () => {
       const prRequests = [];
-      const { plugin } = setup({ api: { documentRulesProposePullRequest: async (body) => { prRequests.push(body); return created; } } });
+      const { plugin, infos } = setup({ api: { documentRulesProposePullRequest: async (body) => { prRequests.push(body); return created; } } });
       const ui = plugin._proposeDialogUi;
       ui.includeHuman.checked = true;
       await plugin._refreshProposal();
-      const scrolled = [];
-      ui.prSection.prResult.scrollIntoView = (options) => { scrolled.push(options); };
       await plugin._onCreatePullRequest();
-      const result = ui.prSection.prResult;
-      assert.strictEqual(result.children[0].textContent, 'Pull request #7 created. Open on GitHub');
-      assert.strictEqual(
-        result.querySelector('[name="prMergeInstructions"]').textContent,
-        'Once the pull request has been merged, close this dialog and use "Update to upstream" to apply the merged rules to this document.'
-      );
-      // Scrolled into view, since it is below a long proposal
-      assert.strictEqual(scrolled.length, 1);
-      const link = result.querySelector('a');
-      assert.strictEqual(link.textContent, 'Open on GitHub');
-      assert.strictEqual(link.getAttribute('href'), 'https://github.com/o/r/pull/7');
-      assert.strictEqual(link.getAttribute('target'), '_blank');
-      assert.strictEqual(link.getAttribute('rel'), 'noopener');
+      assert.deepStrictEqual(infos, [
+        'Pull request #7 created: https://github.com/o/r/pull/7 Once the pull request has been merged, close the "Propose upstream" dialog and use "Update to upstream" to apply the merged rules to this document.'
+      ]);
+      assert.strictEqual(ui.prSection.prResult.textContent, '');
       assert.strictEqual(ui.createPrBtn.disabled, true);
+      assert.strictEqual(plugin._pullRequestCreated, true);
       assert.strictEqual(prRequests.length, 1);
     });
 
     it('names the fork a pull request was opened from', async () => {
-      const { plugin } = setup({ api: { documentRulesProposePullRequest: async () => ({ ...created, number: 8, fork: 'me/r' }) } });
+      const { plugin, infos } = setup({ api: { documentRulesProposePullRequest: async () => ({ ...created, number: 8, fork: 'me/r' }) } });
       const ui = plugin._proposeDialogUi;
       ui.includeHuman.checked = true;
       await plugin._refreshProposal();
       await plugin._onCreatePullRequest();
-      assert.strictEqual(ui.prSection.prResult.children[0].textContent, 'Pull request #8 created from your fork me/r. Open on GitHub');
-      assert.strictEqual(ui.prSection.prResult.querySelector('a').textContent, 'Open on GitHub');
+      assert.match(infos[0], /^Pull request #8 created from your fork me\/r: https:\/\/github\.com\/o\/r\/pull\/7 /);
     });
 
     it('shows an error message and re-enables the button', async () => {
@@ -3312,7 +3303,7 @@ describe('DocumentRulesPlugin upstream cleanup', () => {
     plugin.getDependency = (name) => {
       if (name === 'client') return { apiClient };
       if (name === 'logger') return { warn: (msg) => { warnings.push(msg); }, debug: () => {} };
-      if (name === 'dialog') return { confirm: async (text, title) => { confirms.push([text, title]); return confirm; } };
+      if (name === 'dialog') return { confirm: async (text, title, variant) => { confirms.push(variant ? [text, title, variant] : [text, title]); return confirm; } };
       if (name === 'xmleditor' && xmleditor) return xmleditor;
       throw new Error(`unexpected dependency: ${name}`);
     };
@@ -3540,6 +3531,72 @@ describe('DocumentRulesPlugin upstream cleanup', () => {
     await plugin._onUpdateToUpstream();
     assert.deepStrictEqual(calls, [`refreshResource:${oldMachine}`]);
     assert.deepStrictEqual(notifyCalls.map((c) => c.slice(0, 2)), [['upstream unavailable', 'warning']]);
+  });
+
+  it('_promptUpdateToUpstream warns about outdated rules and updates when confirmed', async () => {
+    const calls = [];
+    const { plugin, confirms } = setup(updateClient(calls), { xmleditor: recordingXmlEditor(calls) });
+    plugin._editorDialogUi.open = true;
+    plugin._upstreamStatusRequest = 3;
+    plugin._upstreamStatus = status({ refs_behind: true, human: { in_upstream: ['ov1'] }, machine: { kept: ['ov2'] } });
+    await plugin._promptUpdateToUpstream(3);
+    assert.deepStrictEqual(confirms, [[
+      'The document rules are outdated. The guide upstream has changed since this document was annotated. 1 override now in upstream. Update to upstream? This updates the document to the current upstream rules and removes 1 override that upstream now contains. 1 other override is kept.',
+      'Document rules outdated',
+      'warning',
+    ]]);
+    // Only the warning is confirmed, not the update a second time
+    assert.strictEqual(confirms.length, 1);
+    assert.strictEqual(calls[0], `refreshResource:${oldMachine}`);
+    assert.ok(calls.includes(`removeOverridesInUpstream:stable123:${newMachine}`));
+  });
+
+  it('_promptUpdateToUpstream does not update when the warning is declined', async () => {
+    const calls = [];
+    const { plugin, confirms } = setup(updateClient(calls), { confirm: false });
+    plugin._editorDialogUi.open = true;
+    plugin._upstreamStatus = status({ refs_behind: true });
+    await plugin._promptUpdateToUpstream(plugin._upstreamStatusRequest);
+    assert.strictEqual(confirms.length, 1);
+    assert.deepStrictEqual(calls, []);
+  });
+
+  it('_promptUpdateToUpstream stays silent when nothing is outdated, the status is stale, the dialog closed or the document read-only', async () => {
+    const cases = [
+      (plugin) => { plugin._upstreamStatus = status(); },
+      (plugin) => { plugin._upstreamStatusRequest = 5; },
+      (plugin) => { plugin._editorDialogUi.open = false; },
+      (plugin) => { plugin._documentReadOnly = true; },
+      (plugin) => { plugin._editorDialogUi.updateToUpstreamBtn.disabled = true; },
+    ];
+    for (const change of cases) {
+      const { plugin, confirms } = setup({});
+      plugin._editorDialogUi.open = true;
+      plugin._upstreamStatusRequest = 4;
+      plugin._upstreamStatus = status({ refs_behind: true });
+      change(plugin);
+      await plugin._promptUpdateToUpstream(4);
+      assert.deepStrictEqual(confirms, []);
+    }
+  });
+
+  it('opening the editor checks for outdated rules once the status is loaded, switching layers does not', async () => {
+    const { plugin } = setup({
+      documentRulesQuery: async () => ({ original_text: 'text', overrides: [], selected_override_id: null }),
+      documentRulesUpstreamStatus: async () => status({ refs_behind: true }),
+    });
+    const prompted = [];
+    plugin._promptUpdateToUpstream = async (request) => { prompted.push(request); };
+    plugin._renderEditorDialog = () => {};
+    plugin._currentShownText = () => '';
+    const [human, machine] = plugin._currentGroup;
+    await plugin._openResourceEditor(machine);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepStrictEqual(prompted, [plugin._upstreamStatusRequest]);
+    assert.strictEqual(plugin._upstreamStatus.refs_behind, true);
+    await plugin._openResourceEditor(human);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.strictEqual(prompted.length, 1);
   });
 
   it('_onUpdateToUpstream does nothing when the confirmation is declined', async () => {
