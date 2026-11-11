@@ -504,6 +504,21 @@ class TestRuntimeInstall(RuntimeInstallTestCase):
             self.install(self.mgr, version="1.0.1", engines={"pte-plugin-api": "^9.0"})
         self.assertFalse((self.site_dir / "pte-plugin-rt-hello").exists())
 
+    def test_failed_import_keeps_the_installed_id(self):
+        wheel = build_wheel(self.wheels, extra_files={f"{PACKAGE}/plugin.py": "import surely_not_installed_module\n"})
+        asyncio.run(self.mgr.install_wheel(wheel, sha256_file(wheel), "mpilhlt/pte-plugins", f"{PLUGIN_ID}-v1.0.0", True))
+        with self.assertLogs("fastapi_app.lib.plugins", level="ERROR"):
+            with self.assertRaises(PluginChangeError):
+                asyncio.run(self.mgr.set_plugin_enabled(PLUGIN_ID, True))
+        record = self.mgr.registry.get_record(PLUGIN_ID)
+        self.assertEqual(record.id if record else None, PLUGIN_ID)
+        self.assertTrue(record is not None and record.site)
+        status, reason = self.mgr.registry.status(PLUGIN_ID)
+        self.assertEqual(status, "failed")
+        self.assertIn("surely_not_installed_module", reason or "")
+        for r in self.mgr.registry.get_records():
+            self.mgr.registry.status(r.id)
+
     def test_upgrade_of_imported_plugin_requires_restart(self):
         self.install(self.mgr)
         asyncio.run(self.mgr.set_plugin_enabled(PLUGIN_ID, True))
