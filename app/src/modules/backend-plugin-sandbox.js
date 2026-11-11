@@ -165,20 +165,37 @@ export class PluginSandbox {
   }
 
   /**
-   * Navigate the plugin iframe to a new URL with automatic session_id injection
+   * Navigate the plugin iframe to a new URL, authenticated with a launch token
+   * (see {@link PluginSandbox#createLaunchUrl}).
    * @param {string} url - Relative or absolute URL to navigate to
+   * @returns {Promise<void>}
    */
-  navigateIframe(url) {
+  async navigateIframe(url) {
     const iframe = this.resultDialog.content.querySelector('iframe');
     if (!iframe) {
       throw new Error('No iframe found in dialog');
     }
+    iframe.src = await this.createLaunchUrl(url);
+  }
+
+  /**
+   * Turn the URL of a backend plugin page into one that authenticates the page
+   * without the session id: it adds a single-use launch token, which the
+   * server exchanges for an HttpOnly cookie scoped to `/api/plugins/` before
+   * redirecting to the URL without the token. Any `session_id` parameter is
+   * removed. URLs outside `/api/plugins/` are returned without a token.
+   * @param {string} url - Relative or absolute URL of the plugin page
+   * @returns {Promise<string>} Absolute URL to load in an iframe or window
+   */
+  async createLaunchUrl(url) {
     const targetUrl = new URL(url, window.location.origin);
-    const state = this.context.getCurrentState();
-    if (!targetUrl.searchParams.has('session_id') && state?.sessionId) {
-      targetUrl.searchParams.set('session_id', state.sessionId);
+    targetUrl.searchParams.delete('session_id');
+    targetUrl.searchParams.delete('launch');
+    if (targetUrl.origin === window.location.origin && targetUrl.pathname.startsWith('/api/plugins/')) {
+      const { token } = await this.context.getDependency('client').apiClient.pluginsLaunchToken();
+      targetUrl.searchParams.set('launch', token);
     }
-    iframe.src = targetUrl.toString();
+    return targetUrl.toString();
   }
 
   /**
@@ -388,8 +405,8 @@ export class PluginSandbox {
   }
 
   /**
-   * Open URL in new window with sandbox control capability, with automatic
-   * session_id injection (same convention as {@link navigateIframe}). The
+   * Open URL in new window with sandbox control capability, authenticated with
+   * a launch token (same convention as {@link navigateIframe}). The
    * opened window's SANDBOX_COMMAND messages are handled by the same generic
    * message handler set up in the constructor (it already handles messages
    * from any iframe or popup), so no dedicated listener is created here.
@@ -405,20 +422,23 @@ export class PluginSandbox {
    *   must be structured-clone-able, and a Window object is not.
    */
   async openControlledWindow(url, name = '_blank', features) {
-    const targetUrl = new URL(url, window.location.origin);
-    const state = this.context.getCurrentState();
-    if (!targetUrl.searchParams.has('session_id') && state?.sessionId) {
-      targetUrl.searchParams.set('session_id', state.sessionId);
-    }
     let resolvedFeatures = features;
     if (resolvedFeatures === undefined) {
       const openTarget = await this.context.getDependency('config').get('backend-plugins.open-target', 'tab');
       resolvedFeatures = openTarget === 'window' ? 'width=1200,height=800' : '';
     }
-    const win = window.open(targetUrl.toString(), name, resolvedFeatures);
+    // Open the window before requesting the launch token, so that waiting for
+    // the server does not use up the user activation that allows the popup
+    const win = window.open('about:blank', name, resolvedFeatures);
 
     if (!win) {
       throw new Error('Failed to open window - popup blocked?');
+    }
+    try {
+      win.location.href = await this.createLaunchUrl(url);
+    } catch (error) {
+      win.close();
+      throw error;
     }
 
     this._controlledWindows.add(win);

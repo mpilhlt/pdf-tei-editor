@@ -108,9 +108,8 @@
     </div>
 
     <script>
-        // Extract session_id from the URL (injected by the frontend when loading outputUrl)
-        const urlParams = new URLSearchParams(window.location.search);
-        const sessionId = urlParams.get('session_id');
+        // Requests to /api/plugins/ are authenticated by the plugin session cookie,
+        // which the server sets when the application opens this page
 
         // Injected by the server according to the user's roles
         const canBackup = __CAN_BACKUP__;
@@ -131,9 +130,7 @@
             setStatus('downloadStatus', 'Preparing backup...', 'info');
 
             // Direct browser download via a new window/tab
-            const url = '/api/plugins/backup-restore/download?session_id=' +
-                        encodeURIComponent(sessionId);
-            window.location.href = url;
+            window.location.href = '/api/plugins/backup-restore/download';
 
             // Re-enable after a delay (download starts in background)
             setTimeout(() => {
@@ -165,17 +162,10 @@
             formData.append('file', file);
 
             try {
-                const response = await fetch(
-                    '/api/plugins/backup-restore/restore?session_id=' +
-                    encodeURIComponent(sessionId),
-                    {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Session-ID': sessionId
-                        }
-                    }
-                );
+                const response = await fetch('/api/plugins/backup-restore/restore', {
+                    method: 'POST',
+                    body: formData
+                });
 
                 const result = await response.json();
 

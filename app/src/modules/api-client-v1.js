@@ -373,6 +373,12 @@
  */
 
 /**
+ * @typedef {Object} LaunchTokenResponse
+ * @property {string} token
+ * @property {number} expires_in
+ */
+
+/**
  * @typedef {Object} ExtractorInfo
  * @property {string} id - Unique identifier for the extractor
  * @property {string} name - Human-readable name of the extractor
@@ -3123,6 +3129,19 @@ export class ApiClientV1 {
   async pluginsExecute(plugin_id, requestBody) {
     const endpoint = `/plugins/${plugin_id}/execute`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Create a single-use token that opens a backend plugin page without the session id in its URL.
+   * Open the page as `/api/plugins/<id>/<route>?launch=<token>`. The server redeems the token, sets
+   * an HttpOnly cookie scoped to `/api/plugins/` and redirects to the URL without the token. The
+   * token expires after `expires_in` seconds.
+   *
+   * @returns {Promise<LaunchTokenResponse>}
+   */
+  async pluginsLaunchToken() {
+    const endpoint = `/plugins/launch-token`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

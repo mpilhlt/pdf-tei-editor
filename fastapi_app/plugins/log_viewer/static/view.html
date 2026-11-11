@@ -238,9 +238,11 @@
             appendEntry(data);
         }
 
-        async function loadRecentLogs(sessionId) {
+        async function loadRecentLogs() {
             try {
-                const response = await fetch('/api/plugins/log-viewer/recent?session_id=' + encodeURIComponent(sessionId));
+                const response = await fetch('/api/plugins/log-viewer/recent', {
+                    headers: { 'X-Session-ID': currentSessionId }
+                });
                 if (!response.ok) {
                     throw new Error('Failed to load recent logs: ' + response.status);
                 }
@@ -257,9 +259,8 @@
             if (!currentSessionId) return;
             try {
                 const response = await fetch(
-                    '/api/plugins/log-viewer/level?level=' + encodeURIComponent(level) +
-                    '&session_id=' + encodeURIComponent(currentSessionId),
-                    { method: 'POST' }
+                    '/api/plugins/log-viewer/level?level=' + encodeURIComponent(level),
+                    { method: 'POST', headers: { 'X-Session-ID': currentSessionId } }
                 );
                 if (!response.ok) {
                     console.error('Failed to set log level:', response.status);
@@ -284,10 +285,10 @@
 
         async function subscribeBackend() {
             try {
-                const response = await fetch(
-                    '/api/plugins/log-viewer/subscribe?session_id=' + encodeURIComponent(currentSessionId),
-                    { method: 'POST' }
-                );
+                const response = await fetch('/api/plugins/log-viewer/subscribe', {
+                    method: 'POST',
+                    headers: { 'X-Session-ID': currentSessionId }
+                });
                 if (!response.ok) {
                     console.error('Backend subscribe failed:', response.status);
                     return false;
@@ -308,11 +309,6 @@
 
         async function init() {
             try {
-                currentSessionId = new URLSearchParams(location.search).get('session_id');
-
-                // Load recent log entries first
-                await loadRecentLogs(currentSessionId);
-
                 // Verify sandbox is available before subscribing
                 if (typeof window.sandbox === 'undefined' || typeof window.sandbox.subscribeSSE !== 'function') {
                     throw new Error(
@@ -321,6 +317,14 @@
                         + '(If the problem persists, try reloading the application.)'
                     );
                 }
+
+                // Log entries reach this page through the SSE stream of the
+                // application tab that opened it, so subscribe with that tab's
+                // session (taken from the sandbox, not from the URL)
+                currentSessionId = (await sandbox.getCurrentState()).sessionId;
+
+                // Load recent log entries first
+                await loadRecentLogs();
 
                 // Subscribe to SSE event forwarding FIRST so the listener is
                 // ready before the backend starts sending events

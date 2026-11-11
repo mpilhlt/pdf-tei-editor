@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 # the databases) reads the data directory. Of several workers starting at once, one applies it.
 from .lib.core.data_restore import apply_pending_restore
 from .lib.core.request_cancellation import CancelledRequestMiddleware
+from .lib.plugins.plugin_window_auth import PluginWindowAuthMiddleware
 _data_was_restored = apply_pending_restore(get_settings().data_root, logger)
 
 
@@ -253,6 +254,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Exchanges plugin window launch tokens for the plugin session cookie and applies the cookie
+app.add_middleware(PluginWindowAuthMiddleware)
 
 # Added last, so it is the outermost user middleware and sees the CancelledError of every route
 app.add_middleware(CancelledRequestMiddleware)

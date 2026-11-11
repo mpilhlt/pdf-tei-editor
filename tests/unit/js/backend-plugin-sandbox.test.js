@@ -59,11 +59,12 @@ describe('PluginSandbox.openControlledWindow()', () => {
     global.clearInterval = originalClearInterval;
   }
 
-  function makeWindowSandbox({ configValue = 'tab', windowOpenReturns = { closed: false } } = {}) {
+  function makeWindowSandbox({ configValue = 'tab', windowOpenReturns = { closed: false, location: {} } } = {}) {
     const configGet = mock.fn(async (_key, defaultValue) => configValue ?? defaultValue);
+    const client = { apiClient: { pluginsLaunchToken: async () => ({ token: 'tok', expires_in: 60 }) } };
     const context = {
       getCurrentState: () => ({ sessionId: null }),
-      getDependency: (name) => (name === 'config' ? { get: configGet } : undefined)
+      getDependency: (name) => ({ config: { get: configGet }, client })[name]
     };
     const sandbox = new PluginSandbox(context, /** @type {any} */ ({}));
     const windowOpen = mock.fn(() => windowOpenReturns);
@@ -101,11 +102,46 @@ describe('PluginSandbox.openControlledWindow()', () => {
     restoreGlobals();
   });
 
+  it('opens a blank window first and then navigates it with a launch token', async () => {
+    const win = { closed: false, location: { href: '' } };
+    const { sandbox, windowOpen } = makeWindowSandbox({ windowOpenReturns: win });
+
+    await sandbox.openControlledWindow('/api/plugins/demo/view?x=1&session_id=old');
+
+    assert.strictEqual(windowOpen.mock.calls[0].arguments[0], 'about:blank');
+    assert.strictEqual(win.location.href, 'http://localhost/api/plugins/demo/view?x=1&launch=tok');
+    restoreGlobals();
+  });
+
   it('throws when window.open() returns null (popup blocked)', async () => {
     const { sandbox } = makeWindowSandbox({ windowOpenReturns: null });
 
     await assert.rejects(() => sandbox.openControlledWindow('/some/url'), /popup blocked/);
     restoreGlobals();
+  });
+});
+
+describe('PluginSandbox.createLaunchUrl()', () => {
+  function makeLaunchSandbox() {
+    const pluginsLaunchToken = mock.fn(async () => ({ token: 'abc', expires_in: 60 }));
+    const context = {
+      getCurrentState: () => ({ sessionId: 'secret' }),
+      getDependency: (name) => (name === 'client' ? { apiClient: { pluginsLaunchToken } } : undefined)
+    };
+    return { sandbox: new PluginSandbox(context, /** @type {any} */ ({})), pluginsLaunchToken };
+  }
+
+  it('replaces the session id with a launch token for plugin routes', async () => {
+    const { sandbox } = makeLaunchSandbox();
+    const url = await sandbox.createLaunchUrl('/api/plugins/demo/view?q=1&session_id=secret');
+    assert.strictEqual(url, 'http://localhost/api/plugins/demo/view?q=1&launch=abc');
+  });
+
+  it('adds no token to URLs outside the plugin routes', async () => {
+    const { sandbox, pluginsLaunchToken } = makeLaunchSandbox();
+    assert.strictEqual(await sandbox.createLaunchUrl('/web/help.html'), 'http://localhost/web/help.html');
+    assert.strictEqual(await sandbox.createLaunchUrl('https://example.com/api/plugins/x'), 'https://example.com/api/plugins/x');
+    assert.strictEqual(pluginsLaunchToken.mock.callCount(), 0);
   });
 });
 

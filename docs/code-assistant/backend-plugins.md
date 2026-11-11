@@ -785,6 +785,17 @@ The `callPluginApi` method:
 - Returns the raw `Response` object for flexible response handling
 - Throws errors for non-OK responses
 
+## Authentication of Plugin Pages
+
+Plugin pages (`outputUrl`, `executeUrl`, `sandbox.navigateIframe()`, `sandbox.openControlledWindow()`) never get the session id in their URL. The frontend requests a single-use launch token (`POST /api/v1/plugins/launch-token`, valid for 60 seconds) and loads `/api/plugins/<id>/<route>?launch=<token>`. `PluginWindowAuthMiddleware` ([plugin_window_auth.py](../../fastapi_app/lib/plugins/plugin_window_auth.py)) redeems the token, sets the HttpOnly cookie `pte_plugin_session` (`Path=/api/plugins/`, `SameSite=Strict`) and redirects to the same URL without the token. The address bar, the browser history and the access logs therefore never show the session id.
+
+For every request under `/api/plugins/` that brings no session id of its own, the middleware copies the cookie's session id into the `X-Session-ID` header. Routes therefore authenticate as before, through `X-Session-ID` (the `session_id` query parameter is still accepted for older clients):
+
+- In page JavaScript, call plugin routes with plain same-origin `fetch()`, `EventSource`, links or `navigator.sendBeacon()`. Do not read `session_id` from `location.search` and do not build URLs with `session_id`, neither in JavaScript nor in Python.
+- Non-GET requests authenticated by the cookie are rejected if their `Origin` header names another host.
+- The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page decides which session it carries. A page that has to act for the session of the application tab that opened it (for example to receive that tab's SSE events) takes the id from `(await sandbox.getCurrentState()).sessionId` and sends it as `X-Session-ID` header, as the log viewer does.
+- Logout clears the cookie.
+
 ## Key Files
 
 - [fastapi_app/lib/plugins/plugin_base.py](../../fastapi_app/lib/plugins/plugin_base.py) - Base classes
@@ -1012,13 +1023,13 @@ Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure opt
 2. Frontend loads form in iframe
 3. User configures options, clicks "Start"
 4. Form JS calls `sandbox.navigateIframe('/api/plugins/.../execute?params...')`
-5. Sandbox injects `session_id` and navigates iframe to execution route
+5. Sandbox adds a launch token and navigates iframe to execution route
 6. Execution route runs and displays results
 
 **Key requirements:**
 
 - Options form must include `generate_sandbox_client_script()` so `sandbox.navigateIframe()` is available
-- `session_id` is injected automatically — form JS only builds the path and query parameters
+- Authentication is handled automatically (see [Authentication of Plugin Pages](#authentication-of-plugin-pages)) — form JS only builds the path and query parameters
 - "Cancel" button can call `sandbox.closeDialog()`
 - Each page in the chain is a full page load; the sandbox client reconnects on each navigation
 
@@ -1045,7 +1056,7 @@ await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
 // Close the result dialog
 pluginSandbox.closeDialog();
 
-// Navigate the iframe to a new URL (session_id injected automatically)
+// Navigate the iframe to a new URL (authenticated with a launch token automatically)
 sandbox.navigateIframe('/api/plugins/my-plugin/execute?param=value');
 
 // Convenience: Open a document (updates xml state, clears diff, closes dialog) - async

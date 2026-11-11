@@ -727,7 +727,7 @@ Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure opt
 2. Frontend loads options form in iframe
 3. User configures options and clicks "Start"
 4. Form JavaScript calls `sandbox.navigateIframe(url)` with the built URL
-5. Sandbox injects `session_id` and navigates the iframe to the execution route
+5. Sandbox adds a launch token and navigates the iframe to the execution route
 6. Execution route runs and displays results in the same iframe
 
 **How `navigateIframe` works:**
@@ -736,7 +736,7 @@ The `navigateIframe(url)` method on the `PluginSandbox` class ([backend-plugin-s
 
 1. Finds the iframe in the plugin result dialog
 2. Constructs a full URL from the relative path
-3. Injects the current `session_id` from application state (matching the pattern used by `displayResultInIframe` and `configureExecuteButton`)
+3. Replaces any `session_id` parameter with a single-use launch token (`createLaunchUrl()`, the same mechanism `displayResultInIframe` and `configureExecuteButton` use, see [Authentication of Plugin Pages](../code-assistant/backend-plugins.md#authentication-of-plugin-pages))
 4. Sets `iframe.src` to navigate
 
 Since `PluginSandbox` methods are auto-discovered by `_extract_sandbox_methods()` in [plugin_tools.py](../../fastapi_app/lib/plugins/plugin_tools.py), the method is automatically available as `sandbox.navigateIframe()` in any iframe that includes the sandbox client script.

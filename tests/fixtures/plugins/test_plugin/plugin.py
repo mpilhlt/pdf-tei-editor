@@ -129,6 +129,13 @@ class TestPlugin(Plugin):
                     "state_params": [],
                 },
                 {
+                    "name": "open_page",
+                    "label": "Open Page",
+                    "description": "Show a plugin page in the result dialog (used by the launch token E2E test)",
+                    "state_params": [],
+                    "url_openable": True,
+                },
+                {
                     "name": "test_service_consumption",
                     "label": "Test Service Consumption",
                     "description": "Test consuming extraction services without hard dependencies",
@@ -144,6 +151,7 @@ class TestPlugin(Plugin):
             "info": self.info,
             "list_services": self.list_services,
             "test_service_consumption": self.test_service_consumption,
+            "open_page": self.open_page,
         }
 
     @classmethod
@@ -273,6 +281,10 @@ class TestPlugin(Plugin):
             result["document"] = {"xml": xml_id, "variant": variant}
 
         return result
+
+    async def open_page(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
+        """Return the URL of a plugin route for the result dialog's iframe."""
+        return {"outputUrl": "/api/plugins/test-plugin/whoami?source=dialog"}
 
     async def info(self, context: PluginContext, params: dict[str, Any]) -> dict[str, Any]:
         """

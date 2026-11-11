@@ -169,8 +169,8 @@
     const resultCountEl = document.getElementById('result-count');
     const refreshLink = document.getElementById('refresh-link');
 
-    const params = new URLSearchParams(location.search);
-    const sessionId = params.get('session_id') || '';
+    // Requests to /api/plugins/ are authenticated by the plugin session cookie,
+    // which the server sets when the application opens this page
 
     // ── Sandbox interaction ───────────────────────────────────────────────────
 
@@ -201,11 +201,7 @@
     // ── Index cleanup ─────────────────────────────────────────────────────────
 
     window.addEventListener('beforeunload', () => {
-      if (sessionId) {
-        navigator.sendBeacon(
-          `/api/plugins/document-search/cache/clear?session_id=${encodeURIComponent(sessionId)}`
-        );
-      }
+      navigator.sendBeacon('/api/plugins/document-search/cache/clear');
     });
 
     // ── Search logic ──────────────────────────────────────────────────────────
@@ -277,18 +273,14 @@
 
     async function runSearch(q, bustCache) {
       if (bustCache) {
-        await fetch(
-          `/api/plugins/document-search/cache/clear?session_id=${encodeURIComponent(sessionId)}`,
-          { method: 'POST' }
-        ).catch(() => {});
+        await fetch('/api/plugins/document-search/cache/clear', { method: 'POST' }).catch(() => {});
       }
 
       setStatus('Searching…');
       resultCountEl.textContent = '';
 
       try {
-        const url = `/api/plugins/document-search/results?q=${encodeURIComponent(q)}&session_id=${encodeURIComponent(sessionId)}`;
-        const resp = await fetch(url, { headers: { 'X-Session-ID': sessionId } });
+        const resp = await fetch(`/api/plugins/document-search/results?q=${encodeURIComponent(q)}`);
         if (!resp.ok) {
           setStatus('Search failed. Please try again.');
           return;

@@ -71,6 +71,8 @@ async def my_endpoint(
         raise HTTPException(status_code=401, detail="User not found")
 ```
 
+Plugin pages are opened with a launch token instead of the session id, and requests from them are authenticated by a cookie that the middleware turns into the `X-Session-ID` header. NEVER read `session_id` from `location.search` in plugin page JavaScript and NEVER build URLs that contain `session_id`. See [Backend Plugins - Authentication of Plugin Pages](../docs/code-assistant/backend-plugins.md#authentication-of-plugin-pages).
+
 **Access Control Pattern for Documents/Files:**
 
 Access control is **collection-based**, not direct user-document relationships. Use utility functions from `fastapi_app/lib/permissions/user_utils.py`:
