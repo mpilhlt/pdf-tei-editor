@@ -60,6 +60,15 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }
 
+/**
+ * Key of an available plugin in the set of running installs
+ * @param {AvailablePlugin} p
+ * @returns {string}
+ */
+function installKey(p) {
+  return `${p.repository}#${p.id}`
+}
+
 class PluginAdminPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
@@ -100,6 +109,12 @@ class PluginAdminPlugin extends Plugin {
 
   /** Whether the operator enabled runtime install */
   #installEnabled = false
+
+  /**
+   * Keys (`repository#id`) of the plugins whose install or upgrade is running; their buttons show a spinner
+   * @type {Set<string>}
+   */
+  #installing = new Set()
 
   /** Whether the server can restart its worker processes itself */
   #restartSupported = false
@@ -159,7 +174,7 @@ class PluginAdminPlugin extends Plugin {
     this.#availableUi.refreshBtn.addEventListener('click', () => this.#loadAvailable(true))
     this.#availableUi.availableList.addEventListener('click', e => {
       const button = /** @type {HTMLElement} */ (e.target).closest('[data-install]')
-      if (button instanceof HTMLElement) this.#confirmInstall(button.dataset.repo, button.dataset.install)
+      if (button instanceof HTMLElement && !button.hasAttribute('disabled')) this.#confirmInstall(button.dataset.repo, button.dataset.install)
     })
 
     this.#confirmUi.confirmInput.addEventListener('sl-input', () => {
@@ -320,11 +335,12 @@ class PluginAdminPlugin extends Plugin {
    */
   #availableRowHtml(p) {
     const installed = p.installed_version
+    const busy = this.#installing.has(installKey(p)) ? ' loading disabled' : ''
     let action = ''
     if (p.installable && !installed) {
-      action = `<sl-button size="small" variant="primary" data-install="${esc(p.id)}" data-repo="${esc(p.repository)}"><sl-icon slot="prefix" name="download"></sl-icon>Install v${esc(p.latest_version ?? '')}</sl-button>`
+      action = `<sl-button size="small" variant="primary" data-install="${esc(p.id)}" data-repo="${esc(p.repository)}"${busy}><sl-icon slot="prefix" name="download"></sl-icon>Install v${esc(p.latest_version ?? '')}</sl-button>`
     } else if (p.installable && p.update_available) {
-      action = `<sl-button size="small" variant="primary" data-install="${esc(p.id)}" data-repo="${esc(p.repository)}"><sl-icon slot="prefix" name="download"></sl-icon>Upgrade to v${esc(p.latest_version ?? '')}</sl-button>`
+      action = `<sl-button size="small" variant="primary" data-install="${esc(p.id)}" data-repo="${esc(p.repository)}"${busy}><sl-icon slot="prefix" name="download"></sl-icon>Upgrade to v${esc(p.latest_version ?? '')}</sl-button>`
     }
     const reason = !p.latest_version
       ? 'No release with a wheel'
@@ -547,22 +563,35 @@ class PluginAdminPlugin extends Plugin {
    * @param {string} version
    */
   async #install(p, version) {
+    const key = installKey(p)
+    if (this.#installing.has(key)) return
+    this.#installing.add(key)
+    this.#renderAvailable()
+    /** @type {[string, 'success' | 'danger', string, number]} */
+    let message
     try {
       const result = await this.#api.pluginsAdminInstall({
         repository: p.repository, id: p.id, version, confirm: p.trusted ? undefined : p.repository
       })
-      notify(`${result.action === 'upgrade' ? 'Upgraded' : 'Installed'} ${p.id} v${result.version}`
+      message = [`${result.action === 'upgrade' ? 'Upgraded' : 'Installed'} ${p.id} v${result.version}`
         + (result.packages?.length ? ` with ${result.packages.length} package${result.packages.length === 1 ? '' : 's'}` : '')
         + (result.restart_required ? '; apply the plugin changes to use the new version' : result.action === 'install' ? '; enable it in the "Installed" tab' : ''),
-      'success', 'check-circle', 6000)
+      'success', 'check-circle', 6000]
     } catch (error) {
       this.#logger.error('Plugin install failed: ' + String(error))
       /** @type {InstallErrorDetail | undefined} */
       const detail = /** @type {any} */ (error)?.detail
       const unmet = detail?.unmet?.length ? ` Missing: ${detail.unmet.join(', ')}` : ''
-      notify(`Could not install ${p.id}: ${error instanceof Error ? error.message : error}.${unmet}`, 'danger', 'exclamation-octagon', 12000)
+      message = [`Could not install ${p.id}: ${error instanceof Error ? error.message : error}.${unmet}`, 'danger', 'exclamation-octagon', 12000]
     }
-    await this.#refreshAll()
+    // Keep the spinner until the lists show the outcome, then report it
+    try {
+      await this.#refreshAll()
+    } finally {
+      this.#installing.delete(key)
+      this.#renderAvailable()
+    }
+    notify(...message)
   }
 
   /**

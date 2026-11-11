@@ -141,8 +141,12 @@ test.describe('Plugin manager', () => {
           ]
         }
       }));
+      /** @type {() => void} */
+      let releaseInstall = () => {};
+      const installHeld = new Promise(resolve => { releaseInstall = () => resolve(undefined); });
       await page.route('**/api/v1/plugins/admin/install', async route => {
         installRequests.push(route.request().postDataJSON());
+        await installHeld;
         await route.fulfill({ json: { plugin: 'stranger-plugin', version: '0.1.0', action: 'install', restart_required: false, generation: 1 } });
       });
 
@@ -168,6 +172,17 @@ test.describe('Plugin manager', () => {
 
       await expect.poll(() => installRequests.length).toBe(1);
       expect(installRequests[0]).toMatchObject({ repository: 'stranger/plugins', id: 'stranger-plugin', version: '0.1.0', confirm: 'stranger/plugins' });
+
+      // While the install runs, the button is disabled with a spinner and no toast is shown
+      const installBtn = page.locator('sl-button[data-install="stranger-plugin"]');
+      await expect(installBtn).toHaveAttribute('loading', '');
+      await expect(installBtn).toHaveAttribute('disabled', '');
+      const toast = page.locator('sl-alert', { hasText: 'Installed stranger-plugin' });
+      await expect(toast).toHaveCount(0);
+
+      releaseInstall();
+      await expect(toast).toHaveCount(1);
+      await expect(installBtn).not.toHaveAttribute('loading', '');
     } finally {
       stopErrorMonitoring();
       try {
