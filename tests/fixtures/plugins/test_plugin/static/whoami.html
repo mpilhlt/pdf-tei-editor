@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Who am I</title></head>
+<body>
+<pre id="result"></pre>
+<script>
+  /**
+   * Ask the whoami route with fetch() and XMLHttpRequest, without setting any session header
+   * @returns {Promise<{fetch: string, xhr: string}>}
+   */
+  window.checkWhoami = async function () {
+    const viaFetch = await fetch('/api/plugins/test-plugin/whoami').then(r => r.json());
+    const viaXhr = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', '/api/plugins/test-plugin/whoami');
+      xhr.setRequestHeader('X-Session-ID', '');
+      xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+      xhr.onerror = reject;
+      xhr.send();
+    });
+    return { fetch: viaFetch.username, xhr: viaXhr.username };
+  };
+  window.checkWhoami().then(r => { document.getElementById('result').textContent = JSON.stringify(r); });
+</script>
+</body>
+</html>

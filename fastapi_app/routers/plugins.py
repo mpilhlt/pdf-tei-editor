@@ -15,7 +15,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from fastapi_app.lib.core.dependencies import get_current_user, get_session_id_from_request
+from fastapi_app.config import get_settings
+from fastapi_app.lib.core.dependencies import (
+    get_current_user,
+    get_session_id_from_request,
+    get_session_manager,
+    require_session_id,
+)
+from fastapi_app.lib.core.sessions import LAUNCH_TOKEN_TTL_SECONDS, SessionManager
 from fastapi_app.lib.plugins.extension_templates import collect_plugin_assets, render_plugin_assets, templates_dir_for
 from fastapi_app.lib.plugins.frontend_extension_registry import FrontendExtensionRegistry
 from fastapi_app.lib.plugins.plugin_manager import PluginManager
@@ -69,6 +76,31 @@ async def list_plugins(
     plugins = manager.get_plugins(category=category, user_roles=user_roles)
 
     return PluginListResponse(plugins=plugins)
+
+
+class LaunchTokenResponse(BaseModel):
+    """Response for a plugin window launch token."""
+
+    token: str
+    expires_in: int
+
+
+@router.post("/launch-token", response_model=LaunchTokenResponse)
+async def create_launch_token(
+    session_id: str = Depends(require_session_id),
+    session_manager: SessionManager = Depends(get_session_manager),
+) -> LaunchTokenResponse:
+    """
+    Create a single-use token that opens a backend plugin page without the session id in its URL.
+
+    Open the page as `/api/plugins/<id>/<route>?launch=<token>`. The server redeems the token, sets
+    an HttpOnly cookie scoped to `/api/plugins/` and redirects to the URL without the token. The
+    token expires after `expires_in` seconds.
+    """
+    if not session_manager.is_session_valid(session_id, get_settings().session_timeout):
+        raise HTTPException(status_code=401, detail="Session expired")
+    token = session_manager.create_launch_token(session_id)
+    return LaunchTokenResponse(token=token, expires_in=LAUNCH_TOKEN_TTL_SECONDS)
 
 
 @router.post("/{plugin_id}/execute", response_model=ExecuteResponse)

@@ -359,23 +359,17 @@ export class BackendPluginsPlugin extends Plugin {
    * Display plugin result in an iframe
    * @param {BackendPlugin} plugin
    * @param {any} result - Must include outputUrl property
+   * @returns {Promise<void>}
    */
-  displayResultInIframe(plugin, result) {
+  async displayResultInIframe(plugin, result) {
     this.#dialogUi.setAttribute("label", plugin.name);
     this.#dialogUi.style.setProperty("--width", "90vw");
     this.#dialogUi.icon.innerHTML = '';
 
-    // Create iframe with authentication
+    // The iframe authenticates with a single-use launch token, which the
+    // server exchanges for a cookie, so the session id stays out of the URL
     const iframe = document.createElement('iframe');
-    const outputUrl = new URL(result.outputUrl, window.location.origin);
-
-    // Add session ID if not already in URL
-    if (!outputUrl.searchParams.has('session_id') && this.state.sessionId) {
-      outputUrl.searchParams.set('session_id', this.state.sessionId);
-    }
-
-    const fullUrl = outputUrl.toString();
-    iframe.src = fullUrl;
+    iframe.src = await this.pluginSandbox.createLaunchUrl(result.outputUrl);
     iframe.style.width = '100%';
     iframe.style.height = '60vh';
     iframe.style.border = 'none';
@@ -390,7 +384,17 @@ export class BackendPluginsPlugin extends Plugin {
     this.#dialogUi.openWindowBtn = newOpenWindowBtn;
 
     this.#dialogUi.openWindowBtn.addEventListener('click', () => {
-      const childWindow = window.open(fullUrl, '_blank', 'width=1200,height=800');
+      // Open synchronously to keep the user activation, then navigate with a
+      // fresh launch token (the iframe has used up the first one)
+      const childWindow = window.open('about:blank', '_blank', 'width=1200,height=800');
+      if (childWindow) {
+        this.pluginSandbox.createLaunchUrl(result.outputUrl)
+          .then(url => { childWindow.location.href = url; })
+          .catch(error => {
+            childWindow.close();
+            notify(`Could not open the window: ${error.message}`, 'danger', 'exclamation-octagon');
+          });
+      }
       const closeChild = () => {
         if (childWindow && !childWindow.closed) {
           childWindow.close();
@@ -495,13 +499,8 @@ export class BackendPluginsPlugin extends Plugin {
 
       dialog.executeBtn.addEventListener('click', async () => {
         try {
-          // Build execute URL with authentication
-          const executeUrl = new URL(result.executeUrl, window.location.origin);
-
-          // Add session ID if not already in URL
-          if (!executeUrl.searchParams.has('session_id') && this.state.sessionId) {
-            executeUrl.searchParams.set('session_id', this.state.sessionId);
-          }
+          // Authenticate with a launch token instead of the session id
+          const executeUrl = await this.pluginSandbox.createLaunchUrl(result.executeUrl);
 
           // Load execute result in the same iframe, with a blocking spinner
           // for the (potentially slow) navigation - the load can take much
@@ -510,7 +509,7 @@ export class BackendPluginsPlugin extends Plugin {
           if (iframe) {
             ui.spinner.show('Please wait...');
             iframe.addEventListener('load', () => ui.spinner.hide(), { once: true });
-            iframe.src = executeUrl.toString();
+            iframe.src = executeUrl;
           }
 
           // Hide execute button after clicking
@@ -537,11 +536,7 @@ export class BackendPluginsPlugin extends Plugin {
     try {
       const url = new URL(downloadUrl, window.location.origin);
 
-      // Add session ID if not already in URL
-      if (!url.searchParams.has('session_id') && this.state.sessionId) {
-        url.searchParams.set('session_id', this.state.sessionId);
-      }
-
+      // Authenticated by the header, so the session id stays out of the URL
       const response = await fetch(url.toString(), {
         headers: { 'X-Session-ID': this.state.sessionId || '' }
       });
@@ -601,7 +596,10 @@ export class BackendPluginsPlugin extends Plugin {
 
     // Check if result contains outputUrl for iframe rendering
     if (result && result.outputUrl) {
-      this.displayResultInIframe(plugin, result);
+      this.displayResultInIframe(plugin, result).catch(error => {
+        console.error(`Could not display the result of plugin ${plugin.id}:`, error);
+        notify(`Could not display the result: ${error.message}`, 'danger', 'exclamation-octagon');
+      });
       return;
     }
 

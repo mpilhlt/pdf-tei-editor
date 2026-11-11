@@ -5,13 +5,15 @@ This module provides SQLite-based session management with dependency injection.
 No Flask or FastAPI dependencies - all parameters are explicitly passed.
 """
 
+import hashlib
+import secrets
 import sqlite3
 import time
 import uuid
 from pathlib import Path
 from typing import Optional, TypedDict
 
-from fastapi_app.lib.core.db_utils import get_connection, init_database
+from fastapi_app.lib.core.db_utils import get_connection, init_database, transaction
 
 
 class SessionDict(TypedDict):
@@ -39,7 +41,21 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_username ON sessions(username);
 CREATE INDEX IF NOT EXISTS idx_last_access ON sessions(last_access);
+
+CREATE TABLE IF NOT EXISTS launch_tokens (
+    token_hash TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    expires_at REAL NOT NULL
+);
 """
+
+LAUNCH_TOKEN_TTL_SECONDS = 60
+"""Lifetime of a plugin window launch token: it only has to survive until the window has loaded"""
+
+
+def _hash_launch_token(token: str) -> str:
+    """Return the SHA-256 hex digest under which a launch token is stored."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 _SESSION_COLUMNS = "session_id, username, created_at, last_access, token_id, expires_at"
 
@@ -323,6 +339,60 @@ class SessionManager:
         conn.commit()
 
         return cursor.rowcount
+
+    def create_launch_token(self, session_id: str, ttl_seconds: int = LAUNCH_TOKEN_TTL_SECONDS) -> str:
+        """
+        Create a single-use launch token for a session.
+
+        A launch token stands in for the session id in the URL of a backend plugin window: the
+        window opens with ``?launch=<token>``, and the server exchanges the token for a cookie
+        (see ``fastapi_app/lib/plugins/plugin_window_auth.py``). Only the hash of the token is stored.
+
+        Args:
+            session_id: Session the token authenticates
+            ttl_seconds: Seconds until the token expires
+
+        Returns:
+            The token
+        """
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with transaction(self.db_path) as conn:
+            conn.execute("DELETE FROM launch_tokens WHERE expires_at <= ?", (now,))
+            conn.execute(
+                "INSERT INTO launch_tokens (token_hash, session_id, expires_at) VALUES (?, ?, ?)",
+                (_hash_launch_token(token), session_id, now + ttl_seconds),
+            )
+        return token
+
+    def consume_launch_token(self, token: str) -> Optional[str]:
+        """
+        Redeem a launch token. A token can be redeemed once, before it expires.
+
+        Args:
+            token: Token returned by :meth:`create_launch_token`
+
+        Returns:
+            The session id the token was created for, or None if the token is unknown, used or expired.
+            The caller still has to check that the session is valid.
+        """
+        if not token:
+            return None
+        token_hash = _hash_launch_token(token)
+        with transaction(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT session_id, expires_at FROM launch_tokens WHERE token_hash = ?",
+                (token_hash,),
+            ).fetchone()
+            if row is None:
+                return None
+            cursor = conn.execute("DELETE FROM launch_tokens WHERE token_hash = ?", (token_hash,))
+            if cursor.rowcount != 1:
+                # Redeemed concurrently by another request
+                return None
+        if row["expires_at"] <= time.time():
+            return None
+        return row["session_id"]
 
     def get_user_session_count(self, username: str) -> int:
         """

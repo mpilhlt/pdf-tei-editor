@@ -19,6 +19,7 @@ from .m009_document_rules_tables import Migration009DocumentRulesTables
 from .m010_add_parent_stable_id_column import Migration010AddParentStableIdColumn
 from .m011_document_rules_section_overrides import Migration011DocumentRulesSectionOverrides
 from .m012_sessions_token_columns import Migration012SessionsTokenColumns
+from .m013_sessions_launch_tokens import Migration013SessionsLaunchTokens
 
 # Migrations by target database
 LOCKS_MIGRATIONS = [
@@ -40,6 +41,7 @@ METADATA_MIGRATIONS = [
 
 SESSIONS_MIGRATIONS = [
     Migration012SessionsTokenColumns,
+    Migration013SessionsLaunchTokens,
 ]
 
 # Access tokens database migrations (for future schema changes)
@@ -64,6 +66,7 @@ ALL_MIGRATIONS = [
     Migration010AddParentStableIdColumn,
     Migration011DocumentRulesSectionOverrides,
     Migration012SessionsTokenColumns,
+    Migration013SessionsLaunchTokens,
 ]
 
 __all__ = [
