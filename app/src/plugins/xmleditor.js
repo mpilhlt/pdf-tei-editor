@@ -250,6 +250,10 @@ class XmlEditorPlugin extends Plugin {
   #currentUser = null;
   /** @type {string|null} */
   #hashBeingSaved = null;
+  /** Set when a save is requested while another one is in flight, so it runs once that one ends */
+  #saveRequestedWhileSaving = false;
+  /** @type {Promise<void>|null} Resolves when the save in flight ends */
+  #saveInFlight = null;
 
   // Draft persistence and save-status reporting
   /** @type {XmlEditorDraftStore} */
@@ -1127,10 +1131,15 @@ class XmlEditorPlugin extends Plugin {
   //
 
   /**
-   * Save the current XML file if the editor is "dirty"
+   * Save the current XML file if the editor is "dirty". Waits for a save in flight, so that the
+   * editor content is saved when the returned promise resolves.
+   * @returns {Promise<void>}
    */
   async saveIfDirty() {
-    return this.#saveIfDirty();
+    // wait for a save in flight (e.g. the auto-save), so that the content is saved on return
+    while (this.#saveInFlight) await this.#saveInFlight;
+    await this.#saveIfDirty();
+    while (this.#saveInFlight) await this.#saveInFlight;
   }
 
   /**
@@ -1391,9 +1400,10 @@ class XmlEditorPlugin extends Plugin {
       return;
     }
     if (isHashBeingSaved) {
-      // A save is already in flight for this file hash; the delayed-update cycle will retry
-      // once it completes. This is not a user-visible problem.
+      // A save is already in flight for this file hash; it saves again when it ends if the
+      // editor is still dirty then. This is not a user-visible problem.
       this.#logger.debug('Not saving: Already saving document');
+      this.#saveRequestedWhileSaving = true;
       return;
     }
     if (!isDirty) {
@@ -1415,12 +1425,16 @@ class XmlEditorPlugin extends Plugin {
       return;
     }
 
-    // Capture the document version BEFORE the save so we can detect edits that happened
-    // during the await and avoid the race where we would otherwise mark a dirty editor
-    // clean (dropping unsaved keystrokes).
-    const versionAtStart = this.#xmlEditor.getDocumentVersion();
+    // Capture the change count BEFORE the save so we can detect edits that happened during the
+    // await and avoid the race where we would otherwise mark a dirty editor clean (dropping
+    // unsaved keystrokes). The content was synced above, so only a change counted after this
+    // point is unsaved. The document version is not compared: it advances 1 s after a change
+    // that is already counted.
     const changesAtStart = this.#xmlEditor.getChangeCount();
 
+    /** @type {() => void} */
+    let endSave = () => {};
+    this.#saveInFlight = new Promise(resolve => { endSave = resolve; });
     try {
       this.#hashBeingSaved = fileHash;
       const filedata = FiledataPlugin.getInstance();
@@ -1439,9 +1453,7 @@ class XmlEditorPlugin extends Plugin {
         }
       }
 
-      const versionAtEnd = this.#xmlEditor.getDocumentVersion();
-      // the version only advances 1 s after a change: compare the change count too
-      if (versionAtEnd === versionAtStart && this.#xmlEditor.getChangeCount() === changesAtStart) {
+      if (this.#xmlEditor.getChangeCount() === changesAtStart) {
         // No edits happened during the save — safe to mark clean.
         this.#xmlEditor.markAsClean();
         // Server has an authoritative copy; drop the local draft to avoid stale restore prompts.
@@ -1449,11 +1461,8 @@ class XmlEditorPlugin extends Plugin {
           this.#draftStore.clearDraft(this.#lastLoadedStableId);
         }
       } else {
-        // Something was typed while saving; next delayed update will trigger another save.
-        this.#logger.debug(
-          `Document version advanced during save (${versionAtStart} -> ${versionAtEnd}); ` +
-          'leaving dirty flag set so the next save cycle covers the new edits.'
-        );
+        // Something was typed while saving; the next save covers the new edits.
+        this.#logger.debug('Document changed during save; leaving dirty flag set so the next save covers the new edits.');
       }
       // Successful server save clears any previously shown warning.
       this.#setSaveBlocked(false);
@@ -1465,6 +1474,14 @@ class XmlEditorPlugin extends Plugin {
       this.#flushDraftNow();
     } finally {
       this.#hashBeingSaved = null;
+      this.#saveInFlight = null;
+      endSave();
+    }
+    // A save requested during this one was dropped: without this, edits made while saving stay
+    // unsaved until the next change, and the dirty editor blocks reloading the page.
+    if (this.#saveRequestedWhileSaving) {
+      this.#saveRequestedWhileSaving = false;
+      await this.#saveIfDirty();
     }
   }
 
