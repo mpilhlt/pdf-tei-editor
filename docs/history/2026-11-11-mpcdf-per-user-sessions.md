@@ -1,6 +1,6 @@
 # MPCDF LLM: per-user sessions (plan)
 
-Status: in implementation (core hook in pdf-tei-editor, per-user managers in pte-plugins, library change in llm-mpcdf).
+Status: implemented (core hook in pdf-tei-editor, per-user managers in pte-plugins, library change in llm-mpcdf). See the implementation notes at the end.
 
 ## Problem
 
@@ -101,3 +101,12 @@ None at the moment.
 0. Library change: `admin_router`/`read_router` use a callable source directly as the dependency; bump the pinned commit.
 1. Core PR: `for_user()` hook, `ProviderNotAvailableError`, providers route, API version bump.
 2. pte-plugins PR (after the core release): per-user managers, catalog, providers, dialog, migration, tests, README; `engines` raised to the core release and `pte-plugin-api: ^1.3`.
+
+## Implementation notes (2026-11-11)
+
+- Library (llm-mpcdf, two commits on top of 37f8c92): `admin_router`/`read_router` use a callable source as the FastAPI dependency itself (sync or async, signature evaluated in the getter's module, `LookupError` still maps to 503). The fake (`mpcdf_llm.testing.FakeLlmis`) now keeps users' endpoints apart like the service and records the form data of every submit (`submitted`), so the plugin can test two MPCDF users and the Hugging Face token sent.
+- Core: as planned. `ProviderNotAvailableError` overrides `__str__` so the 404 detail is the plain message.
+- Plugin routes: the library's admin router is mounted at `/my` (not `/admin`) behind `require_authenticated_user`; `PUT`/`DELETE` on `/my/presets/...` are rejected for non-admins by a router dependency. New routes: `GET /context` (page context), `GET /overview` and `DELETE /users/{username}/session` (admin).
+- User directories are named by the hex encoding of the username (reversible, safe on case-insensitive filesystems). Startup and the watch loop open a manager for every user directory with a stored session; the watch loop also drops managers whose session is no longer stored but still held in memory (logout in another worker, "Remove all" keys, admin removal).
+- The "API test" of the plan (a user starts a preset against the fake and finds the model in `/api/v1/llm/providers`, a second user does not) is a Python test (`test_routes.py`, `TestModelPicker`) that mounts the core's LLM router next to the plugin's, since the JavaScript API tests have no fake MPCDF service. The JavaScript API tests cover access control of the new routes.
+- `engines.pte` stays `>=0.82.0`; `engines.pte-plugin-api: ^1.3` is what requires the core with the hook.
