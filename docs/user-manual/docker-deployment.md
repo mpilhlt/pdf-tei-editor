@@ -136,7 +136,7 @@ API keys of inference providers (Anthropic, Gemini, KISSKI, ...) are not set as 
 | `PTE_PLUGIN_SOURCES` | Plugin repositories that are always listed (default `mpilhlt/pte-plugins`) |
 | `PTE_PLUGIN_TRUSTED_OWNERS` | GitHub owners whose plugins are trusted (default `mpilhlt`) |
 | `PTE_PLUGIN_TRUSTED_ONLY` | Hide and refuse plugins of untrusted owners |
-| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | Install the missing Python packages of a plugin with it (from PyPI) |
+| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | Install the missing Python packages of a plugin with it (from PyPI, or from the URL a plugin names, e.g. a Git repository) |
 | `GITHUB_TOKEN` | Raises the GitHub API rate limit for plugin discovery |
 
 See [Plugins in the image](#plugins-in-the-image). `.env.production` documents the plugin system variables. The settings of individual plugins (such as `GROBID_SERVER_URL`) are described in each plugin's README.
@@ -201,7 +201,7 @@ Administrators can install and upgrade plugins from GitHub releases in the [Plug
 | `PTE_PLUGIN_DISCOVER_TOPIC` | GitHub topic searched for further plugin repositories; empty disables the search | `pte-plugin` |
 | `PTE_PLUGIN_TRUSTED_OWNERS` | Comma-separated GitHub owners whose plugins are trusted; installing other plugins requires typing the repository name | `mpilhlt` |
 | `PTE_PLUGIN_TRUSTED_ONLY` | `1` hides and refuses plugins of other owners | off |
-| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | `1` also installs the Python packages a plugin needs and the image lacks, from PyPI into the plugin's directory | off |
+| `PTE_PLUGIN_INSTALL_DEPENDENCIES` | `1` also installs the Python packages a plugin needs and the image lacks, from PyPI (or from the URL a plugin names, e.g. a Git repository) into the plugin's directory | off |
 | `GITHUB_TOKEN` | Optional token that raises the GitHub API rate limit | - |
 
 For example, a deployment that installs from a fork of the plugin repository sets `PTE_PLUGIN_SOURCES=myorg/pte-plugins` and `PTE_PLUGIN_TRUSTED_OWNERS=mpilhlt,myorg`.
