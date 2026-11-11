@@ -10,6 +10,9 @@
     <span class="diagnostics-drawer-footer-buttons">
       <sl-button name="applyBtn" size="small" variant="primary" disabled>Apply</sl-button>
       <sl-button name="dismissBtn" size="small" disabled>Dismiss</sl-button>
+      <sl-tooltip content="Delete the review marks and comment threads of the checked entries from the document (undo with Ctrl+Z). Other diagnostics are dismissed.">
+        <sl-button name="deleteBtn" size="small" variant="danger" outline disabled style="display: none">Delete</sl-button>
+      </sl-tooltip>
     </span>
   </div>
 </sl-drawer>

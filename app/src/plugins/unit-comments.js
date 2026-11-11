@@ -35,7 +35,7 @@ import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
-import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, addDismissListener } from '../modules/lint-utils.js'
+import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, addDismissListener, addDeleteListener } from '../modules/lint-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
 import {
   LIST_TYPE, readComments, serializeComments, buildThreads, addThread, addReply, setThreadStatus,
@@ -144,6 +144,7 @@ class UnitCommentsPlugin extends Plugin {
       if (!userHasRole(this.state?.user ?? null, ['reviewer', 'admin'])) return
       for (const d of dismissed) if (d.source === SOURCE) this.#dismissed.add(d.message)
     })
+    addDeleteListener(deleted => this.#onDeleted(deleted))
     this.getDependency('sse').addEventListener('commentsChanged', (/** @type {MessageEvent} */ event) => {
       try {
         this.#onCommentsChanged(JSON.parse(event.data))
@@ -536,6 +537,26 @@ class UnitCommentsPlugin extends Plugin {
   }
 
   /**
+   * Deletes the threads of the comment diagnostics a reviewer deleted in the diagnostics drawer,
+   * with all replies.
+   * @param {Diagnostic[]} deleted
+   */
+  #onDeleted(deleted) {
+    const ids = new Set(deleted
+      .filter(d => d.source === SOURCE)
+      .map(d => /** @type {Diagnostic & {threadId?: string}} */ (d).threadId)
+      .filter(id => typeof id === 'string'))
+    if (!ids.size || !userHasRole(this.state?.user ?? null, ['reviewer', 'admin']) || !this.#canWrite(false)) return
+    this.#refresh()
+    let comments = this.#comments
+    for (const id of /** @type {Set<string>} */ (ids)) comments = deleteComment(comments, id)
+    this.#comments = comments
+    this.#placed = this.#placed.filter(p => !ids.has(p.thread.root.id))
+    this.#write(true)
+    testLog('UNIT_COMMENTS_DELETED', { count: ids.size })
+  }
+
+  /**
    * Adds a thread on the element with the given anchor.
    * @param {{path: string, fingerprint: string}} anchor
    * @param {string} text
@@ -648,16 +669,18 @@ class UnitCommentsPlugin extends Plugin {
       const replies = thread.replies.length ? ` (+${thread.replies.length} ${thread.replies.length === 1 ? 'reply' : 'replies'})` : ''
       const message = `${element ? '' : 'Element not found: '}💬 ${this.#displayName(thread.root.author)}: ${thread.root.text}${replies}`
       if (this.#dismissed.has(message)) continue
-      own.push({
+      own.push(/** @type {Diagnostic & {threadId: string}} */ ({
         from: element?.from ?? 0,
         to: element ? element.tagTo : 0,
         severity: 'info',
         message,
+        // for #onDeleted()
+        threadId: id,
         actions: [
           { name: 'Reply', apply: () => { this.openThread(id) } },
           { name: 'Resolve', apply: () => { this.#change(comments => { setThreadStatus(comments, id, 'resolved', { who: this.state?.user?.username ?? '' }) }, id) } }
         ]
-      })
+      }))
     }
     const key = own.map(d => `${d.from}:${d.to}:${d.message}`).join('|')
     if (key === this.#diagnosticsKey) return

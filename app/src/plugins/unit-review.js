@@ -37,7 +37,7 @@ import { isFrozenFile, standOffContributions, userHasRole } from '../modules/acl
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
-import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines, appliedFixRange, addDismissListener } from '../modules/lint-utils.js'
+import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines, appliedFixRange, addDismissListener, addDeleteListener } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
   setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint
@@ -214,6 +214,7 @@ class UnitReviewPlugin extends Plugin {
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
     addDismissListener(dismissed => this.#onDismissed(dismissed))
+    addDeleteListener(deleted => this.#onDeleted(deleted))
     // fixes accepted in the merge view are marked OK once it is closed
     this.#xmlEditor.on('editorHideMergeView', () => { if (this.#appliedFixes.length) this.#refresh() })
     document.addEventListener('mouseup', () => this.#endDrag())
@@ -1170,12 +1171,14 @@ class UnitReviewPlugin extends Plugin {
       const fp = unit.fingerprint
       const message = `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`
       if (this.#dismissed.has(`${fp}\u0000${message}`)) continue
-      own.push({
+      own.push(/** @type {Diagnostic & {unitFingerprint: string}} */ ({
         from: unit.from,
         to: Math.min(unit.to, line.to),
         severity: 'info',
         markClass: `cm-unit-review-${kind}`,
         message,
+        // for #onDeleted()
+        unitFingerprint: fp,
         // only reviewers can mark units
         actions: [
           ...(reviewer ? [
@@ -1184,7 +1187,7 @@ class UnitReviewPlugin extends Plugin {
           ] : []),
           { name: 'Open review', apply: (/** @type {EditorView} */ v, /** @type {number} */ from) => { this.openReview(v.state.doc.lineAt(from).number) } }
         ]
-      })
+      }))
     }
     // empty without diagnostics: #onEditorUpdate() re-merges only while the key is set, and
     // re-merging an empty set after every replacement by another source would make plugins that
@@ -1215,6 +1218,35 @@ class UnitReviewPlugin extends Plugin {
       const unit = this.#scan.units.find(u => u.from === d.from)
       if (unit) this.#dismissed.add(`${unit.fingerprint}\u0000${d.message}`)
     }
+  }
+
+  /**
+   * Deletes the not-OK marks behind the review diagnostics a reviewer deleted in the diagnostics
+   * drawer, of all reviewers including the LLM Reviewer, also those from before an edit. OK marks
+   * stay, so a disputed unit becomes OK.
+   * @param {Diagnostic[]} deleted
+   */
+  #onDeleted(deleted) {
+    const fps = deleted
+      .filter(d => d.source === SOURCE)
+      .map(d => /** @type {Diagnostic & {unitFingerprint?: string}} */ (d).unitFingerprint)
+      .filter(fp => typeof fp === 'string')
+    if (!fps.length || !this.#isReviewer()) return
+    this.#refresh()
+    if (!this.#canWrite(false)) return
+    const data = this.#readData(this.#view().state)
+    for (const fp of /** @type {string[]} */ (fps)) {
+      // the marks before the edit, from which they would be carried over again
+      const root = this.#carry.get(fp)
+      for (const reviewer of data.reviewers.values()) {
+        for (const key of root ? [fp, root] : [fp]) {
+          if (reviewer.marks.get(key)?.state === 'not-ok') reviewer.marks.delete(key)
+          if (reviewer.was.get(key)?.state === 'not-ok') reviewer.was.delete(key)
+        }
+      }
+    }
+    this.#write(data, true)
+    testLog('UNIT_REVIEW_MARKS_DELETED', { count: fps.length })
   }
 
   /**
