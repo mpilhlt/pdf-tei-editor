@@ -117,18 +117,21 @@ def unpack(wheel: Path, info: WheelInfo, site_dir: Path) -> str:
     """
     Unpack a checked wheel into the site directory.
 
+    A version directory that exists already (left by a removal that waits for a restart, or by an
+    interrupted install) is replaced.
+
     Returns:
         The version directory, relative to the site directory
 
     Raises:
-        InstallError: If the version is unpacked already or unpacking fails
+        InstallError: If unpacking fails
     """
     relative = f"{canonicalize_name(info.distribution)}/{info.version}"
     target = resolve_site_path(relative, site_dir)
     if target.exists():
-        raise InstallError(409, f"{info.distribution} {info.version} is unpacked already in {target}")
+        logger.info(f"Replacing the unpacked {info.distribution} {info.version} in {target}")
     try:
-        extract_wheel(wheel, target)
+        extract_wheel(wheel, target, replace=True)
     except WheelError as e:
         raise InstallError(422, str(e)) from e
     except OSError as e:

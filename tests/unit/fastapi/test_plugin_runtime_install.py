@@ -175,6 +175,15 @@ class TestWheel(unittest.TestCase):
         with self.assertRaises(WheelError):
             extract_wheel(build_wheel(self.dir), target)
 
+    def test_extract_replaces_existing_directory(self):
+        target = self.dir / "site" / "pte-plugin-rt-hello" / "1.0.0"
+        (target / "stale").mkdir(parents=True)
+        (target / "stale" / "old.py").write_text("")
+        extract_wheel(build_wheel(self.dir), target, replace=True)
+        self.assertTrue((target / PACKAGE / "plugin.py").is_file())
+        self.assertFalse((target / "stale").exists())
+        self.assertEqual(sorted(p.name for p in target.parent.iterdir()), ["1.0.0"])
+
 
 class FakeGitHub:
     """GitHubClient serving canned responses."""
@@ -550,6 +559,29 @@ class TestRuntimeInstall(RuntimeInstallTestCase):
         self.assertEqual(self.mgr.state_store.read().pending_removal, frozenset())
         with self.assertRaises(PluginChangeError):
             asyncio.run(self.mgr.remove_plugin(PLUGIN_ID))
+
+    def test_reinstall_after_remove_replaces_the_directory_pending_removal(self):
+        self.install(self.mgr)
+        asyncio.run(self.mgr.remove_plugin(PLUGIN_ID))
+        (self.site_dir / "pte-plugin-rt-hello" / "1.0.0" / "stale.txt").write_text("")
+        result = self.install(self.mgr)
+        self.assertEqual(result["action"], "install")
+        state = self.mgr.state_store.read()
+        self.assertEqual(state.pending_removal, frozenset())
+        version_dir = self.site_dir / "pte-plugin-rt-hello" / "1.0.0"
+        self.assertFalse((version_dir / "stale.txt").exists())
+        self.assertTrue((version_dir / PACKAGE / "plugin.py").is_file())
+        self.discover(self.new_manager())
+        self.assertTrue((version_dir / PACKAGE / "plugin.py").is_file())
+
+    def test_install_replaces_a_leftover_version_directory(self):
+        leftover = self.site_dir / "pte-plugin-rt-hello" / "1.0.0"
+        leftover.mkdir(parents=True)
+        (leftover / "partial.txt").write_text("")
+        result = self.install(self.mgr)
+        self.assertEqual(result["action"], "install")
+        self.assertFalse((leftover / "partial.txt").exists())
+        self.assertTrue((leftover / PACKAGE / "plugin.py").is_file())
 
     def test_startup_prunes_plugins_whose_directory_was_deleted(self):
         import shutil

@@ -981,6 +981,7 @@ class PluginManager:
                 pending = set(current.pending_removal)
                 if previous is not None:
                     pending.add(previous.path)
+                pending.discard(new_entry.path)
                 disabled = current.disabled if upgrade else current.disabled | {new_entry.id}
                 result = replace(current, installed=installed, pending_removal=frozenset(pending), disabled=disabled)
                 if restart:
