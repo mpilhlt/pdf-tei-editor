@@ -49,10 +49,7 @@ async function openHeaderEditor(page) {
 }
 
 test.describe('TEI Header Editor', () => {
-  // Skipped: in the full CI run (PRs to main) the header editor button stays disabled, so the
-  // first click times out. It passes on its own and in a full local run. Preceding plugin-admin
-  // tests leave persistent "reload" / "apply plugin changes" alerts, which may be related.
-  test.skip('reviewer can edit publisher and save, leaving an untouched titleStmt intact', async ({ page }) => {
+  test('reviewer can edit publisher and save, leaving an untouched titleStmt intact', async ({ page }) => {
     test.setTimeout(60000);
 
     const consoleLogs = setupTestConsoleCapture(page);
