@@ -35,7 +35,7 @@ import { notify } from '../modules/sl-utils.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
-import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics } from '../modules/lint-utils.js'
+import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, addDismissListener } from '../modules/lint-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
 import {
   LIST_TYPE, readComments, serializeComments, buildThreads, addThread, addReply, setThreadStatus,
@@ -123,6 +123,12 @@ class UnitCommentsPlugin extends Plugin {
   /** True while this plugin dispatches its own diagnostics */
   #renderingDiagnostics = false
 
+  /**
+   * @type {Set<string>} Diagnostics a reviewer dismissed in the diagnostics drawer, by message:
+   *   they stay hidden until the document is loaded again or the thread changes (e.g. a reply)
+   */
+  #dismissed = new Set()
+
   #writing = false
 
   /** @param {ApplicationState} state */
@@ -133,6 +139,11 @@ class UnitCommentsPlugin extends Plugin {
     this.#xmlEditor.addStatusbarWidget(this.#meter, 'right', 5)
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
+    addDismissListener(dismissed => {
+      // for reviewers only: annotators keep seeing the open feedback
+      if (!userHasRole(this.state?.user ?? null, ['reviewer', 'admin'])) return
+      for (const d of dismissed) if (d.source === SOURCE) this.#dismissed.add(d.message)
+    })
     this.getDependency('sse').addEventListener('commentsChanged', (/** @type {MessageEvent} */ event) => {
       try {
         this.#onCommentsChanged(JSON.parse(event.data))
@@ -404,6 +415,7 @@ class UnitCommentsPlugin extends Plugin {
     closePopover()
     this.#pendingChanges = null
     this.#positions = new Map()
+    this.#dismissed = new Set()
     this.#refresh()
   }
 
@@ -634,11 +646,13 @@ class UnitCommentsPlugin extends Plugin {
       if (element && element.tagTo > doc.length) continue
       const id = thread.root.id
       const replies = thread.replies.length ? ` (+${thread.replies.length} ${thread.replies.length === 1 ? 'reply' : 'replies'})` : ''
+      const message = `${element ? '' : 'Element not found: '}💬 ${this.#displayName(thread.root.author)}: ${thread.root.text}${replies}`
+      if (this.#dismissed.has(message)) continue
       own.push({
         from: element?.from ?? 0,
         to: element ? element.tagTo : 0,
         severity: 'info',
-        message: `${element ? '' : 'Element not found: '}💬 ${this.#displayName(thread.root.author)}: ${thread.root.text}${replies}`,
+        message,
         actions: [
           { name: 'Reply', apply: () => { this.openThread(id) } },
           { name: 'Resolve', apply: () => { this.#change(comments => { setThreadStatus(comments, id, 'resolved', { who: this.state?.user?.username ?? '' }) }, id) } }

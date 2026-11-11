@@ -37,7 +37,7 @@ import { isFrozenFile, standOffContributions, userHasRole } from '../modules/acl
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
-import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines, appliedFixRange } from '../modules/lint-utils.js'
+import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines, appliedFixRange, addDismissListener } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
   setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint
@@ -183,6 +183,13 @@ class UnitReviewPlugin extends Plugin {
   /** @type {{from: number, to: number}[]} Ranges where the user applied an LLM fix, not yet accepted */
   #appliedFixes = []
 
+  /**
+   * @type {Set<string>} Diagnostics a reviewer dismissed in the diagnostics drawer, by unit
+   *   fingerprint and message: they stay hidden until the document is loaded again or their
+   *   message changes
+   */
+  #dismissed = new Set()
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
@@ -206,6 +213,7 @@ class UnitReviewPlugin extends Plugin {
 
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
+    addDismissListener(dismissed => this.#onDismissed(dismissed))
     // fixes accepted in the merge view are marked OK once it is closed
     this.#xmlEditor.on('editorHideMergeView', () => { if (this.#appliedFixes.length) this.#refresh() })
     document.addEventListener('mouseup', () => this.#endDrag())
@@ -404,6 +412,7 @@ class UnitReviewPlugin extends Plugin {
     clearTimeout(this.#timer)
     this.#llmFixes = []
     this.#appliedFixes = []
+    this.#dismissed = new Set()
     closePopover()
     this.#pendingChanges = null
     this.#carryPending = false
@@ -1159,12 +1168,14 @@ class UnitReviewPlugin extends Plugin {
       const kind = recheck ? 'changed' : combined.state === 'disputed' ? 'disputed' : 'not-ok'
       const line = state.doc.lineAt(unit.from)
       const fp = unit.fingerprint
+      const message = `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`
+      if (this.#dismissed.has(`${fp}\u0000${message}`)) continue
       own.push({
         from: unit.from,
         to: Math.min(unit.to, line.to),
         severity: 'info',
         markClass: `cm-unit-review-${kind}`,
-        message: `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`,
+        message,
         // only reviewers can mark units
         actions: [
           ...(reviewer ? [
@@ -1190,6 +1201,20 @@ class UnitReviewPlugin extends Plugin {
         this.#renderingDiagnostics = false
       }
     }, 0)
+  }
+
+  /**
+   * Hides the review diagnostics a reviewer dismissed in the diagnostics drawer. For other users
+   * they come back, since they show the reviewers' feedback.
+   * @param {Diagnostic[]} dismissed
+   */
+  #onDismissed(dismissed) {
+    if (!this.#isReviewer()) return
+    for (const d of dismissed) {
+      if (d.source !== SOURCE) continue
+      const unit = this.#scan.units.find(u => u.from === d.from)
+      if (unit) this.#dismissed.add(`${unit.fingerprint}\u0000${d.message}`)
+    }
   }
 
   /**
