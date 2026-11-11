@@ -525,6 +525,21 @@ class TestExample(unittest.TestCase):
     console.log('Filtered changed files with pattern:', changedFiles);
   });
 
+  test('should run all tests when a dependency manifest or lockfile changes', async () => {
+    // A dependency change (e.g. an automated plugin pin bump touching only pyproject.toml
+    // and uv.lock) can break any part of the app but matches no import, so it must not
+    // select zero tests.
+    const runner = new SmartTestRunner();
+    const all = await runner.discoverTestFiles();
+
+    for (const changed of [['uv.lock'], ['pyproject.toml']]) {
+      const { tests } = await runner.getTestsToRun({ namesOnly: true, changedFiles: changed });
+      for (const kind of ['js', 'py', 'api', 'e2e']) {
+        assert.deepStrictEqual([...tests[kind]].sort(), [...all[kind]].sort(), `${changed[0]} should select all ${kind} tests`);
+      }
+    }
+  });
+
   test('should output only test file names with --names-only option', async () => {
     // Temporarily add --names-only to process.argv for this test
     const originalArgv = process.argv.slice();
