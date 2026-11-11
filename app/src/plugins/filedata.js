@@ -97,9 +97,14 @@ class FiledataPlugin extends Plugin {
     /** @type {StatusText | null} */
     this.savingStatusWidget = null;
 
-    /** @private Flag to prevent concurrent reload operations */
-    this._reloadInProgress = false;
   }
+
+  /** @type {Promise<ApplicationState> | null} The running reload, see {@link FiledataPlugin#reload} */
+  #reloadRun = null;
+  /** Whether a reload was requested while one was running */
+  #reloadPending = false;
+  /** Whether one of the reloads requested while one was running asked for a cache refresh */
+  #reloadPendingRefresh = false;
 
   // Cached dependencies
   #logger;
@@ -301,83 +306,104 @@ class FiledataPlugin extends Plugin {
   }
 
   /**
-   * Reloads the file data from the server
+   * Reloads the file data from the server. Reloads do not overlap: a request while a reload
+   * is running makes it run once more when it ends (with a cache refresh if any of the
+   * requests asked for one), and the returned promise resolves after that run. A caller that
+   * changed files on the server therefore never gets the file data from before its change.
    * @param {Object} options - Options for reloading
    * @param {boolean} [options.refresh] - Whether to force refresh of server cache
    * @returns {Promise<ApplicationState>} Updated state with new file data
    */
-  async reload(options = {}) {
-    // Prevent concurrent reload operations
-    if (this._reloadInProgress) {
-      this.#logger.debug("Ignoring reload request - reload already in progress");
-      return this.state;
+  reload(options = {}) {
+    if (this.#reloadRun) {
+      this.#reloadPending = true;
+      this.#reloadPendingRefresh ||= !!options.refresh;
+      return this.#reloadRun;
+    }
+    this.#reloadRun = (async () => {
+      try {
+        let refresh = !!options.refresh;
+        let newState;
+        do {
+          this.#reloadPending = false;
+          newState = await this.#loadFileData(refresh);
+          refresh = this.#reloadPendingRefresh;
+          this.#reloadPendingRefresh = false;
+        } while (this.#reloadPending);
+        return newState;
+      } finally {
+        this.#reloadRun = null;
+      }
+    })();
+    return this.#reloadRun;
+  }
+
+  /**
+   * Loads the file data, collections and projects from the server and stores them in the state.
+   * Only called through {@link FiledataPlugin#reload}.
+   * @param {boolean} refresh - Whether to force refresh of server cache
+   * @returns {Promise<ApplicationState>} Updated state with new file data
+   */
+  async #loadFileData(refresh) {
+    this.#logger.debug("Reloading file data" + (refresh ? " with cache refresh" : ""));
+    // Get file list response - API returns {files: [...]} structure
+    const response = await this.#client.getFileList(null, refresh);
+  
+    /** @type {DocumentItem[]} */
+    let data = response?.files || [];
+    if (!data || data.length === 0) {
+      data = []; // Ensure data is an empty array instead of null/undefined
     }
 
-    this._reloadInProgress = true;
-    this.#logger.debug("Reloading file data" + (options.refresh ? " with cache refresh" : ""));
+    // Create ID lookup index when fileData is loaded
+    if (data && data.length > 0) {
+      this.#logger.debug('Creating ID lookup index for file data');
+      createIdLookupIndex(data);
+    } else {
+      // Initialize empty ID lookup index to prevent errors
+      this.#logger.debug('Initializing empty ID lookup index');
+      createIdLookupIndex([]);
+    }
 
+    // Load collections from server
+    let collections = [];
     try {
-      // Get file list response - API returns {files: [...]} structure
-      const response = await this.#client.getFileList(null, options.refresh);
-    
-      /** @type {DocumentItem[]} */
-      let data = response?.files || [];
-      if (!data || data.length === 0) {
-        data = []; // Ensure data is an empty array instead of null/undefined
-      }
+      collections = await this.#client.getCollections();
+      this.#logger.debug(`Loaded ${collections.length} collections from server`);
 
-      // Create ID lookup index when fileData is loaded
-      if (data && data.length > 0) {
-        this.#logger.debug('Creating ID lookup index for file data');
-        createIdLookupIndex(data);
-      } else {
-        // Initialize empty ID lookup index to prevent errors
-        this.#logger.debug('Initializing empty ID lookup index');
-        createIdLookupIndex([]);
-      }
-
-      // Load collections from server
-      let collections = [];
-      try {
-        collections = await this.#client.getCollections();
-        this.#logger.debug(`Loaded ${collections.length} collections from server`);
-
-        // Validate that all document collections exist in the collections list
-        const collectionIds = new Set(collections.map(c => c.id));
-        data.forEach((doc) => {
-          if (doc.collections && doc.collections.length > 0) {
-            const invalidCollections = doc.collections.filter(colId => !collectionIds.has(colId));
-            if (invalidCollections.length > 0) {
-              this.#logger.warn(
-                `Document ${doc.doc_id} references non-existent collection(s): ${invalidCollections.join(', ')}`
-              );
-            }
+      // Validate that all document collections exist in the collections list
+      const collectionIds = new Set(collections.map(c => c.id));
+      data.forEach((doc) => {
+        if (doc.collections && doc.collections.length > 0) {
+          const invalidCollections = doc.collections.filter(colId => !collectionIds.has(colId));
+          if (invalidCollections.length > 0) {
+            this.#logger.warn(
+              `Document ${doc.doc_id} references non-existent collection(s): ${invalidCollections.join(', ')}`
+            );
           }
-        });
-      } catch (error) {
-        this.#logger.error(`Failed to load collections: ${error}`);
-        // Continue with empty collections list - file operations will still work
-      }
-
-      // Load projects from server
-      let projects = [];
-      try {
-        projects = await this.#client.listProjects();
-        this.#logger.debug(`Loaded ${projects.length} projects from server`);
-      } catch (error) {
-        this.#logger.error(`Failed to load projects: ${error}`);
-      }
-
-      // Store fileData, collections, and projects in state and propagate them
-      const newState = await this.dispatchStateChange({
-        fileData: data,
-        collections,
-        projects
+        }
       });
-      return newState;
-    } finally {
-      this._reloadInProgress = false;
+    } catch (error) {
+      this.#logger.error(`Failed to load collections: ${error}`);
+      // Continue with empty collections list - file operations will still work
     }
+
+    // Load projects from server
+    let projects = [];
+    try {
+      projects = await this.#client.listProjects();
+      this.#logger.debug(`Loaded ${projects.length} projects from server`);
+    } catch (error) {
+      this.#logger.error(`Failed to load projects: ${error}`);
+    }
+
+    // Store fileData, collections, and projects in state and propagate them
+    const newState = await this.dispatchStateChange({
+      fileData: data,
+      collections,
+      projects
+    });
+    return newState;
   }
 
   /**

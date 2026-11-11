@@ -789,7 +789,7 @@ The `callPluginApi` method:
 
 Plugin pages (`outputUrl`, `executeUrl`, `sandbox.navigateIframe()`, `sandbox.openControlledWindow()`) never get the session id in their URL. The frontend requests a single-use launch token (`POST /api/v1/plugins/launch-token`, valid for 60 seconds) and loads `/api/plugins/<id>/<route>?launch=<token>`. `PluginWindowAuthMiddleware` ([plugin_window_auth.py](../../fastapi_app/lib/plugins/plugin_window_auth.py)) redeems the token, sets the HttpOnly cookie `pte_plugin_session` (`Path=/api/plugins/`, `SameSite=Strict`) and redirects to the same URL without the token. The address bar, the browser history and the access logs therefore never show the session id.
 
-For every request under `/api/plugins/` that brings no session id of its own, the middleware copies the cookie's session id into the `X-Session-ID` header. Routes therefore authenticate as before, through `X-Session-ID` (the `session_id` query parameter is still accepted for older clients):
+For every request under `/api/plugins/` that brings no session id of its own, the middleware copies the cookie's session id into the `X-Session-ID` header. Routes therefore authenticate through `X-Session-ID`. The `session_id` query parameter is accepted too, but plugins must not use it (#734):
 
 - In page JavaScript, call plugin routes with plain same-origin `fetch()`, `EventSource`, links or `navigator.sendBeacon()`. Do not read `session_id` from `location.search` and do not build URLs with `session_id`, neither in JavaScript nor in Python.
 - Non-GET requests authenticated by the cookie are rejected if their `Origin` header names another host.
