@@ -6,7 +6,7 @@ Provides login (with a password or a personal access token), logout, and session
 
 from typing import Any, Optional, List
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, Header, Request, HTTPException
+from fastapi import APIRouter, Depends, Header, Request, HTTPException, Response
 from starlette.concurrency import run_in_threadpool
 
 from ..lib.core.access_tokens import AccessTokenStore, get_access_token_store
@@ -17,6 +17,7 @@ from ..lib.utils.auth import AuthManager
 from ..lib.core.sessions import SessionManager
 from ..lib.utils.server_utils import get_session_id_from_request
 from ..lib.utils.logging_utils import get_logger
+from ..lib.plugins.plugin_window_auth import PLUGIN_ROUTES_PREFIX, PLUGIN_SESSION_COOKIE
 
 
 logger = get_logger(__name__)
@@ -179,13 +180,14 @@ async def token_login(
 
 
 @router.post("/logout", response_model=LogoutResponse)
-async def logout(request: Request):
+async def logout(request: Request, response: Response):
     """
     Logout user by deleting their session.
 
-    Returns success even if no session exists.
+    Also clears the cookie that authenticates backend plugin pages. Returns success even if no session exists.
     """
     session_id = get_session_id_from_request(request)
+    response.delete_cookie(PLUGIN_SESSION_COOKIE, path=PLUGIN_ROUTES_PREFIX, httponly=True, samesite="strict")
 
     if session_id:
         session_manager = get_session_manager()

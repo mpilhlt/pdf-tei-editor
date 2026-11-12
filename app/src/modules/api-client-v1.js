@@ -195,6 +195,16 @@
  */
 
 /**
+ * `detail` of the 423 response of `filesAcquireLock`: who holds the lock
+ * @typedef {Object} LockedDetail
+ * @property {'locked'} code
+ * @property {'user'|'own_session'|'process'} holder - A session of another (or an unknown) user,
+ *   another session of the requesting user, or a non-session holder such as a background job
+ * @property {string=} username - The user holding the lock, if `holder` is 'user' or 'own_session'
+ * @property {string} message - Notice to show to the user
+ */
+
+/**
  * @typedef {Object} CheckLockResponse
  * @property {boolean} is_locked
  * @property {string=} locked_by
@@ -370,6 +380,12 @@
  * @typedef {Object} ExecuteResponse
  * @property {boolean} success
  * @property {any} result
+ */
+
+/**
+ * @typedef {Object} LaunchTokenResponse
+ * @property {string} token
+ * @property {number} expires_in
  */
 
 /**
@@ -2663,7 +2679,8 @@ export class ApiClientV1 {
    * Returns:
    * "OK" string on success (matches Flask API)
    * Raises:
-   * HTTPException: 403 if insufficient permissions, 404 if file not found, 423 if cannot acquire lock
+   * HTTPException: 403 if insufficient permissions, 404 if file not found, 423 if cannot acquire lock,
+   * with a LockedDetail that says who holds the lock
    *
    * @param {AcquireLockRequest} requestBody
    * @returns {Promise<string>}
@@ -3123,6 +3140,19 @@ export class ApiClientV1 {
   async pluginsExecute(plugin_id, requestBody) {
     const endpoint = `/plugins/${plugin_id}/execute`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Create a single-use token that opens a backend plugin page without the session id in its URL.
+   * Open the page as `/api/plugins/<id>/<route>?launch=<token>`. The server redeems the token, sets
+   * an HttpOnly cookie scoped to `/api/plugins/` and redirects to the URL without the token. The
+   * token expires after `expires_in` seconds.
+   *
+   * @returns {Promise<LaunchTokenResponse>}
+   */
+  async pluginsLaunchToken() {
+    const endpoint = `/plugins/launch-token`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

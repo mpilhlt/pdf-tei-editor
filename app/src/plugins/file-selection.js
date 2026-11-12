@@ -77,7 +77,10 @@ class FileSelectionPlugin extends Plugin {
   /** @type {Set<string>} */
   #variants;
   #collections;
-  #isPopulatingSelectboxes = false;
+  /** @type {Promise<void>|null} The running population of the selectboxes, if any */
+  #populateRun = null;
+  /** Whether the selectboxes must be populated again once the running population ends */
+  #populatePending = false;
   #isFileLoading = false;
   /** @type {Set<EventTarget>} Selects that were opened by the user; gates sl-change handling */
   #userOpenedDropdown = new Set();
@@ -158,7 +161,7 @@ class FileSelectionPlugin extends Plugin {
       // steps that can take seconds for large file lists, and holding #isUpdatingState=true
       // that long blocks user interactions from dispatching their own state changes.
       setTimeout(() => {
-        this.#populateSelectboxes(this.state).catch(e => this.#logger.error(String(e)));
+        this.#requestPopulate().catch(e => this.#logger.error(String(e)));
       }, 0);
     } else {
       this.#updateSelectboxValues(state);
@@ -173,7 +176,7 @@ class FileSelectionPlugin extends Plugin {
     this.#isFileLoading = isLoading;
     this.#setSelectboxLoadingState(isLoading);
     if (!isLoading && this.state?.fileData) {
-      await this.#populateSelectboxes(this.state);
+      await this.#requestPopulate();
     }
   }
 
@@ -184,6 +187,10 @@ class FileSelectionPlugin extends Plugin {
    */
   async reload(options = {}) {
     await this.getDependency('filedata').reload(options);
+    // Populating the selectboxes on the fileData change is deferred (see onStateUpdate), so
+    // populate them here: callers read the options right after reloading, e.g. to load the
+    // next version after deleting one, and must not see deleted files.
+    await this.#requestPopulate();
   }
 
   /**
@@ -355,19 +362,41 @@ class FileSelectionPlugin extends Plugin {
     this.#variant.value = state.variant || "";
   }
 
-  /** @param {ApplicationState} state */
+  /**
+   * Populates the selectboxes from the current state. Populations do not overlap: a request
+   * during a running population makes it run once more when it ends, with the state of then,
+   * and the returned promise resolves after that run.
+   * @returns {Promise<void>}
+   */
+  #requestPopulate() {
+    if (this.#populateRun) {
+      this.#populatePending = true;
+      return this.#populateRun;
+    }
+    this.#populateRun = (async () => {
+      try {
+        do {
+          this.#populatePending = false;
+          await this.#populateSelectboxes(this.state);
+        } while (this.#populatePending);
+      } finally {
+        this.#populateRun = null;
+      }
+    })();
+    return this.#populateRun;
+  }
+
+  /**
+   * Populates the selectboxes. Only called through `#requestPopulate()`.
+   * @param {ApplicationState} state
+   */
   async #populateSelectboxes(state) {
     if (this.#isFileLoading) {
       this.#logger.debug("Ignoring populateSelectboxes request - file loading in progress");
       return;
     }
-    if (this.#isPopulatingSelectboxes) {
-      this.#logger.debug("Ignoring populateSelectboxes request - already in progress");
-      return;
-    }
     if (!state.fileData) throw new Error("fileData hasn't been loaded yet");
 
-    this.#isPopulatingSelectboxes = true;
     this.#logger.debug("Populating selectboxes");
     this.#setSelectboxLoadingState(true);
 
@@ -550,7 +579,6 @@ class FileSelectionPlugin extends Plugin {
       // Update selected values after options are in the DOM
       this.#updateSelectboxValues(state);
     } finally {
-      this.#isPopulatingSelectboxes = false;
       this.#setSelectboxLoadingState(false);
     }
   }

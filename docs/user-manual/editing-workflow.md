@@ -91,7 +91,7 @@ Each time you navigate, the node is scrolled to the vertical center of the edito
 
 Node navigation is on while an XPath expression is selected in the dropdown. The **×** button at the end of the navigation group turns it off: the node loses its highlight or focus, the XPath selection is cleared, the **‹** / **›** buttons and the focus toggle are disabled, and the node is removed from the URL. Selecting an XPath expression in the dropdown turns navigation on again.
 
-While node navigation is on, **Tools → Review Annotations** reviews only the current node instead of the whole document. In focus mode, the same review can be started with the **LLM Review** button in the bottom right corner of the focused node. The suggestions of a review are kept for the browser tab: after an accidental reload, or when you return to the document, they are shown again without a new review, except those whose text you have changed in the meantime.
+**Tools → Review document annotations** always reviews the whole document with the model selected in **Tools → Inference**. To review only the current node, use the **LLM Review** button in the bottom right corner of the focused node in focus mode. The suggestions of a review are kept for the browser tab: after an accidental reload, or when you return to the document, they are shown again without a new review, except those whose text you have changed in the meantime.
 
 The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
 
@@ -137,7 +137,7 @@ While the document has diagnostics, they are listed in a drawer on the left side
 
 - Click a diagnostic to select the text it applies to in the XML editor.
 - **Propose fix** (on annotation review suggestions) shows the change in the merge view, as in the editor tooltip.
-- Check diagnostics, or use **Select all**, then click **Apply** to apply their fixes at once, without confirmation, or **Dismiss** to remove them. Both close the merge view. Diagnostics without a fix (such as validation errors) are kept by Apply.
+- Check diagnostics, or use **Select all**, then click **Apply** to apply their fixes at once, without confirmation, or **Dismiss** to remove them. Both close the merge view. Diagnostics without a fix (such as validation errors) are kept by Apply. For reviewers (and admins), Dismiss also removes review entries (*Marked not OK*, *Review disputed*, *Changed after a not-OK review*) and open comments from the list, without changing the marks or comments themselves. They stay hidden until the document is loaded again or the entry changes, e.g. after a new mark or a reply. For annotators, these entries come back, since they are the reviewers' feedback. To remove them for good, reviewers and admins click **Delete** instead: it deletes the not-OK marks of the checked review entries (of all reviewers, including the LLM Reviewer; OK marks stay, so a disputed unit becomes OK) and the checked comment threads with their replies. Other checked diagnostics are dismissed. Delete is an edit of the document, so **Ctrl+Z** undoes it.
 - When diagnostics are added, for example by a validation run or an LLM review, the list scrolls to show them. Added diagnostics that have a fix (such as LLM review suggestions) are checked, so that you can apply them right away; diagnostics without a fix (validation errors, comments, disputed reviews) are not checked, and the checks you set yourself stay as they are. Diagnostics that reappear after a re-validation, and those whose text you edited, do not count as added.
 
 ---
@@ -152,6 +152,16 @@ Auto-save keeps the document up to date silently. To record a named checkpoint i
 - **Clear reviews** — shown with *Save to a new personal version* to reviewers when the document has [unit review](unit-review.md) marks; the new version starts without them.
 - **Keep comments** — shown with *Save to a new personal version* when the document has [unit comments](unit-comments.md); uncheck it to start the new version without them.
 - **Save as gold version** — marks this document as the authoritative Gold Standard (reviewers only).
+
+### Documents opened by someone else
+
+Only one window can edit a document at a time. When the document is already open for editing elsewhere, it opens read-only, and a notice says why:
+
+- *This document is being edited by &lt;user&gt;*: another user has it open.
+- *You have this document open for editing in another window or session*: you have it open yourself, in another tab, browser or after logging in again.
+- A notice of a plugin, e.g. while a background job changes the document.
+
+When the other window closes the document, it becomes editable here and *You can now edit this document* appears.
 
 ### Superseded versions
 

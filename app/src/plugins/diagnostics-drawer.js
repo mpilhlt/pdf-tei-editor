@@ -39,8 +39,10 @@ import { Plugin } from '../modules/plugin-base.js'
 import ui, { registerTemplate, createFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { linkifyNodes } from '../modules/linkify.js'
+import { userHasRole } from '../modules/acl-utils.js'
 import {
   collectDiagnostics,
+  deleteDiagnostics,
   diagnosticKey,
   dismissDiagnostics,
   fixChanges,
@@ -142,6 +144,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
     })
     this.#ui.footer.applyBtn.addEventListener('click', () => this.applyChecked())
     this.#ui.footer.dismissBtn.addEventListener('click', () => this.dismissChecked())
+    this.#ui.footer.deleteBtn.addEventListener('click', () => this.deleteChecked())
 
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
   }
@@ -157,7 +160,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
       // a newly loaded document shows its diagnostics
       if (state.xml) this.#setExpanded(true)
     }
-    if (changedKeys.includes('editorReadOnly')) this.#updateFooter()
+    if (changedKeys.includes('editorReadOnly') || changedKeys.includes('user')) this.#updateFooter()
   }
 
   //
@@ -198,6 +201,31 @@ class DiagnosticsDrawerPlugin extends Plugin {
       notify(`${kept} selected diagnostic(s) have no applicable fix and were kept.`, 'warning', 'exclamation-triangle')
     }
     this.#scheduleRefresh()
+  }
+
+  /**
+   * Removes the checked diagnostics and the data behind them: the plugins that own them (unit
+   * review, unit comments) delete the review marks and comment threads they show. Diagnostics
+   * without such data are dismissed. Only for reviewers and admins, in documents they can edit.
+   * Switches off the merge view first.
+   * @returns {Promise<void>}
+   */
+  async deleteChecked() {
+    if (!this.#canDelete()) return
+    await this.#switchOffMergeView()
+    await this.#pendingRemerges()
+    const view = this.#xmlEditor.getView()
+    deleteDiagnostics(view, this.#checkedDiagnostics(view))
+    this.#checked.clear()
+    this.#scheduleRefresh()
+  }
+
+  /**
+   * Whether the current user may delete diagnostics with their data.
+   * @returns {boolean}
+   */
+  #canDelete() {
+    return userHasRole(this.state?.user ?? null, ['reviewer', 'admin']) && !this.state?.editorReadOnly
   }
 
   /**
@@ -431,7 +459,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    * Enables the footer controls according to the checked diagnostics
    */
   #updateFooter() {
-    const { selectAll, applyBtn, dismissBtn } = this.#ui.footer
+    const { selectAll, applyBtn, dismissBtn, deleteBtn } = this.#ui.footer
     const count = this.#entries.filter(e => this.#checked.has(e.key)).length
     selectAll.checked = count > 0 && count === this.#entries.length
     selectAll.indeterminate = count > 0 && count < this.#entries.length
@@ -439,6 +467,9 @@ class DiagnosticsDrawerPlugin extends Plugin {
     const fixable = this.#entries.some(e => this.#checked.has(e.key) && typeof e.diagnostic.replacement === 'string')
     applyBtn.disabled = !fixable || Boolean(this.state?.editorReadOnly)
     dismissBtn.disabled = count === 0
+    // not `hidden`, which the button's own display style overrides
+    deleteBtn.style.display = userHasRole(this.state?.user ?? null, ['reviewer', 'admin']) ? '' : 'none'
+    deleteBtn.disabled = count === 0 || !this.#canDelete()
   }
 
   /**

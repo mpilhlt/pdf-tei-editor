@@ -5,15 +5,14 @@
  * removal actions via the plugin sandbox API.
  */
 
-// Session ID is passed as a query param by the application when opening the iframe
-const sessionId = new URLSearchParams(window.location.search).get('session_id') || '';
+// Requests to /api/plugins/ are authenticated by the plugin session cookie,
+// which the server sets when the application opens this page
 
 $(function () {
     const table = $('#sessionsTable').DataTable({
         ajax: {
             url: '/api/plugins/active-sessions/data',
             type: 'GET',
-            headers: { 'X-Session-ID': sessionId },
             dataSrc: 'data',
             error: function (xhr, error, thrown) {
                 console.error('DataTables AJAX error:', error, thrown);

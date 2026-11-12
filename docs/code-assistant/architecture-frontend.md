@@ -129,3 +129,13 @@ async function install(state) {
 - **Development**: Templates loaded via fetch from `app/src/templates/`
 - **Production**: `scripts/build/bundle-templates.js` analyzes code and generates `templates.json`
 - **Build process**: Template bundling runs automatically during `npm run build`
+
+## Links to the User Manual
+
+To link to a section of the user manual from a description, dialog or rendered Markdown, use the GitHub blob URL of the docs file with the heading anchor, e.g. `https://github.com/mpilhlt/pdf-tei-editor/blob/main/docs/development/api-reference.md#programmatic-api-access`. Outside the app, the link opens the page on GitHub. Inside the app, the `info` plugin intercepts clicks on such links anywhere in the DOM (including shadow roots) and opens the section in the user manual drawer; the ref in the URL is ignored, since the drawer always shows the docs of the running version. A link inside an open `sl-dialog` hides the dialog until the drawer is closed. Clicks with a modifier key keep the browser's default behaviour.
+
+- Only Markdown files under `docs/` are intercepted (`parseManualUrl()` in `app/src/modules/manual-links.js`); other files of the repository, such as `README.md`, open on GitHub.
+- In code, open a section with `InfoPlugin.open('<path>#<anchor>')` or `InfoPlugin.openUrl(url)`, and build a link with `manualUrl(path, anchor, ref)`.
+- Users get the link of a section from the "Copy link" button shown when hovering a heading in the manual; it uses the tag of the running version as ref.
+
+The table of contents drop-up and the heading link buttons of the user manual and the annotation guide drawers come from `app/src/modules/markdown-toc.js`.

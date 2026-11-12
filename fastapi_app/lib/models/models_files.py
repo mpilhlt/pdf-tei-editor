@@ -3,7 +3,7 @@ Pydantic models for file API operations.
 """
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 
@@ -206,6 +206,16 @@ class ReleaseLockResponse(BaseModel):
     """Response for POST /api/files/release_lock"""
     action: str         # 'released', 'already_released'
     message: str
+
+
+class LockedDetail(BaseModel):
+    """`detail` of the 423 response of POST /api/files/acquire_lock: who holds the lock"""
+    code: Literal["locked"] = "locked"
+    # 'user': a session of another user (or of an unknown user), 'own_session': another session
+    # of the requesting user (e.g. another tab), 'process': a non-session holder such as a job
+    holder: Literal["user", "own_session", "process"]
+    username: Optional[str] = None  # the user holding the lock, if holder is 'user' or 'own_session'
+    message: str  # notice to show to the user
 
 
 class CheckLockRequest(BaseModel):

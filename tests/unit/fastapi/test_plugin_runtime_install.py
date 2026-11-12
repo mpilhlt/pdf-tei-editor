@@ -175,6 +175,15 @@ class TestWheel(unittest.TestCase):
         with self.assertRaises(WheelError):
             extract_wheel(build_wheel(self.dir), target)
 
+    def test_extract_replaces_existing_directory(self):
+        target = self.dir / "site" / "pte-plugin-rt-hello" / "1.0.0"
+        (target / "stale").mkdir(parents=True)
+        (target / "stale" / "old.py").write_text("")
+        extract_wheel(build_wheel(self.dir), target, replace=True)
+        self.assertTrue((target / PACKAGE / "plugin.py").is_file())
+        self.assertFalse((target / "stale").exists())
+        self.assertEqual(sorted(p.name for p in target.parent.iterdir()), ["1.0.0"])
+
 
 class FakeGitHub:
     """GitHubClient serving canned responses."""
@@ -495,6 +504,21 @@ class TestRuntimeInstall(RuntimeInstallTestCase):
             self.install(self.mgr, version="1.0.1", engines={"pte-plugin-api": "^9.0"})
         self.assertFalse((self.site_dir / "pte-plugin-rt-hello").exists())
 
+    def test_failed_import_keeps_the_installed_id(self):
+        wheel = build_wheel(self.wheels, extra_files={f"{PACKAGE}/plugin.py": "import surely_not_installed_module\n"})
+        asyncio.run(self.mgr.install_wheel(wheel, sha256_file(wheel), "mpilhlt/pte-plugins", f"{PLUGIN_ID}-v1.0.0", True))
+        with self.assertLogs("fastapi_app.lib.plugins", level="ERROR"):
+            with self.assertRaises(PluginChangeError):
+                asyncio.run(self.mgr.set_plugin_enabled(PLUGIN_ID, True))
+        record = self.mgr.registry.get_record(PLUGIN_ID)
+        self.assertEqual(record.id if record else None, PLUGIN_ID)
+        self.assertTrue(record is not None and record.site)
+        status, reason = self.mgr.registry.status(PLUGIN_ID)
+        self.assertEqual(status, "failed")
+        self.assertIn("surely_not_installed_module", reason or "")
+        for r in self.mgr.registry.get_records():
+            self.mgr.registry.status(r.id)
+
     def test_upgrade_of_imported_plugin_requires_restart(self):
         self.install(self.mgr)
         asyncio.run(self.mgr.set_plugin_enabled(PLUGIN_ID, True))
@@ -550,6 +574,29 @@ class TestRuntimeInstall(RuntimeInstallTestCase):
         self.assertEqual(self.mgr.state_store.read().pending_removal, frozenset())
         with self.assertRaises(PluginChangeError):
             asyncio.run(self.mgr.remove_plugin(PLUGIN_ID))
+
+    def test_reinstall_after_remove_replaces_the_directory_pending_removal(self):
+        self.install(self.mgr)
+        asyncio.run(self.mgr.remove_plugin(PLUGIN_ID))
+        (self.site_dir / "pte-plugin-rt-hello" / "1.0.0" / "stale.txt").write_text("")
+        result = self.install(self.mgr)
+        self.assertEqual(result["action"], "install")
+        state = self.mgr.state_store.read()
+        self.assertEqual(state.pending_removal, frozenset())
+        version_dir = self.site_dir / "pte-plugin-rt-hello" / "1.0.0"
+        self.assertFalse((version_dir / "stale.txt").exists())
+        self.assertTrue((version_dir / PACKAGE / "plugin.py").is_file())
+        self.discover(self.new_manager())
+        self.assertTrue((version_dir / PACKAGE / "plugin.py").is_file())
+
+    def test_install_replaces_a_leftover_version_directory(self):
+        leftover = self.site_dir / "pte-plugin-rt-hello" / "1.0.0"
+        leftover.mkdir(parents=True)
+        (leftover / "partial.txt").write_text("")
+        result = self.install(self.mgr)
+        self.assertEqual(result["action"], "install")
+        self.assertFalse((leftover / "partial.txt").exists())
+        self.assertTrue((leftover / PACKAGE / "plugin.py").is_file())
 
     def test_startup_prunes_plugins_whose_directory_was_deleted(self):
         import shutil

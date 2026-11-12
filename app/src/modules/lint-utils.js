@@ -18,12 +18,13 @@
  * range when the user applies its fix from the drawer.
  *
  * @import { Diagnostic } from '@codemirror/lint'
- * @import { StateEffectType, Extension } from '@codemirror/state'
+ * @import { StateEffectType, Extension, Range, ChangeSet, Text } from '@codemirror/state'
  * @import { EditorView, ViewUpdate } from '@codemirror/view'
  */
 
 import { forEachDiagnostic, setDiagnostics, setDiagnosticsEffect, linter, lintGutter } from '@codemirror/lint';
-import { EditorState, StateEffect, Facet } from '@codemirror/state';
+import { EditorState, StateEffect, StateField, Facet, RangeSet } from '@codemirror/state';
+import { GutterMarker, gutterLineClass } from '@codemirror/view';
 
 /**
  * A diagnostic that may carry an automatically applicable fix.
@@ -71,6 +72,63 @@ export function drawerOnlyDiagnostics(source) {
   return [drawerOnlySources.of(source), drawerOnlyConfig];
 }
 
+/** @type {Map<string, GutterMarker>} */
+const lineClassMarkers = new Map();
+
+/**
+ * @param {string} elementClass
+ * @returns {GutterMarker}
+ */
+function lineClassMarker(elementClass) {
+  let marker = lineClassMarkers.get(elementClass);
+  if (!marker) {
+    marker = new class extends GutterMarker {}();
+    // GutterMarker.elementClass is a prototype field: set it on the instance
+    Object.defineProperty(marker, 'elementClass', { value: elementClass });
+    lineClassMarkers.set(elementClass, marker);
+  }
+  return marker;
+}
+
+/**
+ * Gutter line classes `cm-lint-line-<class>` for the `markClass` classes of the diagnostics on each
+ * line, including drawer-only ones.
+ * @param {EditorState} state
+ * @returns {RangeSet<GutterMarker>}
+ */
+function markClassLines(state) {
+  /** @type {Range<GutterMarker>[]} */
+  const ranges = [];
+  forEachDiagnostic(state, (d, from) => {
+    if (!d.markClass) return;
+    const lineStart = state.doc.lineAt(from).from;
+    for (const cls of d.markClass.split(/\s+/).filter(Boolean)) {
+      ranges.push(lineClassMarker(`cm-lint-line-${cls}`).range(lineStart));
+    }
+  });
+  return RangeSet.of(ranges, true);
+}
+
+const markClassLinesField = StateField.define({
+  create: markClassLines,
+  update(lines, tr) {
+    if (tr.effects.some(e => e.is(setDiagnosticsEffect))) return markClassLines(tr.state);
+    return tr.docChanged ? lines.map(tr.changes) : lines;
+  },
+  provide: field => gutterLineClass.from(field)
+});
+
+/**
+ * Editor extension that gives the gutter elements of a line the classes `cm-lint-line-<class>` for
+ * the `markClass` classes of the diagnostics on that line, also of drawer-only ones. A source can so
+ * restyle the lint gutter marker of the lines its diagnostics mark (e.g. unit review colors the
+ * marker of a line with a not-OK review red, see app.css).
+ * @returns {Extension}
+ */
+export function markClassGutterLines() {
+  return markClassLinesField;
+}
+
 /**
  * Editor extension that removes the diagnostics whose range a document change touches, in the
  * transaction making the change; the other diagnostics keep their (mapped) positions and fields.
@@ -98,6 +156,9 @@ export function clearDiagnosticsOnChange() {
 
 /** @type {Set<(dismissed: Diagnostic[]) => void>} */
 const dismissListeners = new Set();
+
+/** @type {Set<(deleted: Diagnostic[]) => void>} */
+const deleteListeners = new Set();
 
 /**
  * Returns the diagnostics currently stored in the editor state.
@@ -201,6 +262,32 @@ export function addDismissListener(listener) {
 }
 
 /**
+ * Registers a listener called with the diagnostics the user deleted, so that a
+ * plugin can remove the data its diagnostics show (e.g. review marks or
+ * comments). Delete listeners are called after the dismiss listeners.
+ * @param {(deleted: Diagnostic[]) => void} listener
+ * @returns {() => void} Function removing the listener
+ */
+export function addDeleteListener(listener) {
+  deleteListeners.add(listener);
+  return () => deleteListeners.delete(listener);
+}
+
+/**
+ * Dismisses the given diagnostics (see {@link dismissDiagnostics}) and
+ * notifies the delete listeners, which remove the data behind them.
+ * Diagnostics no plugin handles are only dismissed.
+ * @param {EditorView} view
+ * @param {Diagnostic[]} deleted - With positions in the current state
+ * @returns {void}
+ */
+export function deleteDiagnostics(view, deleted) {
+  if (!deleted.length) return;
+  dismissDiagnostics(view, deleted);
+  for (const listener of deleteListeners) listener(deleted);
+}
+
+/**
  * Removes the given diagnostics (matched by {@link diagnosticKey}) from the
  * view and notifies the dismiss listeners.
  * @param {EditorView} view
@@ -238,6 +325,48 @@ export function fixChanges(diagnostics) {
     end = d.to;
   }
   return { changes, applied };
+}
+
+/**
+ * Checks whether a document change applied the fix (`replacement`) of a
+ * diagnostic: the changes touch the diagnostic's range, and the changed text
+ * around it now reads as if only the fix had been applied. This holds for the
+ * fix applied as one change (diagnostics drawer) as well as for a change the
+ * diff split up or widened (accepting a chunk of the merge view). Differences
+ * in whitespace between tags are ignored.
+ * @param {ChangeSet} changes - The changes, from `startDoc` to `newDoc`
+ * @param {Text} startDoc - The document before the changes
+ * @param {Text} newDoc - The document after the changes
+ * @param {{from: number, to: number, replacement: string}} fix - Positions in `startDoc`
+ * @returns {{from: number, to: number}|null} The range in `newDoc` that the fix
+ *   and the changes overlapping it now cover, or null if the fix was not applied
+ */
+export function appliedFixRange(changes, startDoc, newDoc, fix) {
+  let lo = fix.from;
+  let hi = fix.to;
+  let touched = false;
+  changes.iterChangedRanges((fromA, toA) => {
+    if (fromA <= hi && toA >= lo) {
+      lo = Math.min(lo, fromA);
+      hi = Math.max(hi, toA);
+      touched = true;
+    }
+  });
+  if (!touched || hi > startDoc.length) return null;
+  const from = changes.mapPos(lo, -1);
+  const to = changes.mapPos(hi, 1);
+  const expected = startDoc.sliceString(lo, fix.from) + fix.replacement + startDoc.sliceString(fix.to, hi);
+  return normalizeXmlWhitespace(newDoc.sliceString(from, to)) === normalizeXmlWhitespace(expected) ? { from, to } : null;
+}
+
+/**
+ * Collapses whitespace runs and removes whitespace between tags, which the
+ * merge view may change when it applies a chunk.
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeXmlWhitespace(text) {
+  return text.replace(/\s+/g, ' ').replace(/> </g, '><').trim();
 }
 
 /**

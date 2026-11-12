@@ -26,6 +26,7 @@ from fastapi_app.lib.core.dependencies import (
     require_authenticated_user,
     require_reviewer_or_admin,
 )
+from fastapi_app.lib.core.locking import register_lock_holder, unregister_lock_holder
 from fastapi_app.lib.core.gc_hooks import register_gc_handler, unregister_gc_handler
 from fastapi_app.lib.core.gc_registry import (
     GcContext,
@@ -64,6 +65,7 @@ from fastapi_app.lib.llm import (
     LLMRateLimitError,
     ModelStatus,
     OpenAICompatibleProvider,
+    ProviderNotAvailableError,
     get_completion_session,
     post_completion,
     rate_limit_http_error,
@@ -108,6 +110,7 @@ __all__ = [
     "rate_limit_http_error",
     "ModelStatus",
     "OpenAICompatibleProvider",
+    "ProviderNotAvailableError",
     "Plugin",
     "PluginConfigSpec",
     "PluginContext",
@@ -131,6 +134,7 @@ __all__ = [
     "register_document_rules_provider",
     "register_gc_handler",
     "register_gc_task",
+    "register_lock_holder",
     "register_schema_config",
     "register_schema_redirect",
     "require_admin_user",
@@ -140,6 +144,7 @@ __all__ = [
     "unregister_document_rules_provider",
     "unregister_gc_handler",
     "unregister_gc_task",
+    "unregister_lock_holder",
     "unregister_schema_config",
     "unregister_schema_redirect",
 ]

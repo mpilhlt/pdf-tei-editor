@@ -15,7 +15,7 @@
 
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, setupErrorFailure } from './helpers/test-logging.js';
-import { navigateAndLogin } from './helpers/login-helper.js';
+import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 import { selectFirstDocuments } from './helpers/extraction-helper.js';
 
 const ALLOWED_ERROR_PATTERNS = [
@@ -192,6 +192,9 @@ test.describe('PDF viewer search scrolling', () => {
       expect(interrupted.visible, JSON.stringify({ ...interrupted, samples: undefined })).toBe(true);
     } finally {
       stopErrorMonitoring();
+      // The document stays locked for 90 s otherwise, which makes it read-only for the next tests
+      await releaseAllLocks(page);
+      await performLogout(page);
     }
   });
 });

@@ -205,12 +205,12 @@ class ServicesPlugin extends Plugin {
               this.#logger.debug(`Acquired lock for file ${xml}`)
             } catch (error) {
               if (error instanceof this.#client.LockedError) {
-                this.#logger.debug(`File ${xml} is locked, loading in read-only mode`)
+                this.#logger.debug(`File ${xml} is locked (holder: ${error.detail?.holder ?? 'unknown'}), loading in read-only mode`)
                 file_is_locked = true
                 notify(
-                  'This document is being edited by another user',
+                  error.detail?.message ?? 'This document is being edited by another user',
                   'warning',
-                  'exclamation-triangle'
+                  error.detail?.holder === 'user' ? 'exclamation-triangle' : 'lock'
                 )
               } else if (error instanceof this.#client.ApiError && error.statusCode === 403) {
                 // Permission denied - load in read-only mode

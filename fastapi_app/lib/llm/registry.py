@@ -14,7 +14,7 @@ import logging
 
 from fastapi_app.lib.secrets import MissingSecretError, require_user_secret
 
-from .base import LLMProvider
+from .base import LLMProvider, ProviderNotAvailableError
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,8 @@ class LLMProviderRegistry:
     def get_provider_for_user(self, provider_id: str, username: str | None) -> LLMProvider:
         """Get a provider that is ready to be used on behalf of `username`.
 
-        If the provider supports per-user keys and the user has stored one, a copy
+        The registered provider is first bound to the user with its for_user() hook.
+        Then, if the provider supports per-user keys and the user has stored one, a copy
         using that key is returned, marked with `uses_user_key` (it takes
         precedence over a shared key, since usage is then billed to the user).
         Otherwise the registered provider is returned if it carries a shared key
@@ -69,10 +70,14 @@ class LLMProviderRegistry:
 
         Raises:
             KeyError: If no provider with that id is registered.
+            ProviderNotAvailableError: (a KeyError) If the provider offers nothing to that user.
             MissingSecretError: If the provider has no shared key and the user has not stored one.
             SecretsError: If the user's stored key cannot be decrypted.
         """
-        provider = self.get_provider(provider_id)
+        registered = self.get_provider(provider_id)
+        provider = registered.for_user(username)
+        if provider is None:
+            raise ProviderNotAvailableError(f"LLM provider '{registered.label}' is not available to you")
         if not provider.secret_service:
             return provider
         try:

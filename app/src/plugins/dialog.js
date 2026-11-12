@@ -17,7 +17,7 @@ import Plugin from '../modules/plugin-base.js';
  * @property {(message:string) => void} info
  * @property {(message:string) => void} error
  * @property {(message:string) => void} success
- * @property {(message:string, title?:string) => Promise<boolean>} confirm
+ * @property {(message:string, title?:string, variant?:'question'|'warning') => Promise<boolean>} confirm
  * @property {(message:string, title?:string, defaultValue?:string, placeholder?:string) => Promise<string|null>} prompt
  */
 
@@ -76,12 +76,14 @@ class DialogPlugin extends Plugin {
   /**
    * @param {string} message
    * @param {string} [title="Confirm"]
+   * @param {'question'|'warning'} [variant="question"] - "warning" shows a warning sign instead of a question mark
    * @returns {Promise<boolean>}
    */
-  confirm(message, title = 'Confirm') {
+  confirm(message, title = 'Confirm', variant = 'question') {
     return new Promise((resolve) => {
       this.#ui.setAttribute('label', title);
-      this.#ui.icon.innerHTML = `<sl-icon name="question-circle" style="color: var(--sl-color-warning-500);"></sl-icon>`;
+      const iconName = variant === 'warning' ? 'exclamation-triangle' : 'question-circle';
+      this.#ui.icon.innerHTML = `<sl-icon name="${iconName}" style="color: var(--sl-color-warning-500);"></sl-icon>`;
       this.#ui.message.innerHTML = linkifyUrls(message);
 
       this.#ui.closeBtn.style.display = 'none';

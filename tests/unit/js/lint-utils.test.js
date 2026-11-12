@@ -5,10 +5,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EditorState } from '@codemirror/state';
+import { gutterLineClass } from '@codemirror/view';
 import { setDiagnostics } from '@codemirror/lint';
 import {
-  addDismissListener, applyMergedDiagnostics, clearDiagnosticsOnChange, collectDiagnostics, diagnosticKey, dismissDiagnostics, fixChanges,
-  mergeDiagnostics, replacesDiagnostics, revealsDiagnostics
+  addDismissListener, applyMergedDiagnostics, clearDiagnosticsOnChange, collectDiagnostics, diagnosticKey, dismissDiagnostics, fixChanges, appliedFixRange,
+  markClassGutterLines, mergeDiagnostics, replacesDiagnostics, revealsDiagnostics
 } from '../../../app/src/modules/lint-utils.js';
 
 const DOC = 'hello brave new world';
@@ -233,5 +234,76 @@ describe('clearDiagnosticsOnChange', () => {
     const state = editorWith([brave]);
     const tr = state.update({ changes: { from: 7, insert: 'x' }, ...setDiagnostics(state, [{ ...brave, from: 6, to: 12 }]) });
     assert.deepStrictEqual(collectDiagnostics(tr.state).map(d => [d.message, d.from, d.to]), [['brave', 6, 12]]);
+  });
+});
+
+describe('markClassGutterLines', () => {
+  /**
+   * @param {EditorState} state
+   * @returns {[number, string][]}
+   */
+  function lineClasses(state) {
+    /** @type {[number, string][]} */
+    const result = [];
+    for (const set of state.facet(gutterLineClass)) {
+      set.between(0, state.doc.length, (from, _to, marker) => { result.push([from, marker.elementClass]); });
+    }
+    return result;
+  }
+
+  it('gives the line of a diagnostic with markClass the prefixed class, also on later lines', () => {
+    const base = EditorState.create({ doc: 'first\nsecond line', extensions: markClassGutterLines() });
+    const state = base.update(setDiagnostics(base, [
+      { from: 9, to: 12, severity: 'info', message: 'r', markClass: 'cm-unit-review-not-ok' },
+      { from: 0, to: 2, severity: 'info', message: 'plain' }
+    ])).state;
+    assert.deepStrictEqual(lineClasses(state), [[6, 'cm-lint-line-cm-unit-review-not-ok']]);
+  });
+
+  it('maps through document changes and drops the class when the diagnostics are replaced', () => {
+    const base = EditorState.create({ doc: 'first\nsecond', extensions: markClassGutterLines() });
+    let state = base.update(setDiagnostics(base, [{ from: 7, to: 9, severity: 'info', message: 'r', markClass: 'x' }])).state;
+    state = state.update({ changes: { from: 0, insert: 'ab' } }).state;
+    assert.deepStrictEqual(lineClasses(state), [[8, 'cm-lint-line-x']]);
+    state = state.update(setDiagnostics(state, [])).state;
+    assert.deepStrictEqual(lineClasses(state), []);
+  });
+});
+
+describe('appliedFixRange', () => {
+  const doc = EditorState.create({ doc: '<bibl><title>Foo</title> 2001</bibl>' }).doc;
+  // the fix tags the year
+  const fix = { from: 25, to: 29, replacement: '<date>2001</date>' };
+
+  it('finds a fix applied as one change', () => {
+    const changes = EditorState.create({ doc }).changes({ from: 25, to: 29, insert: fix.replacement });
+    const newDoc = changes.apply(doc);
+    assert.deepStrictEqual(appliedFixRange(changes, doc, newDoc, fix), { from: 25, to: 25 + fix.replacement.length });
+  });
+
+  it('finds a fix applied as several smaller changes (merge view chunks)', () => {
+    const changes = EditorState.create({ doc }).changes([{ from: 25, insert: '<date>' }, { from: 29, insert: '</date>' }]);
+    const newDoc = changes.apply(doc);
+    assert.ok(appliedFixRange(changes, doc, newDoc, fix));
+  });
+
+  it('finds a fix inside a wider change', () => {
+    const changes = EditorState.create({ doc }).changes({ from: 13, to: 36, insert: 'Foo</title> <date>2001</date></bibl>' });
+    const newDoc = changes.apply(doc);
+    assert.strictEqual(newDoc.toString(), '<bibl><title>Foo</title> <date>2001</date></bibl>');
+    assert.ok(appliedFixRange(changes, doc, newDoc, fix));
+  });
+
+  it('ignores whitespace changes between tags', () => {
+    const changes = EditorState.create({ doc }).changes({ from: 25, to: 29, insert: '<date>2001</date>\n  ' });
+    assert.ok(appliedFixRange(changes, doc, changes.apply(doc), fix));
+  });
+
+  it('returns null for other changes', () => {
+    const state = EditorState.create({ doc });
+    const elsewhere = state.changes({ from: 13, to: 16, insert: 'Bar' });
+    assert.strictEqual(appliedFixRange(elsewhere, doc, elsewhere.apply(doc), fix), null);
+    const different = state.changes({ from: 25, to: 29, insert: '<date>2002</date>' });
+    assert.strictEqual(appliedFixRange(different, doc, different.apply(doc), fix), null);
   });
 });

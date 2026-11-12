@@ -87,6 +87,10 @@ class TestRequirementCheck(unittest.TestCase):
             plugin_deps.to_install(["pymupdf==1.26.0", "requests==2.32.0"], {"requests": "2.32.0"}),
             ["pymupdf==1.26.0"],
         )
+        self.assertEqual(
+            plugin_deps.to_install(["mpcdf-llm @ git+https://example.org/x.git@abc", "requests==2.32.0"], {"mpcdf-llm": "2.0"}),
+            ["requests==2.32.0"],
+        )
 
     def test_environment_distributions_exclude_the_site_directory(self):
         with tempfile.TemporaryDirectory() as d:
@@ -125,6 +129,21 @@ class TestUvResolveAndInstall(unittest.TestCase):
     def test_conflict_with_a_pin_is_refused(self):
         with self.assertRaises(plugin_deps.DependencyError):
             plugin_deps.resolve([f"{DEP_DIST}>=2"], {DEP_DIST: "1.0.0"}, self.dir)
+
+    def test_resolves_and_installs_a_direct_reference(self):
+        url = (self.links / f"{DEP_MODULE}-1.0.0-py3-none-any.whl").as_uri()
+        self.assertEqual(plugin_deps.resolve([f"{DEP_DIST} @ {url}"], {}, self.dir), [f"{DEP_DIST} @ {url}"])
+        site = self.dir / "site"
+        target = site / "pte-plugin-x" / "1.0.0"
+        target.mkdir(parents=True)
+        packages = plugin_deps.install_missing([f"{DEP_DIST} @ {url}"], site, target, self.dir)
+        self.assertEqual(packages, [f"{DEP_DIST} @ {url}"])
+        self.assertTrue((target / DEP_MODULE / "__init__.py").is_file())
+
+    def test_unexpected_uv_output_is_refused(self):
+        with patch("fastapi_app.lib.plugins.plugin_deps._run", return_value="rt-hello-dep==1.0.0\n-e ./somewhere\n"):
+            with self.assertRaises(plugin_deps.DependencyError):
+                plugin_deps.resolve([DEP_DIST], {}, self.dir)
 
     def test_installs_into_the_target_directory(self):
         site = self.dir / "site"

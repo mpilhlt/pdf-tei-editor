@@ -11,6 +11,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { AuthenticationData } from './authentication.js'
+ * @import { LockedDetail } from '../modules/api-client-v1.js'
  */
 
 import Plugin from '../modules/plugin-base.js';
@@ -45,11 +46,13 @@ class LockedError extends ApiError {
   /**
    * @param {string} message - The error message
    * @param {number} statusCode - The HTTP status code associated with the error, defaults to 423
+   * @param {LockedDetail} [detail] - Who holds the lock, if the server said so (acquire_lock)
    */    
-  constructor(message, statusCode = 423) {
-    super(message);
+  constructor(message, statusCode = 423, detail = undefined) {
+    super(message, statusCode, detail);
     this.name = "LockedError";
-    this.statusCode = statusCode;
+    /** @type {LockedDetail|undefined} */
+    this.detail = detail;
   }
 }
 
@@ -249,7 +252,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     // handle app-specific error types
     switch (response.status) {
       case 423:
-        throw new LockedError(message)
+        throw new LockedError(message, 423, detail)
       case 504:
         // Timeout
         throw new ConnectionError(message)

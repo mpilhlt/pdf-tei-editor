@@ -374,7 +374,11 @@ class PluginRegistry:
         record.manifest, record.external, record.site = old.manifest, old.external, old.site
         if record.load_status == "ok" and record.id != plugin_id:
             record = self._failed_record(old.directory, f"Plugin id {record.id} does not match the installed id {plugin_id}")
-            record.id = plugin_id
+        if record.load_status != "ok":
+            # A failed record is named after the package directory; keep the installed id and listing
+            record.id, record.metadata, record.manifest, record.external, record.site = (
+                plugin_id, old.metadata, old.manifest, old.external, old.site
+            )
         self._records[plugin_id] = record
         if record.load_status == "ok" and record.plugin is not None:
             self._register_with_dependencies([record.plugin])

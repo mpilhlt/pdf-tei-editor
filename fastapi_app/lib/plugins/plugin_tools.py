@@ -172,6 +172,92 @@ def _extract_sandbox_methods() -> list[dict[str, str]]:
     return methods
 
 
+_SESSION_HEADER_SCRIPT = r"""
+  // Session of the application tab that opened this page. Plugin pages open
+  // without the session id in their URL and authenticate with a cookie that
+  // belongs to the browser profile (see plugin_window_auth.py). Same-origin
+  // fetch() and XMLHttpRequest calls to /api/ get the opening tab's session as
+  // X-Session-ID header instead, so that they act for that tab even when
+  // another tab has opened a plugin page with a different session since.
+  // Navigations, links, downloads and EventSource still use the cookie.
+  (function() {
+    const SESSION_HEADER = 'X-Session-ID';
+    const EMPTY_VALUES = ['', 'null', 'undefined'];
+    const SESSION_TIMEOUT_MS = 3000;
+
+    const sessionPromise = Promise.race([
+      callSandboxMethod('getCurrentState').then(state => (state && state.sessionId) || null),
+      new Promise(resolve => setTimeout(() => resolve(null), SESSION_TIMEOUT_MS))
+    ]).catch(() => null);
+
+    /** @param {string | URL} url */
+    function isApiUrl(url) {
+      try {
+        const target = new URL(String(url), window.location.href);
+        return target.origin === window.location.origin && target.pathname.startsWith('/api/');
+      } catch {
+        return false;
+      }
+    }
+
+    /** @param {string | null | undefined} value */
+    function isEmpty(value) {
+      return value === null || value === undefined || EMPTY_VALUES.includes(String(value).trim());
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = async function(input, init) {
+      const url = input instanceof Request ? input.url : input;
+      if (!isApiUrl(url)) {
+        return originalFetch.call(this, input, init);
+      }
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init && init.headers).forEach((value, name) => headers.set(name, value));
+      if (isEmpty(headers.get(SESSION_HEADER))) {
+        const sessionId = await sessionPromise;
+        if (sessionId) {
+          headers.set(SESSION_HEADER, sessionId);
+        } else {
+          headers.delete(SESSION_HEADER);
+        }
+      }
+      return originalFetch.call(this, input, { ...init, headers });
+    };
+
+    const xhrOpen = XMLHttpRequest.prototype.open;
+    const xhrSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+    const xhrSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      this._pteApiRequest = isApiUrl(url);
+      this._pteHasSession = false;
+      return xhrOpen.call(this, method, url, ...rest);
+    };
+
+    XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+      if (this._pteApiRequest && String(name).toLowerCase() === SESSION_HEADER.toLowerCase()) {
+        // An empty value would be joined with the one added in send()
+        if (isEmpty(value)) return;
+        this._pteHasSession = true;
+      }
+      return xhrSetRequestHeader.call(this, name, value);
+    };
+
+    XMLHttpRequest.prototype.send = function(body) {
+      if (!this._pteApiRequest || this._pteHasSession) {
+        return xhrSend.call(this, body);
+      }
+      sessionPromise.then(sessionId => {
+        if (sessionId) {
+          xhrSetRequestHeader.call(this, SESSION_HEADER, sessionId);
+        }
+        xhrSend.call(this, body);
+      });
+    };
+  })();
+"""
+
+
 def generate_sandbox_client_script() -> str:
     """
     Generate JavaScript code that establishes connection with parent window
@@ -345,7 +431,7 @@ def generate_sandbox_client_script() -> str:
       }};
     }}
   }})();
-
+{_SESSION_HEADER_SCRIPT}
   console.log('SandboxClient: Connected to parent window');
 }})();
 """.strip()

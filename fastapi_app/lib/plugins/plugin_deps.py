@@ -4,7 +4,8 @@ Python packages of plugins installed at runtime.
 A plugin wheel contains only the plugin's own code; its ``Requires-Dist`` lines name the
 packages it needs. By default a runtime install accepts only plugins whose requirements are
 already installed. When the operator sets ``PTE_PLUGIN_INSTALL_DEPENDENCIES=1``
-(``plugin_install_policy``), the missing packages are installed from PyPI into the plugin's
+(``plugin_install_policy``), the missing packages are installed from PyPI (or from the URL of a
+direct reference such as ``name @ git+https://...``) into the plugin's
 version directory, which is on ``sys.path`` like the plugin itself and is deleted with it:
 
 1. The missing requirements are resolved with ``uv pip compile``, with every distribution that
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 PLUGIN_DISTRIBUTION_PREFIX = "pte-plugin-"
 UV_TIMEOUT = 600
 _PINNED = re.compile(r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[^\s;]+)")
+_DIRECT = re.compile(r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)(\[[^\]]*\])?\s*@\s*(?P<url>\S+)")
 
 
 class DependencyError(Exception):
@@ -161,10 +163,12 @@ def resolve(requirements: list[str], pins: dict[str, str], workdir: Path) -> lis
         workdir: Directory for the input files
 
     Returns:
-        ``name==version`` of every package of the resolution
+        ``name==version`` of every package of the resolution, or ``name @ url`` for a direct
+        reference (e.g. a ``git+https`` URL)
 
     Raises:
-        DependencyError: If the requirements conflict with the installed versions or cannot be found
+        DependencyError: If the requirements conflict with the installed versions, cannot be
+            found, or uv prints a line that is neither
     """
     requirements_file = workdir / "requirements.in"
     constraints_file = workdir / "constraints.txt"
@@ -179,15 +183,27 @@ def resolve(requirements: list[str], pins: dict[str, str], workdir: Path) -> lis
     )
     resolved: list[str] = []
     for line in output.splitlines():
-        match = _PINNED.match(line.strip())
-        if match:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if match := _PINNED.match(line):
             resolved.append(f"{canonicalize_name(match['name'])}=={match['version']}")
+        elif match := _DIRECT.match(line):
+            resolved.append(f"{canonicalize_name(match['name'])} @ {match['url']}")
+        else:
+            raise DependencyError(f"Could not resolve the plugin's packages: unexpected output of uv: {line}")
     return resolved
+
+
+def spec_name(spec: str) -> str:
+    """Canonical distribution name of a resolved package (``name==version`` or ``name @ url``)."""
+    match = _PINNED.match(spec) or _DIRECT.match(spec)
+    return canonicalize_name(match["name"] if match else spec)
 
 
 def to_install(resolved: list[str], environment: dict[str, str]) -> list[str]:
     """The resolved packages that the environment does not provide."""
-    return [spec for spec in resolved if canonicalize_name(spec.split("==", 1)[0]) not in environment]
+    return [spec for spec in resolved if spec_name(spec) not in environment]
 
 
 def install(packages: list[str], target: Path) -> None:

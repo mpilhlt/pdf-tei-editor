@@ -65,7 +65,9 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 
 ## LLM reviewer
 
-When review mode is on and you run **Review Annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
+When review mode is on and you run **Review document annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
+
+The model's suggestions are listed in the diagnostics drawer, most of them with a fix. If you are a reviewer (or an admin) and apply such a fix, from the diagnostics drawer or with **Propose fix** in the comparison view, you agree with the model: if the unit was marked not OK, it is marked OK in your name and the model's mark is removed, instead of the unit being listed as *Changed after a not-OK review*. A unit with other suggestions of the model that you have not applied keeps its marks. Fixes applied by annotators still need the reviewer to check the unit again.
 
 ### Adjusting the rules the model uses
 
@@ -115,7 +117,7 @@ For a category with both layers, the same **Propose change upstream** button ope
 
 The patch is built from your saved texts, so you are asked to save unsaved changes before the dialog opens.
 
-If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. Above the title, the dialog names the repository the pull request will be opened on. The button opens a pull request with the changed files in one commit, and the dialog then shows a link to it. Once the pull request has been merged, close the dialog: the editor then checks upstream again (bypassing the cached state of the guide repository) and offers **Update to upstream**. Guides on GitLab keep the patch download only.
+If the guide repository is on GitHub, the dialog also shows a **Pull request title** and a **Description** (both prefilled, and editable) and a **Create pull request** button. Above the title, the dialog names the repository the pull request will be opened on. The button opens a pull request with the changed files in one commit, and a message dialog then shows a link to it. Once the pull request has been merged, close the **Propose upstream** dialog: the editor then checks upstream again (bypassing the cached state of the guide repository) and offers **Update to upstream**. Guides on GitLab keep the patch download only.
 
 Creating a pull request needs a GitHub personal access token, stored under **GitHub** in your API keys (the dialog asks for it when it is missing). Create one at <https://github.com/settings/tokens> (the **GitHub** entry's help link opens the form for a classic token with `public_repo` preselected):
 
@@ -139,7 +141,7 @@ Overrides of the whole guide file that were created before this change are cut d
 
 ### After a proposal is merged
 
-Once a proposal has been merged, the editor marks each of your overrides whose text the guide upstream now contains with a cloud icon, and a status line says how many overrides are now in upstream, with a link that does the same as the **Update to upstream** button. The button then applies the current upstream rules to the document and removes only those overrides. Overrides that differ from upstream are kept. A confirmation names the counts before anything is changed. After the document is updated, the server checks again, against the rules the document is now pinned to, that they contain each override before it deletes it: an override is only removed when the version of the rules the document now references contains its text. If a deletion fails partway, the message says how many overrides were already removed.
+Once a proposal has been merged, the editor marks each of your overrides whose text the guide upstream now contains with a cloud icon, and a status line says how many overrides are now in upstream, with a link that does the same as the **Update to upstream** button. The button then applies the current upstream rules to the document and removes only those overrides. Overrides that differ from upstream are kept. A confirmation names the counts before anything is changed. When you open the editor and the document's rules are behind upstream (the guide changed upstream since the document was annotated, or upstream contains some of your overrides), a warning says so and asks whether to update to upstream; **Confirm** does the same as the button, without a second confirmation. The warning is not shown for a read-only document. After the document is updated, the server checks again, against the rules the document is now pinned to, that they contain each override before it deletes it: an override is only removed when the version of the rules the document now references contains its text. If a deletion fails partway, the message says how many overrides were already removed.
 
 ## Edited units
 

@@ -22,6 +22,13 @@ const debugLog = (...args) => {
 };
 
 /**
+ * Changed files that select the whole suite: a dependency change (e.g. an automated
+ * pte-plugins pin bump) can break any part of the app but matches no import.
+ * @type {string[]}
+ */
+const FULL_SUITE_TRIGGERS = ['pyproject.toml', 'uv.lock'];
+
+/**
  * @typedef {Object} SmartTestRunnerOptions
  * @property {string[]} [baseDirs=['app/src', 'fastapi_app']] - Base directories to analyze
  * @property {RegExp[]} [excludeRegExp=[/node_modules/, /\.husky/]] - Patterns to exclude from analysis
@@ -616,6 +623,13 @@ class SmartTestRunner {
 
     const changedFiles = this.getChangedFiles(options.changedFiles);
     if (!options.tap && !options.namesOnly) logger.info('Changed files:', changedFiles.length > 0 ? changedFiles.join(', ') : 'none');
+
+    const fullSuiteTrigger = changedFiles.find(f => FULL_SUITE_TRIGGERS.includes(f));
+    if (fullSuiteTrigger) {
+      if (!options.tap && !options.namesOnly) console.log(`🏃 ${fullSuiteTrigger} changed, running all tests...`);
+      const analysisResult = await this.analyzeDependencies(options);
+      return { tests: testFiles, analysisResult };
+    }
 
     const analysisResult = await this.analyzeDependencies(options);
     debugLog('Analysis result:', JSON.stringify(analysisResult, null, 2));

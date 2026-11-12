@@ -20,6 +20,7 @@
  * @import { EditorView, BlockInfo, ViewUpdate } from '@codemirror/view'
  * @import { ChangeSet, EditorState } from '@codemirror/state'
  * @import { Diagnostic } from '@codemirror/lint'
+ * @import { FixableDiagnostic } from '../modules/lint-utils.js'
  * @import { Unit, UnitScan, ReviewData, CombinedUnit, ReviewSummary, MarkState, Mark, Reviewer } from '../modules/unit-review.js'
  * @import { LineMark, LineMarkState } from '../modules/codemirror/unit-review-gutter.js'
  * @import { PopoverReview } from '../modules/unit-review-popover.js'
@@ -36,7 +37,7 @@ import { isFrozenFile, standOffContributions, userHasRole } from '../modules/acl
 import { testLog } from '../modules/test-log.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
-import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics } from '../modules/lint-utils.js'
+import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines, appliedFixRange, addDismissListener, addDeleteListener } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
   setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint
@@ -60,6 +61,15 @@ const LLM_REVIEW_SOURCE = 'annotation-review'
  * @returns {boolean}
  */
 const needsRecheck = combined => combined?.state === 'stale' && combined.was.some(r => r.mark.state === 'not-ok')
+
+/**
+ * The fixes of the LLM Reviewer's diagnostics in a state.
+ * @param {EditorState} state
+ * @returns {{from: number, to: number, replacement: string}[]}
+ */
+const llmFixesOf = state => collectDiagnostics(state)
+  .filter(d => d.source === LLM_REVIEW_SOURCE && typeof (/** @type {FixableDiagnostic} */ (d)).replacement === 'string')
+  .map(d => ({ from: d.from, to: d.to, replacement: /** @type {string} */ ((/** @type {FixableDiagnostic} */ (d)).replacement) }))
 
 /** Delay after the last edit before units are recomputed */
 const REFRESH_DELAY_MS = 250
@@ -146,6 +156,9 @@ class UnitReviewPlugin extends Plugin {
   /** @type {ReturnType<typeof setTimeout>|undefined} */
   #timer = undefined
 
+  /** The marks of units edited by the user still have to be written as carried-over marks */
+  #carryPending = false
+
   /** @type {string} Key of the diagnostics last applied, to avoid redundant dispatches */
   #diagnosticsKey = ''
 
@@ -160,14 +173,32 @@ class UnitReviewPlugin extends Plugin {
   /** True while this plugin dispatches its own diagnostics */
   #renderingDiagnostics = false
 
+  /**
+   * @type {{from: number, to: number, replacement: string}[]} The fixes of the LLM Reviewer's
+   *   diagnostics in the current text, kept after the diagnostics are dismissed: the diagnostics
+   *   drawer dismisses a diagnostic just before it applies its fix
+   */
+  #llmFixes = []
+
+  /** @type {{from: number, to: number}[]} Ranges where the user applied an LLM fix, not yet accepted */
+  #appliedFixes = []
+
+  /**
+   * @type {Set<string>} Diagnostics a reviewer dismissed in the diagnostics drawer, by unit
+   *   fingerprint and message: they stay hidden until the document is loaded again or their
+   *   message changes
+   */
+  #dismissed = new Set()
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
     this.#slot = this.#xmlEditor.createExtensionSlot([])
     // the review diagnostics are listed in the diagnostics drawer and the strip shows the state, also
     // while review mode is off: no hover tooltip, which would repeat the context menu's review
-    // buttons, and no lint gutter marker
-    this.#xmlEditor.createExtensionSlot(drawerOnlyDiagnostics(SOURCE))
+    // buttons, and no lint gutter marker. Instead, the lint gutter marker of other diagnostics on the
+    // line (e.g. LLM findings) takes the review's color (see app.css)
+    this.#xmlEditor.createExtensionSlot([drawerOnlyDiagnostics(SOURCE), markClassGutterLines()])
 
     this.#toggle = PanelUtils.createToggleButton({
       name: 'unitReviewToggle',
@@ -182,6 +213,10 @@ class UnitReviewPlugin extends Plugin {
 
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
+    addDismissListener(dismissed => this.#onDismissed(dismissed))
+    addDeleteListener(deleted => this.#onDeleted(deleted))
+    // fixes accepted in the merge view are marked OK once it is closed
+    this.#xmlEditor.on('editorHideMergeView', () => { if (this.#appliedFixes.length) this.#refresh() })
     document.addEventListener('mouseup', () => this.#endDrag())
     this.getDependency('sse').addEventListener('reviewMarksChanged', (/** @type {MessageEvent} */ event) => {
       try {
@@ -320,18 +355,21 @@ class UnitReviewPlugin extends Plugin {
    * @param {ViewUpdate} update
    */
   #onEditorUpdate(update) {
+    this.#trackLlmFixes(update)
     if (update.docChanged && isRemoteUpdate(update)) {
       // another user's saved text already holds their marks, carried over or renumbered: read
       // them as after a reload
       this.#pendingChanges = null
+      this.#carryPending = false
       this.#carry = new Map()
       this.#scan = { units: [], looseText: [], complete: true, path: null }
       clearTimeout(this.#timer)
       this.#timer = setTimeout(() => this.#refresh(), REFRESH_DELAY_MS)
     } else if (update.docChanged) {
       this.#pendingChanges = this.#pendingChanges ? this.#pendingChanges.compose(update.changes) : update.changes
+      this.#carryPending = true
       clearTimeout(this.#timer)
-      this.#timer = setTimeout(() => this.#refresh({ persistCarry: true }), REFRESH_DELAY_MS)
+      this.#timer = setTimeout(() => this.#refresh(), REFRESH_DELAY_MS)
     } else if (replacesDiagnostics(update) && this.#diagnosticsKey && !this.#renderingDiagnostics
       && !collectDiagnostics(update.state).some(d => d.source === SOURCE)) {
       // another source replaced the diagnostics without ours: merge ours in again (not from inside
@@ -373,8 +411,12 @@ class UnitReviewPlugin extends Plugin {
 
   #onDocumentLoaded() {
     clearTimeout(this.#timer)
+    this.#llmFixes = []
+    this.#appliedFixes = []
+    this.#dismissed = new Set()
     closePopover()
     this.#pendingChanges = null
+    this.#carryPending = false
     this.#carry = new Map()
     this.#scan = { units: [], looseText: [], complete: true, path: null }
     this.#fpCache = new Map()
@@ -434,10 +476,11 @@ class UnitReviewPlugin extends Plugin {
 
   /**
    * Recomputes units, reads the review data and updates the strip, the meter and the diagnostics.
-   * @param {{persistCarry?: boolean}} [options] - With persistCarry, marks of units edited since the
-   *   last refresh are written to the document as carried-over marks
+   * After the user edited the document, the marks of the edited units are written to the document
+   * as carried-over marks, by whichever refresh comes first (also one that cancels the delayed
+   * refresh after the edit).
    */
-  #refresh(options = {}) {
+  #refresh() {
     clearTimeout(this.#timer)
     const view = this.#xmlEditor.getView?.()
     if (!view) return
@@ -469,10 +512,78 @@ class UnitReviewPlugin extends Plugin {
       this.#write(copy, false)
       return
     }
-    if (options.persistCarry && this.#carry.size && data.reviewers.size && this.#canWrite(true)) {
+    if (this.#carryPending && (!this.#carry.size || !data.reviewers.size)) {
+      this.#carryPending = false
+    } else if (this.#carryPending && this.#canWrite(true)) {
+      this.#carryPending = false
       const copy = this.#readData(state)
       if (reconcileReviewData(copy, scan.units, this.#carry)) this.#write(copy, false)
     }
+    this.#acceptAppliedFixes()
+  }
+
+  /**
+   * Records the fixes of the LLM Reviewer's diagnostics, and the places where a document change
+   * applied one of them (from the diagnostics drawer or the merge view of "Propose fix").
+   * @param {ViewUpdate} update
+   */
+  #trackLlmFixes(update) {
+    if (update.docChanged && isRemoteUpdate(update)) {
+      this.#llmFixes = []
+      this.#appliedFixes = []
+    } else if (update.docChanged) {
+      const known = new Set(this.#llmFixes.map(f => `${f.from}:${f.to}:${f.replacement}`))
+      const fixes = [...this.#llmFixes, ...llmFixesOf(update.startState).filter(f => !known.has(`${f.from}:${f.to}:${f.replacement}`))]
+      const { changes, startState, state } = update
+      this.#appliedFixes = this.#appliedFixes.map(r => ({ from: changes.mapPos(r.from, -1), to: changes.mapPos(r.to, 1) }))
+      this.#llmFixes = []
+      for (const fix of fixes) {
+        const applied = appliedFixRange(changes, startState.doc, state.doc, fix)
+        if (applied) {
+          this.#appliedFixes.push(applied)
+        } else if (!changes.touchesRange(fix.from, fix.to)) {
+          this.#llmFixes.push({ ...fix, from: changes.mapPos(fix.from, 1), to: changes.mapPos(fix.to, -1) })
+        }
+      }
+    }
+    if (replacesDiagnostics(update)) {
+      const known = new Set(this.#llmFixes.map(f => `${f.from}:${f.to}:${f.replacement}`))
+      this.#llmFixes.push(...llmFixesOf(update.state).filter(f => !known.has(`${f.from}:${f.to}:${f.replacement}`)))
+    }
+  }
+
+  /**
+   * Marks the units in which a reviewer applied a fix of the LLM Reviewer as OK and removes the
+   * LLM Reviewer's marks from them, if the units would otherwise need a new review because they
+   * were marked not OK before the edit. Waits until the document can be written (e.g. the merge
+   * view is closed). For other users the units keep the "Changed after a not-OK review" diagnostic.
+   */
+  #acceptAppliedFixes() {
+    if (!this.#appliedFixes.length) return
+    if (!this.#isReviewer() || this.state?.editorReadOnly) {
+      this.#appliedFixes = []
+      return
+    }
+    if (!this.#canWrite(true)) return
+    const ranges = this.#appliedFixes
+    this.#appliedFixes = []
+    const state = this.#view().state
+    // a unit with findings left, whose fix the reviewer did not apply, still needs a review; the
+    // findings inside the applied ranges are those of the applied fixes, until they are removed
+    const open = collectDiagnostics(state)
+      .filter(d => d.source === LLM_REVIEW_SOURCE && !ranges.some(r => r.from <= d.from && d.to <= r.to))
+    const overlaps = (/** @type {{from: number, to: number}} */ r, /** @type {Unit} */ u) => r.from < u.to && r.to > u.from || r.from === r.to && u.from <= r.from && r.from <= u.to
+    // with the marks of the edited units carried over, which may not be written yet
+    const data = this.#readData(state)
+    reconcileReviewData(data, this.#scan.units, this.#carry)
+    const { byFingerprint } = combineReviews(this.#scan.units, data, { mode: this.#mode, llmVote: this.#llmVote })
+    const fps = this.#scan.units
+      .filter(u => ranges.some(r => overlaps(r, u)) && needsRecheck(byFingerprint.get(u.fingerprint)) && !open.some(d => overlaps(d, u)))
+      .map(u => u.fingerprint)
+    if (!fps.length) return
+    testLog('UNIT_REVIEW_FIX_ACCEPTED', { count: fps.length })
+    // the reviewer agreed with the LLM Reviewer: its not-OK mark must not dispute the OK mark
+    this.markUnits(fps, 'ok', { removeLlmMarks: true })
   }
 
   /**
@@ -493,6 +604,14 @@ class UnitReviewPlugin extends Plugin {
       const from = changes.mapPos(old.from, 1)
       let unit = byStart.get(from)
       if (!unit) unit = scan.units.find(u => u.from <= from && from < u.to)
+      if (!unit) {
+        // the unit's start was replaced, e.g. with its indentation by a merge view chunk: the only
+        // unit within the replacement of the old unit
+        const lo = changes.mapPos(old.from, -1)
+        const hi = changes.mapPos(old.to, 1)
+        const within = scan.units.filter(u => lo <= u.from && u.to <= hi)
+        if (within.length === 1) unit = within[0]
+      }
       if (!unit || unit.fingerprint === old.fingerprint) continue
       if (baseFingerprint(unit.fingerprint) === baseFingerprint(old.fingerprint)) {
         renames.set(old.fingerprint, unit.fingerprint)
@@ -565,7 +684,8 @@ class UnitReviewPlugin extends Plugin {
    * Sets the current user's mark on the given units.
    * @param {string[]} fingerprints
    * @param {MarkState|null} state
-   * @param {{comment?: string, final?: boolean}} [options]
+   * @param {{comment?: string, final?: boolean, removeLlmMarks?: boolean}} [options] - With
+   *   removeLlmMarks, the marks of the LLM Reviewer on the units are removed
    * @returns {Promise<boolean>}
    */
   async markUnits(fingerprints, state, options = {}) {
@@ -582,6 +702,17 @@ class UnitReviewPlugin extends Plugin {
     for (const fp of fingerprints) {
       const comment = options.comment ?? (state === 'not-ok' ? data.reviewers.get(user.username)?.marks.get(fp)?.comment : '') ?? ''
       setMark(data, { id: user.username }, fp, state, { comment, final })
+      if (options.removeLlmMarks) {
+        // also from the fingerprint before the edit, from which they would be carried over again
+        const root = this.#carry.get(fp)
+        for (const reviewer of data.reviewers.values()) {
+          if (!reviewer.isLlm) continue
+          for (const key of root ? [fp, root] : [fp]) {
+            reviewer.marks.delete(key)
+            reviewer.was.delete(key)
+          }
+        }
+      }
     }
     this.#write(data, true)
     return true
@@ -1038,12 +1169,16 @@ class UnitReviewPlugin extends Plugin {
       const kind = recheck ? 'changed' : combined.state === 'disputed' ? 'disputed' : 'not-ok'
       const line = state.doc.lineAt(unit.from)
       const fp = unit.fingerprint
-      own.push({
+      const message = `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`
+      if (this.#dismissed.has(`${fp}\u0000${message}`)) continue
+      own.push(/** @type {Diagnostic & {unitFingerprint: string}} */ ({
         from: unit.from,
         to: Math.min(unit.to, line.to),
         severity: 'info',
         markClass: `cm-unit-review-${kind}`,
-        message: `${what} (${comments.join('; ')})${recheck ? ', please check again' : ''}`,
+        message,
+        // for #onDeleted()
+        unitFingerprint: fp,
         // only reviewers can mark units
         actions: [
           ...(reviewer ? [
@@ -1052,7 +1187,7 @@ class UnitReviewPlugin extends Plugin {
           ] : []),
           { name: 'Open review', apply: (/** @type {EditorView} */ v, /** @type {number} */ from) => { this.openReview(v.state.doc.lineAt(from).number) } }
         ]
-      })
+      }))
     }
     // empty without diagnostics: #onEditorUpdate() re-merges only while the key is set, and
     // re-merging an empty set after every replacement by another source would make plugins that
@@ -1069,6 +1204,49 @@ class UnitReviewPlugin extends Plugin {
         this.#renderingDiagnostics = false
       }
     }, 0)
+  }
+
+  /**
+   * Hides the review diagnostics a reviewer dismissed in the diagnostics drawer. For other users
+   * they come back, since they show the reviewers' feedback.
+   * @param {Diagnostic[]} dismissed
+   */
+  #onDismissed(dismissed) {
+    if (!this.#isReviewer()) return
+    for (const d of dismissed) {
+      if (d.source !== SOURCE) continue
+      const unit = this.#scan.units.find(u => u.from === d.from)
+      if (unit) this.#dismissed.add(`${unit.fingerprint}\u0000${d.message}`)
+    }
+  }
+
+  /**
+   * Deletes the not-OK marks behind the review diagnostics a reviewer deleted in the diagnostics
+   * drawer, of all reviewers including the LLM Reviewer, also those from before an edit. OK marks
+   * stay, so a disputed unit becomes OK.
+   * @param {Diagnostic[]} deleted
+   */
+  #onDeleted(deleted) {
+    const fps = deleted
+      .filter(d => d.source === SOURCE)
+      .map(d => /** @type {Diagnostic & {unitFingerprint?: string}} */ (d).unitFingerprint)
+      .filter(fp => typeof fp === 'string')
+    if (!fps.length || !this.#isReviewer()) return
+    this.#refresh()
+    if (!this.#canWrite(false)) return
+    const data = this.#readData(this.#view().state)
+    for (const fp of /** @type {string[]} */ (fps)) {
+      // the marks before the edit, from which they would be carried over again
+      const root = this.#carry.get(fp)
+      for (const reviewer of data.reviewers.values()) {
+        for (const key of root ? [fp, root] : [fp]) {
+          if (reviewer.marks.get(key)?.state === 'not-ok') reviewer.marks.delete(key)
+          if (reviewer.was.get(key)?.state === 'not-ok') reviewer.was.delete(key)
+        }
+      }
+    }
+    this.#write(data, true)
+    testLog('UNIT_REVIEW_MARKS_DELETED', { count: fps.length })
   }
 
   /**

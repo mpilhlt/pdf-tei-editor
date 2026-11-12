@@ -80,6 +80,7 @@ grobid = "pte_plugin_grobid"
 Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/test_core_plugin_independence.py` and the CI job that runs the core suites with `fastapi_app/plugins/` emptied). Plugins hook into core through:
 
 - `register_gc_task(task_id, label, task, order=500, supports_dry_run=True)` (`lib/core/gc_registry.py`, plugin API 1.1): a garbage-collection task run by `POST /api/v1/files/garbage_collect`. Register it in `initialize()` with an id `plugin:<plugin id>` and remove it with `unregister_gc_task()` in `cleanup()`. The task receives a `GcContext` (`deleted_before`, `sync_status`, `is_admin`, `dry_run`, `file_repo`, `file_storage`, `db_dir`) and returns a `GcResult` (`items_deleted`, `bytes_freed`, `details: dict[str, int]`, `errors`); the result is shown as one row of the GC result dialog. A task that supports dry runs must not delete anything when `context.dry_run` is set. Use order 800-899 for caches; `register_directory_gc_task(task_id, label, get_dir)` empties a cache directory and reports its size. Exceptions are caught and reported as the task's error. The older `register_gc_handler(plugin_id, handler)` (handler returns the number of deleted items) is deprecated; it registers a task `plugin:<plugin_id>` without dry-run support, whose count still appears in the response's `plugin_items_deleted`.
+- `register_lock_holder(prefix, notice)` (`lib/core/locking.py`, plugin API 1.4): a plugin that locks files under its own holder id instead of a user session (e.g. a background job calling `acquire_lock(stable_id, f"auto-annotation:{job_id}", ...)`) registers the prefix of that id with the notice that users see when they open such a file, e.g. "This document is locked while its annotations are corrected automatically". `POST /api/v1/files/acquire_lock` returns it in the `message` of its 423 detail (`holder: "process"`). Remove it with `unregister_lock_holder(prefix)` in `cleanup()`.
 - Event bus events (`lib/sse/event_bus.py`): e.g. `file.lock_changed` (emitted after a lock is acquired or released, payload `stable_id`), `file.deleted`, `document.saved`.
 - `register_schema_config(url, timeout, reason)` (`lib/core/schema_validator.py`): a shorter validation timeout for complex schemas.
 - `ExtractorUnavailableError` (`lib/extraction`): raise it when an external dependency of an extractor is missing; the extraction router then falls back to the mock extractor if one is registered.
@@ -383,7 +384,7 @@ Administrators can enable and disable plugins at runtime from the Tools menu ("M
 With `PTE_PLUGIN_INSTALL=1` (operator setting, see [Runtime Plugin Install](../user-manual/docker-deployment.md#runtime-plugin-install)), administrators install plugins from GitHub release wheels in the Plugin Manager. Modules: `plugin_catalog.py` (discovery), `plugin_wheel.py` (inspection, requirement check, unpacking), `plugin_install.py` (download and verification), `plugin_site.py` (`data/plugins/site/`), `plugin_install_policy.py` (settings and audit log), and the install/upgrade/remove methods of `PluginManager`.
 
 - **Releases.** A plugin repository lists its plugins in `pte-plugins.json` on its default branch (`id`, `package`, `module`, `path`, `version`, `requires` (plugin ids), `dependencies` (other Python requirements), `engines`); a repository with one plugin uses `"path": "."`. Releases are tagged `<id>-v<version>` (`v<version>` in a single-plugin repository) and carry the wheel (`py3-none-any`) and `SHA256SUMS` as assets; [pte-plugins](https://github.com/mpilhlt/pte-plugins) creates them with its release workflow.
-- **Install.** The wheel is downloaded, checked against `SHA256SUMS`, inspected without importing it (one `pte.plugins` entry point, only the plugin package plus `.dist-info`, no `.data`, compatible `engines`), and its `Requires-Dist` is checked against the installed distributions. Plugins that need packages that are not installed are refused ("install it with uv sync"). The wheel is unpacked into `data/plugins/site/<distribution>/<version>/` and recorded in `installed` of `plugins-state.json`.
+- **Install.** The wheel is downloaded, checked against `SHA256SUMS`, inspected without importing it (one `pte.plugins` entry point, only the plugin package plus `.dist-info`, no `.data`, compatible `engines`), and its `Requires-Dist` is checked against the installed distributions. Plugins that need packages that are not installed are refused ("install it with uv sync"). The wheel is unpacked into `data/plugins/site/<distribution>/<version>/` and recorded in `installed` of `plugins-state.json`. An existing directory of the same version (left by a removal that waits for a restart, or by an interrupted install) is replaced, and the path is dropped from `pending_removal`.
 - **Not imported until enabled.** A new plugin is installed disabled. Disabled runtime-installed plugins are listed from their state entry (`PluginRecord.deferred`), not imported, also at startup. Enabling one imports it (`PluginRegistry.load_deferred()`), registers its routes and static files live and runs `initialize()`, in every worker (`PluginManager.reconcile()`).
 - **Live routes.** `register_plugin_routes()` records the position after the startup plugin routes; `register_live_routes()` inserts the routes of a plugin loaded later at that position, before the catch-all compat router and static mounts, by replacing `app.router.routes` in one assignment, and resets `app.openapi_schema`.
 - **Precedence.** The version directories are put at the front of `sys.path` at startup, so a runtime-installed version replaces a version installed with `uv sync` (its entry point and package are found first). Built-in plugins and plugins from `FASTAPI_PLUGIN_PATHS` cannot be replaced. An editable install of the same distribution (`npm run dev:install` in a pte-plugins checkout, recognized by `dir_info.editable` in its `direct_url.json`) takes precedence over the runtime-installed version, which is then neither activated nor listed, and a warning is logged at startup (`plugin_site.without_editable()`).
@@ -785,6 +786,17 @@ The `callPluginApi` method:
 - Returns the raw `Response` object for flexible response handling
 - Throws errors for non-OK responses
 
+## Authentication of Plugin Pages
+
+Plugin pages (`outputUrl`, `executeUrl`, `sandbox.navigateIframe()`, `sandbox.openControlledWindow()`) never get the session id in their URL. The frontend requests a single-use launch token (`POST /api/v1/plugins/launch-token`, valid for 60 seconds) and loads `/api/plugins/<id>/<route>?launch=<token>`. `PluginWindowAuthMiddleware` ([plugin_window_auth.py](../../fastapi_app/lib/plugins/plugin_window_auth.py)) redeems the token, sets the HttpOnly cookie `pte_plugin_session` (`Path=/api/plugins/`, `SameSite=Strict`) and redirects to the same URL without the token. The address bar, the browser history and the access logs therefore never show the session id.
+
+For every request under `/api/plugins/` that brings no session id of its own, the middleware copies the cookie's session id into the `X-Session-ID` header. Routes therefore authenticate through `X-Session-ID`. The `session_id` query parameter is accepted too, but plugins must not use it (#734):
+
+- In page JavaScript, call plugin routes with plain same-origin `fetch()`, `EventSource`, links or `navigator.sendBeacon()`. Do not read `session_id` from `location.search` and do not build URLs with `session_id`, neither in JavaScript nor in Python.
+- Non-GET requests authenticated by the cookie are rejected if their `Origin` header names another host.
+- The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page decides which session it carries. So that two tabs logged in as different users can both use plugin pages, the sandbox client script (injected by `load_plugin_html()` / `wrap_html_with_sandbox_client()`) asks the application tab that opened the page for its session and adds it as `X-Session-ID` header to every same-origin `fetch()` and `XMLHttpRequest` to `/api/`, unless the request sets a non-empty one itself. Plain navigations (reload, links, `window.location` downloads), `navigator.sendBeacon()` and `EventSource` cannot carry the header and use the cookie, so with parallel sessions in one browser they act for the session of the most recently opened plugin page.
+- Logout clears the cookie.
+
 ## Key Files
 
 - [fastapi_app/lib/plugins/plugin_base.py](../../fastapi_app/lib/plugins/plugin_base.py) - Base classes
@@ -1012,13 +1024,13 @@ Use `outputUrl` with `sandbox.navigateIframe()` when the user must configure opt
 2. Frontend loads form in iframe
 3. User configures options, clicks "Start"
 4. Form JS calls `sandbox.navigateIframe('/api/plugins/.../execute?params...')`
-5. Sandbox injects `session_id` and navigates iframe to execution route
+5. Sandbox adds a launch token and navigates iframe to execution route
 6. Execution route runs and displays results
 
 **Key requirements:**
 
 - Options form must include `generate_sandbox_client_script()` so `sandbox.navigateIframe()` is available
-- `session_id` is injected automatically — form JS only builds the path and query parameters
+- Authentication is handled automatically (see [Authentication of Plugin Pages](#authentication-of-plugin-pages)) — form JS only builds the path and query parameters
 - "Cancel" button can call `sandbox.closeDialog()`
 - Each page in the chain is a full page load; the sandbox client reconnects on each navigation
 
@@ -1045,7 +1057,7 @@ await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
 // Close the result dialog
 pluginSandbox.closeDialog();
 
-// Navigate the iframe to a new URL (session_id injected automatically)
+// Navigate the iframe to a new URL (authenticated with a launch token automatically)
 sandbox.navigateIframe('/api/plugins/my-plugin/execute?param=value');
 
 // Convenience: Open a document (updates xml state, clears diff, closes dialog) - async
