@@ -90,6 +90,7 @@
  * @property {string} id
  * @property {string} repository - GitHub repository (owner/repo)
  * @property {string} description
+ * @property {string=} readme_url - Link to the plugin's README
  * @property {string} index_version - Version listed in the repository's pte-plugins.json
  * @property {string=} latest_version - Version of the newest installable release
  * @property {string=} latest_tag

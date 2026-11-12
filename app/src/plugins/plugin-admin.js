@@ -362,7 +362,10 @@ class PluginAdminPlugin extends Plugin {
           ${p.requires.length ? `<span>requires ${p.requires.map(esc).join(', ')}</span>` : ''}
         </div>
       </div>
-      <div style="align-self: start;">${action}</div>
+      <div style="display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-end;">
+        ${action}
+        ${p.readme_url ? `<sl-button size="small" href="${esc(p.readme_url)}" target="_blank" rel="noopener"><sl-icon slot="prefix" name="book"></sl-icon>README</sl-button>` : ''}
+      </div>
     </div>`
   }
 

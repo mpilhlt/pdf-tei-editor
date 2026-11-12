@@ -251,6 +251,18 @@ class TestCatalog(unittest.TestCase):
         self.assertEqual((entry.repository, entry.trusted), ("mpilhlt/pte-plugins", True))
         self.assertEqual([r.version for r in entry.releases], ["1.0.0"])
         self.assertEqual(entry.latest.tag if entry.latest else None, "rt-hello-v1.0.0")
+        self.assertEqual(entry.readme_url, "https://github.com/mpilhlt/pte-plugins/tree/main/plugins/rt-hello#readme")
+
+    def test_readme_url(self):
+        responses = repository_responses("someone/plugin", branch="dev")
+        index = responses["https://raw.githubusercontent.com/someone/plugin/dev/pte-plugins.json"]
+        os.environ["PTE_PLUGIN_SOURCES"] = "someone/plugin"
+        index["plugins"][0]["path"] = "."
+        self.assertEqual(PluginCatalog(FakeGitHub(responses)).get().entries[0].readme_url, "https://github.com/someone/plugin#readme")
+        index["plugins"][0]["readme"] = "https://docs.example.org/plugin"
+        self.assertEqual(PluginCatalog(FakeGitHub(responses)).get().entries[0].readme_url, "https://docs.example.org/plugin")
+        index["plugins"][0]["readme"] = "javascript:alert(1)"
+        self.assertEqual(PluginCatalog(FakeGitHub(responses)).get().entries[0].readme_url, "https://github.com/someone/plugin#readme")
 
     def test_sources_and_trusted_owners_from_environment(self):
         os.environ["PTE_PLUGIN_SOURCES"] = "someone/plugins, not a repo"

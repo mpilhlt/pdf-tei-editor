@@ -835,6 +835,7 @@ class PluginManager:
                 "id": entry.id,
                 "repository": entry.repository,
                 "description": entry.description,
+                "readme_url": entry.readme_url,
                 "index_version": entry.version,
                 "latest_version": latest.version if latest else None,
                 "latest_tag": latest.tag if latest else None,
