@@ -2,6 +2,24 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.84.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.83.0...v0.84.0) (2026-11-12)
+
+
+### Bug Fixes
+
+* **document-rules:** detect a guide change merged upstream within two minutes ([797b1d0](https://github.com/mpilhlt/pdf-tei-editor/commit/797b1d0faf50eac992b264d03ed26685c05e423b))
+* **tei-tools:** fold the header again when its fold is dropped ([d76e538](https://github.com/mpilhlt/pdf-tei-editor/commit/d76e538046cb00ece985c07742e8714c934532eb))
+
+
+### Features
+
+* **diagnostics-drawer:** one-click Apply fix for diagnostics with a fix ([acd631d](https://github.com/mpilhlt/pdf-tei-editor/commit/acd631d0182fad0cbdfe5b8c8edd8bdd20a5fd06))
+* **document-rules:** check rule drift after loading an editable document ([a57c6e3](https://github.com/mpilhlt/pdf-tei-editor/commit/a57c6e3bd469aa64c4ca76193df8275714f4231a))
+* **plugin-admin:** show README links in the Available tab ([b9da370](https://github.com/mpilhlt/pdf-tei-editor/commit/b9da370798164f09b5205f7321fc7cd9fc44c324))
+* **unit-review:** show disputed reviews dotted red/green ([038f408](https://github.com/mpilhlt/pdf-tei-editor/commit/038f4087efd11eee2904d11d2179303f939bb504))
+* **xmleditor:** declutter the editor status bar ([cf03bae](https://github.com/mpilhlt/pdf-tei-editor/commit/cf03baeaf61e2cce8b0fdb71ff18da4b50df35af))
+* **xsl-viewer:** offer only the transformations that apply to the open document ([ca4b53f](https://github.com/mpilhlt/pdf-tei-editor/commit/ca4b53f6914cbc3354ebe2097f6e10c39350fdb6)), closes [#571](https://github.com/mpilhlt/pdf-tei-editor/issues/571)
+
 # [0.83.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.82.0...v0.83.0) (2026-11-12)
 
 
