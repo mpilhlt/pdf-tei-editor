@@ -348,6 +348,22 @@ test.describe('Unit review', () => {
       await expect.poll(async () => editorText(page)).not.toContain('unit-review');
       expect(await editorText(page)).not.toContain('<standOff');
       await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 open');
+      // the new version opens with the header folded, as the toggle shows
+      const headerFoldState = () => page.evaluate(() => {
+        const w = /** @type {any} */ (window);
+        return {
+          folded: w.app.getDependency('xmleditor').isFoldedByXpath('//tei:teiHeader'),
+          toggleChecked: w.ui.xmlEditor.toolbar.headerGroup.headerFoldToggle.checked
+        };
+      });
+      await expect.poll(headerFoldState).toEqual({ folded: true, toggleChecked: false });
+      // a change that drops the header's fold without an unfold effect folds it again
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: view.state.doc.toString() } });
+      });
+      await waitForTestMessage(consoleLogs, 'TEI_HEADER_REFOLDED');
+      await expect.poll(headerFoldState).toEqual({ folded: true, toggleChecked: false });
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);
