@@ -593,13 +593,14 @@ class DocumentRulesPlugin extends Plugin {
   /**
    * Check the rules of the loaded document for drift, DRIFT_CHECK_DELAY_MS
    * after its resources were listed, so that editing is not delayed. Only
-   * once per load, for an editable document whose resources are listed
-   * (i.e. for reviewers and admins). A read-only document is checked once it
-   * becomes editable.
+   * once per load, for an editable document and a reviewer or admin (whom
+   * "Refresh document rules" is reserved for). A read-only document is
+   * checked once it becomes editable.
    */
   _scheduleDriftCheck() {
     const xml = this.state?.xml
-    if (!xml || this._driftCheckXml !== xml || this._documentReadOnly || this._resources.length === 0) return
+    if (!xml || this._driftCheckXml !== xml || this._documentReadOnly) return
+    if (!userHasRole(this.state.user, ['reviewer', 'admin'])) return
     if (this._driftCheckTimer) clearTimeout(this._driftCheckTimer)
     this._driftCheckTimer = setTimeout(() => {
       this._driftCheckTimer = null
@@ -621,79 +622,35 @@ class DocumentRulesPlugin extends Plugin {
   }
 
   /**
-   * The drift check of _scheduleDriftCheck(): find the first interpretation-ref
-   * category of document `xml` whose rules are behind upstream (or whose
-   * overrides upstream now contains), or else whose machine rules are
-   * outdated against the guide, and offer the matching update: "Update to
-   * upstream" (which asks about the machine rules afterwards, see
-   * _runUpdateToUpstream()) or "Update from guide". Accepting opens the
-   * rule editor on that category and runs the update there.
+   * The drift check of _scheduleDriftCheck(): ask the server what "Refresh
+   * document rules" would change for document `xml` (e.g. a guide changed
+   * upstream since the document's rules were pinned). If anything, warn and,
+   * on Confirm, run the refresh right away, without the rule editor.
    * @param {string} xml - stable id of the document checked
    * @returns {Promise<void>}
    */
   async _checkDrift(xml) {
     if (this._driftCheckXml !== xml || this._driftDeclined.has(xml) || !this._driftCheckCurrent(xml)) return
     this._driftCheckXml = null
-    /** @type {{ resource: ResourceDescriptorModel, text: string, title: string, upstream: boolean }|null} */
-    let drift = null
-    for (const group of this._resourceGroups()) {
-      const resource = group[0]
-      if (resource.kind !== 'interpretation-ref') continue
-      /** @type {UpstreamStatusResponse|null} */
-      let status = null
-      try {
-        status = await this.#client.apiClient.documentRulesUpstreamStatus({ xml, url: resource.url })
-      } catch (error) {
-        this.#logger.warn('document-rules: drift check could not load upstream status: ' + String(error))
-      }
-      if (!this._driftCheckCurrent(xml)) return
-      if (status && (status.refs_behind || countUpstreamIds(status, 'in_upstream') > 0)) {
-        drift = {
-          resource,
-          upstream: true,
-          title: 'Document rules outdated',
-          text: `The document rules "${resource.label}" are outdated. ${this._upstreamChangeText(status)} Update to upstream? ${this._updateToUpstreamText(status)}`
-        }
-        break
-      }
-      const human = group.find(r => r.layer === 'human')
-      const machine = group.find(r => r.layer === 'machine')
-      if (!human || !machine) continue
-      let syncStatus = null
-      try {
-        syncStatus = (await this.#client.apiClient.documentRulesSyncStatus({ human_url: human.url, machine_url: machine.url })).status
-      } catch (error) {
-        this.#logger.warn('document-rules: drift check could not load sync status: ' + String(error))
-      }
-      if (!this._driftCheckCurrent(xml)) return
-      if (syncStatus === 'machine_outdated') {
-        drift = {
-          resource: machine,
-          upstream: false,
-          title: 'Machine rules outdated',
-          text: `The guide section of "${resource.label}" has changed since the machine rules were last updated from it. Update the machine rules from the guide now?`
-        }
-        break
-      }
+    let preview
+    try {
+      preview = await this.#client.apiClient.documentRulesRefreshPreview({ xml })
+    } catch (error) {
+      this.#logger.warn('document-rules: drift check could not preview the refresh: ' + String(error))
+      return
     }
-    if (!drift) return
-    const confirmed = await this.getDependency('dialog').confirm(drift.text, drift.title, 'warning')
+    if (!preview.available || !preview.changed || !this._driftCheckCurrent(xml)) return
+    const confirmed = await this.getDependency('dialog').confirm(
+      `The document rules are outdated: the rules upstream have changed since they were added to this document. ${preview.message} Refresh the document rules now?`,
+      'Document rules outdated',
+      'warning'
+    )
     if (!this._driftCheckCurrent(xml)) return
     if (!confirmed) {
       this._driftDeclined.add(xml)
       return
     }
-    await this._openResourceEditor(drift.resource, { promptUpstream: false })
-    if (!this._editorDialogUi.open || this._currentResource !== drift.resource) return
-    if (!drift.upstream) {
-      await this._openUpdateDialog()
-      return
-    }
-    await this._upstreamStatusLoaded
-    // The editor's own status decides: the overrides may have changed meanwhile
-    if (!this._editorDialogUi.open || this._currentResource !== drift.resource || !this._upstreamActionable()) return
-    if (this._editorDialogUi.updateToUpstreamBtn.disabled) return
-    await this._runUpdateToUpstream()
+    await this._executeRefresh(xml)
   }
 
   /**
@@ -2585,10 +2542,22 @@ class DocumentRulesPlugin extends Plugin {
 
     const confirmed = await dialog.confirm(preview.message, 'Refresh document rules?')
     if (!confirmed) return
+    await this._executeRefresh(state.xml)
+  }
 
+  /**
+   * Run "Refresh document rules" for document `xml` after its confirmation:
+   * save pending edits, rewrite the rules server-side, reload the document
+   * if anything changed, and report the outcome.
+   * @param {string} xml - stable id of the document
+   * @returns {Promise<void>}
+   */
+  async _executeRefresh(xml) {
+    // The refresh rewrites the stored document, which the reload then shows
+    await this.#xmlEditor.saveIfDirty()
     let outcome
     try {
-      outcome = await this.#client.apiClient.documentRulesRefreshExecute({ xml: state.xml })
+      outcome = await this.#client.apiClient.documentRulesRefreshExecute({ xml })
     } catch (error) {
       notify(`Could not refresh document rules: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
       return
@@ -2596,7 +2565,7 @@ class DocumentRulesPlugin extends Plugin {
 
     if (outcome.changed) {
       try {
-        await this.getDependency('services').load({ xml: state.xml })
+        await this.getDependency('services').load({ xml })
       } catch (error) {
         // The refresh itself already succeeded server-side; only the
         // editor reload failed, so still confirm the refresh and report

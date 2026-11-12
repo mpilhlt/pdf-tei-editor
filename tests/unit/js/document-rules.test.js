@@ -1419,6 +1419,7 @@ describe('DocumentRulesPlugin._onRefreshDocumentRules', () => {
     let reloadedWith;
     plugin.getDependency = (name) => {
       if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return { saveIfDirty: async () => {} };
       if (name === 'services') return { load: async (opts) => { reloadedWith = opts; } };
       if (name === 'client') return { apiClient: {
         documentRulesRefreshPreview: async () => ({ available: true, changed: true, entry_count: 2, variant_id: 'v', message: 'Would regenerate 2 entries.' }),
@@ -1435,6 +1436,7 @@ describe('DocumentRulesPlugin._onRefreshDocumentRules', () => {
     const plugin = makePlugin();
     plugin.getDependency = (name) => {
       if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return { saveIfDirty: async () => {} };
       if (name === 'services') return { load: async () => { throw new Error('locked'); } };
       if (name === 'client') return { apiClient: {
         documentRulesRefreshPreview: async () => ({ available: true, changed: true, entry_count: 2, variant_id: 'v', message: 'Would regenerate 2 entries.' }),
@@ -1455,6 +1457,7 @@ describe('DocumentRulesPlugin._onRefreshDocumentRules', () => {
     let reloadCalled = false;
     plugin.getDependency = (name) => {
       if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return { saveIfDirty: async () => {} };
       if (name === 'services') return { load: async () => { reloadCalled = true; } };
       if (name === 'client') return { apiClient: {
         documentRulesRefreshPreview: async () => ({ available: true, changed: false, entry_count: 0, variant_id: 'v', message: 'Already up to date.' }),
@@ -1464,6 +1467,85 @@ describe('DocumentRulesPlugin._onRefreshDocumentRules', () => {
     };
     await plugin._onRefreshDocumentRules();
     assert.strictEqual(reloadCalled, false);
+  });
+
+  it('saves pending edits before executing', async () => {
+    const plugin = makePlugin();
+    /** @type {string[]} */
+    const calls = [];
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async () => true };
+      if (name === 'xmleditor') return { saveIfDirty: async () => { calls.push('save'); } };
+      if (name === 'services') return { load: async () => {} };
+      if (name === 'client') return { apiClient: {
+        documentRulesRefreshPreview: async () => ({ available: true, changed: true, entry_count: 2, variant_id: 'v', message: 'Would regenerate 2 entries.' }),
+        documentRulesRefreshExecute: async () => { calls.push('execute'); return { available: true, changed: true, entry_count: 2, variant_id: 'v', message: 'Regenerated 2 entries.' }; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    await plugin._onRefreshDocumentRules();
+    assert.deepStrictEqual(calls, ['save', 'execute']);
+  });
+});
+
+describe('DocumentRulesPlugin._checkDrift', () => {
+  /**
+   * A plugin whose loaded document stable123 is editable and awaits its drift check.
+   * @param {{ changed: boolean, confirm: boolean }} options
+   */
+  function makeDriftPlugin({ changed, confirm }) {
+    const plugin = makePlugin(['reviewer']);
+    Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', editorReadOnly: false, user: { username: 'u', roles: ['reviewer'] } }), configurable: true });
+    plugin._editorDialogUi = /** @type {any} */ ({ open: false });
+    plugin._driftCheckXml = 'stable123';
+    const calls = { confirm: /** @type {string[]} */ ([]), execute: 0, load: 0 };
+    plugin.getDependency = (name) => {
+      if (name === 'dialog') return { confirm: async (text) => { calls.confirm.push(text); return confirm; } };
+      if (name === 'xmleditor') return { saveIfDirty: async () => {} };
+      if (name === 'services') return { load: async () => { calls.load++; } };
+      if (name === 'client') return { apiClient: {
+        documentRulesRefreshPreview: async () => ({ available: true, changed, entry_count: 1, variant_id: 'v', message: 'Would update the annotation rules reference (1 entry).' }),
+        documentRulesRefreshExecute: async () => { calls.execute++; return { available: true, changed: true, entry_count: 1, variant_id: 'v', message: 'Updated the annotation rules reference (1 entry).' }; },
+      } };
+      throw new Error(`unexpected dependency: ${name}`);
+    };
+    return { plugin, calls };
+  }
+
+  it('refreshes the document rules, without the rule editor, when the preview reports a change and the user confirms', async () => {
+    const { plugin, calls } = makeDriftPlugin({ changed: true, confirm: true });
+    let editorOpened = false;
+    plugin._openResourceEditor = async () => { editorOpened = true; };
+    await plugin._checkDrift('stable123');
+    assert.strictEqual(calls.confirm.length, 1);
+    assert.match(calls.confirm[0], /Refresh the document rules now\?/);
+    assert.strictEqual(calls.execute, 1);
+    assert.strictEqual(calls.load, 1);
+    assert.strictEqual(editorOpened, false);
+  });
+
+  it('does not ask when the preview reports no change', async () => {
+    const { plugin, calls } = makeDriftPlugin({ changed: false, confirm: true });
+    await plugin._checkDrift('stable123');
+    assert.strictEqual(calls.confirm.length, 0);
+    assert.strictEqual(calls.execute, 0);
+  });
+
+  it('does not ask again about a document whose warning was declined', async () => {
+    const { plugin, calls } = makeDriftPlugin({ changed: true, confirm: false });
+    await plugin._checkDrift('stable123');
+    plugin._driftCheckXml = 'stable123';
+    await plugin._checkDrift('stable123');
+    assert.strictEqual(calls.confirm.length, 1);
+    assert.strictEqual(calls.execute, 0);
+  });
+
+  it('skips a read-only document', async () => {
+    const { plugin, calls } = makeDriftPlugin({ changed: true, confirm: true });
+    Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', editorReadOnly: true, user: { username: 'u', roles: ['reviewer'] } }), configurable: true });
+    await plugin._checkDrift('stable123');
+    assert.strictEqual(calls.confirm.length, 0);
+    assert.strictEqual(calls.execute, 0);
   });
 });
 
