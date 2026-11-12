@@ -136,7 +136,7 @@ class UnitCommentsPlugin extends Plugin {
     await super.install(state)
     this.#slot = this.#xmlEditor.createExtensionSlot(this.#extensions())
     this.#meter = this.#createMeter()
-    this.#xmlEditor.addStatusbarWidget(this.#meter, 'right', 5)
+    this.#xmlEditor.addStatusbarWidget(this.#meter, 'right', 6)
     this.#xmlEditor.addUpdateListener(update => this.#onEditorUpdate(update))
     this.#xmlEditor.on('editorAfterLoad', () => this.#onDocumentLoaded())
     addDismissListener(dismissed => {
@@ -649,8 +649,8 @@ class UnitCommentsPlugin extends Plugin {
     if (!meter) return
     const open = this.#placed.filter(p => p.thread.status === 'open').length
     meter.style.display = open ? 'inline-flex' : 'none'
-    meter.textContent = `💬 ${open} open comment${open === 1 ? '' : 's'}`
-    meter.title = 'Click to go to the next open comment and show all open comments in the diagnostics drawer'
+    meter.textContent = `💬 ${open}`
+    meter.title = `${open} open comment${open === 1 ? '' : 's'}. Click to go to the next open comment and show all open comments in the diagnostics drawer.`
   }
 
   /**

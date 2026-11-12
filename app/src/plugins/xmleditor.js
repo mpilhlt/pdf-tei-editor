@@ -330,14 +330,13 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
-    // Indentation (and its separator) and cursor position go first when space is short,
-    // before the centre navigation (0) and the review/comment meters
-    const statusbarRightWidgets = createFromTemplate('xmleditor-statusbar-right');
-    const statusbarRightPriorities = [-2, -2, -1]; // indentation, separator, cursor position
+    // Cursor position goes first when space is short, then indentation (and its separator),
+    // before the review meter (4), the centre navigation (5) and the comment meter (6)
+    const statusbarRightWidgets = /** @type {HTMLElement[]} */ (createFromTemplate('xmleditor-statusbar-right')
+      .filter(widget => widget instanceof HTMLElement));
+    const statusbarRightPriorities = [-2, -2, -10]; // indentation, separator, cursor position
     statusbarRightWidgets.forEach((widget, index) => {
-      if (widget instanceof HTMLElement) {
-        this.#statusbar.add(widget, 'right', statusbarRightPriorities[index] ?? 0);
-      }
+      this.#statusbar.add(widget, 'right', statusbarRightPriorities[index] ?? 0);
     });
 
     // Create toolbar widgets from templates and add to toolbar
@@ -719,11 +718,13 @@ class XmlEditorPlugin extends Plugin {
       name: 'nodeCounterWidget'
     });
 
-    // Add navigation widgets to statusbar center section
-    this.#statusbar.add(this.#prevNodeBtn, 'center', 0);
-    this.#statusbar.add(this.#xpathDropdown, 'center', 0);
-    this.#statusbar.add(this.#nextNodeBtn, 'center', 0);
-    this.#statusbar.add(this.#nodeCounterWidget, 'center', 0);
+    // Add navigation widgets to statusbar center section. They outrank the review meter (4)
+    // and give way only to the comment meter (6).
+    const NAVIGATION_PRIORITY = 5;
+    this.#statusbar.add(this.#prevNodeBtn, 'center', NAVIGATION_PRIORITY);
+    this.#statusbar.add(this.#xpathDropdown, 'center', NAVIGATION_PRIORITY);
+    this.#statusbar.add(this.#nextNodeBtn, 'center', NAVIGATION_PRIORITY);
+    this.#statusbar.add(this.#nodeCounterWidget, 'center', NAVIGATION_PRIORITY);
 
     this.#focusToggle = PanelUtils.createToggleButton({
       icon: 'search',
@@ -732,7 +733,7 @@ class XmlEditorPlugin extends Plugin {
       name: 'focusToggle',
       disabled: true
     });
-    this.#statusbar.add(this.#focusToggle, 'center', 0);
+    this.#statusbar.add(this.#focusToggle, 'center', NAVIGATION_PRIORITY);
     this.#focusPreferred = this.uiStorage.get('focusMode', true);
     this.#focusToggle.checked = this.#focusPreferred;
 
@@ -742,7 +743,7 @@ class XmlEditorPlugin extends Plugin {
       name: 'clearNodeBtn',
       disabled: true
     });
-    this.#statusbar.add(this.#clearNodeBtn, 'center', 0);
+    this.#statusbar.add(this.#clearNodeBtn, 'center', NAVIGATION_PRIORITY);
 
     // Update UI to register navigation widgets
     updateUi();
