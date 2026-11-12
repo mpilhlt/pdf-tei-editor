@@ -4,7 +4,9 @@ Unit tests for the pluggable git-forge adapter registry.
 @testCovers fastapi_app/lib/core/git_forge_adapters.py
 """
 
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -16,7 +18,7 @@ from fastapi_app.lib.core.git_forge_adapters import (
     GitHubAdapter,
     GitLabAdapter,
 )
-from fastapi_app.lib.core.url_cache import UrlCache
+from fastapi_app.lib.core.url_cache import BRANCH_HEAD_TTL_SECONDS, UrlCache, get_cache_info
 
 
 class _AlwaysMatchesAdapter(BaseGitForgeAdapter):
@@ -166,6 +168,24 @@ class TestGitHubAdapter(unittest.TestCase):
 
         mock_get.assert_not_called()
         self.assertEqual(resolved, f"https://github.com/mpilhlt/fossil/blob/{'c' * 40}/docs/guidelines.md")
+
+    @patch("fastapi_app.lib.core.git_forge_adapters.requests.get")
+    def test_resolve_ref_to_sha_resolves_a_branch_head_older_than_the_branch_head_ttl_anew(self, mock_get):
+        # A branch head cached before an upstream merge must not outlive
+        # BRANCH_HEAD_TTL_SECONDS, though the cache's own TTL is longer
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = UrlCache(Path(tmp), ttl_seconds=3600)
+            api_url = "https://api.github.com/repos/mpilhlt/fossil/commits/main"
+            cache.set_text(api_url, "c" * 40)
+            cache_file = get_cache_info(api_url, Path(tmp))[1]
+            old = time.time() - BRANCH_HEAD_TTL_SECONDS - 10
+            os.utime(cache_file, (old, old))
+            mock_get.return_value.json.return_value = {"sha": "d" * 40}
+
+            resolved = self.adapter.resolve_ref_to_sha("https://github.com/mpilhlt/fossil/blob/main/docs/guidelines.md", cache)
+
+        mock_get.assert_called_once()
+        self.assertEqual(resolved, f"https://github.com/mpilhlt/fossil/blob/{'d' * 40}/docs/guidelines.md")
 
 
 class TestGitLabAdapter(unittest.TestCase):

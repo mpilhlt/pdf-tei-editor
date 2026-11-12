@@ -874,6 +874,73 @@ test.describe('Document rules registry', () => {
       }
     });
 
+    test('asks to update the machine rules after updating to a changed guide upstream', async ({ page }) => {
+      // Upstream status, refresh and sync status are mocked: the local rules server cannot show a changed upstream
+      const consoleLogs = setupTestConsoleCapture(page);
+      const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+      /** @type {http.Server | null} */
+      let server = null;
+      let updated = false;
+      const status = () => ({
+        refs_behind: !updated,
+        refresh_message: null,
+        layers: [{ layer: 'machine', url: TWO_LAYER_RULE_URLS[1], error: null, in_upstream: [], kept: [] }]
+      });
+
+      try {
+        server = await startRulesServer(TWO_LAYER_PORT);
+        await mockLlm(page, [{ id: 'mock', label: 'Mock provider', models: [{ id: 'mock-model', label: 'Mock model' }] }]);
+        await page.route('**/api/v1/document-rules/upstream-status', (route) => route.fulfill({ json: status() }));
+        await page.route('**/api/v1/document-rules/refresh-resource', (route) => {
+          updated = true;
+          return route.fulfill({ json: { status: 'ok', refs: [], changed: false, message: '' } });
+        });
+        await page.route('**/api/v1/document-rules/remove-overrides-in-upstream', (route) => route.fulfill({ json: status() }));
+        await page.route('**/api/v1/document-rules/sync-status', (route) => route.fulfill({
+          json: { status: updated ? 'machine_outdated' : 'in_sync', human_source: 'original', machine_source: 'original', synced_commit: null }
+        }));
+        await page.route('**/api/v1/document-rules/update-from-guide', (route) => route.fulfill({
+          json: { mode: 'align', old_human: null, new_human: 'Human guide text for data correction.', machine: 'Machine rule text.', proposed: PROPOSED_MACHINE_TEXT, unchanged: false }
+        }));
+
+        await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+        await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+        await openToolsMenu(page);
+        const editMenuItem = page.locator('sl-menu-item:has-text("Edit document rules")');
+        await editMenuItem.hover();
+        await page.waitForTimeout(500);
+        await page.locator('sl-menu-item:has-text("Edit document rules") sl-menu[slot="submenu"] sl-menu-item:has-text("Data correction")').click();
+        const dialog = page.locator('sl-dialog[name="documentRulesEditorDialog"]');
+        await expect(dialog).toHaveAttribute('open', '');
+
+        // Opening the editor warns that the guide changed upstream; accepted here
+        const confirmDialog = page.locator('sl-dialog[name="dialog"]');
+        await expect(confirmDialog).toHaveAttribute('open', '', { timeout: 5000 });
+        await expect(confirmDialog).toContainText('The guide upstream has changed since this document was annotated.');
+        await page.waitForTimeout(500);
+        await confirmDialog.locator('sl-button[name="confirmBtn"]').click();
+
+        // The re-pinned guide section is newer than the machine rules: asks to update them
+        await expect(confirmDialog).toContainText('Update the machine rules from the guide now?', { timeout: 15000 });
+        await expect(dialog.locator('[name="syncStatus"]')).toContainText('Machine rules outdated');
+        await page.waitForTimeout(500);
+        await confirmDialog.locator('sl-button[name="confirmBtn"]').click();
+
+        const updateDialog = page.locator('sl-dialog[name="documentRulesUpdateDialog"]');
+        await expect(updateDialog).toHaveAttribute('open', '');
+        await expect(updateDialog).toContainText('Change in the guide');
+        await updateDialog.locator('sl-button[name="closeBtn"]').click();
+        await expect(updateDialog).not.toHaveAttribute('open', '');
+
+        await dialog.locator('sl-button[name="closeBtn"]').click();
+      } finally {
+        await deleteRuleOverrides(page, TWO_LAYER_RULE_URLS);
+        server?.close();
+        stopErrorMonitoring();
+        await releaseAllLocks(page);
+      }
+    });
+
     test('asks for a missing API key on top of the update dialog', async ({ page }) => {
       const consoleLogs = setupTestConsoleCapture(page);
       // the mocked 428 below is logged by the browser

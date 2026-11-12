@@ -4,6 +4,7 @@ Unit tests for the generic URL content cache.
 @testCovers fastapi_app/lib/core/url_cache.py
 """
 
+import os
 import tempfile
 import time
 import unittest
@@ -94,6 +95,20 @@ class TestUrlCache(unittest.TestCase):
         self.assertIsNone(cache.get_text("https://example.com/a/b.txt"))
         # ...but ignore_ttl=True returns it anyway, regardless of age.
         self.assertEqual(cache.get_text("https://example.com/a/b.txt", ignore_ttl=True), "content")
+
+    def test_get_text_max_age_lowers_the_ttl(self):
+        self.cache.set_text("https://example.com/a/b.txt", "content")
+        cache_file = get_cache_info("https://example.com/a/b.txt", self.cache_root)[1]
+        ten_minutes_ago = time.time() - 600
+        os.utime(cache_file, (ten_minutes_ago, ten_minutes_ago))
+        self.assertEqual(self.cache.get_text("https://example.com/a/b.txt"), "content")
+        self.assertIsNone(self.cache.get_text("https://example.com/a/b.txt", max_age_seconds=120))
+
+    def test_get_text_max_age_never_raises_the_ttl(self):
+        cache = UrlCache(self.cache_root, ttl_seconds=0)
+        cache.set_text("https://example.com/a/b.txt", "content")
+        time.sleep(0.01)
+        self.assertIsNone(cache.get_text("https://example.com/a/b.txt", max_age_seconds=3600))
 
     def test_get_text_with_ignore_ttl_still_returns_none_when_never_cached(self):
         cache = UrlCache(self.cache_root)
