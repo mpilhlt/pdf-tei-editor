@@ -294,6 +294,30 @@ def require_reviewer_or_admin(
     return user
 
 
+def require_annotator_reviewer_or_admin(
+    user: Dict = Depends(require_authenticated_user)
+) -> Dict:
+    """
+    Require authenticated user with annotator, reviewer or admin role.
+
+    Args:
+        user: Authenticated user from require_authenticated_user
+
+    Returns:
+        User dict if annotator, reviewer or admin
+
+    Raises:
+        HTTPException: 403 if user has none of these roles
+    """
+    user_roles = user.get('roles', [])
+    if not any(role in user_roles for role in ('annotator', 'reviewer', 'admin', '*')):
+        raise HTTPException(
+            status_code=403,
+            detail="Annotator role required"
+        )
+    return user
+
+
 # Decorator for requiring session (used on router functions)
 
 def require_session(func):

@@ -4,10 +4,16 @@ Requested by Christian (2026-11-12): the check whether the document rules are in
 
 ## Behavior
 
-- After the resources of a newly loaded document are listed (reviewers and admins only, as the "Document rules" menu), `document-rules.js` waits 2 s (`DRIFT_CHECK_DELAY_MS`) so that loading and editing are not delayed, then checks each interpretation-ref category: first `upstream-status` (`refs_behind` or overrides now in upstream), then `sync-status` of its human/machine pair (`machine_outdated`).
-- The first category with drift gets a warning confirmation. Confirm opens the rule editor on it and runs "Update to upstream" (which asks about the machine rules afterwards, as before) or opens "Update from guide".
+- 2 s after a newly loaded document's resources are listed (`DRIFT_CHECK_DELAY_MS`), for annotators, reviewers and admins, `document-rules.js` calls `refresh/preview`, which says whether "Refresh document rules" would change the document (e.g. a guide changed upstream since the rules were pinned).
+- If so, a warning offers to refresh. Confirm runs the refresh directly and reloads the document (`_executeRefresh()`, shared with the "Refresh document rules" menu item). The user does not have to deal with the rule editor.
 - Skipped for a read-only document (checked once it becomes editable), when the rule editor is opened first, and for a document whose warning was declined earlier in the page session.
+
+## History
+
+- Christian asked the same day that annotators can update the document rules too: the drift check, the "Refresh document rules" menu item and the `refresh/preview` and `refresh/execute` endpoints accept the annotator role (the server still requires edit access to the document). "Edit document rules" stays reviewer/admin-only.
+
+- PR #761 first opened the rule editor on drift and ran "Update to upstream" or "Update from guide" there. Christian corrected this the same day: the check should only refresh the rules, without the editor. The follow-up fix replaced the check with the refresh preview.
 
 ## Tests
 
-- `tests/e2e/tests/document-rules.spec.js`: the former "asks to update the machine rules after updating to a changed guide upstream" test now goes through the warning on load; a new test covers the machine-rules-outdated warning on load.
+- `tests/e2e/tests/document-rules.spec.js`: "refreshes outdated document rules after loading, without the rule editor".

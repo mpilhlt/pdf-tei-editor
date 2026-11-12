@@ -150,9 +150,9 @@ class RefreshOutcomeResponse(BaseModel):
 
     `available=False` means no rules-refresh provider is registered for
     this document's extractor - not an error, just nothing to refresh.
-    `changed` is always False from /preview (nothing is ever written
-    there); from /execute it reflects whether anything was actually
-    rewritten.
+    `changed` from /preview says whether /execute would rewrite anything
+    (nothing is written there); from /execute it reflects whether anything
+    was actually rewritten.
     """
     available: bool
     changed: bool

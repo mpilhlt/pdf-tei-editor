@@ -285,15 +285,24 @@ class TestRefreshEndpoints(DocumentRulesRouterTestCase):
     def _set_user_roles(self, roles):
         self.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "alice", "roles": roles}
 
-    def test_preview_requires_reviewer_or_admin_role(self):
+    def test_preview_requires_annotator_reviewer_or_admin_role(self):
         self._set_user_roles(["user"])
         response = self.client.post("/document-rules/refresh/preview", json={"xml": "tei-1"})
         self.assertEqual(response.status_code, 403)
 
-    def test_execute_requires_reviewer_or_admin_role(self):
+    def test_execute_requires_annotator_reviewer_or_admin_role(self):
         self._set_user_roles(["user"])
         response = self.client.post("/document-rules/refresh/execute", json={"xml": "tei-1"})
         self.assertEqual(response.status_code, 403)
+
+    def test_preview_is_open_to_annotators(self):
+        self._set_user_roles(["annotator"])
+        with patch(
+            "fastapi_app.routers.document_rules.resolve_refresh_target",
+            side_effect=RefreshPreconditionError("You don't have permission to edit this document."),
+        ):
+            response = self.client.post("/document-rules/refresh/preview", json={"xml": "tei-1"})
+        self.assertEqual(response.status_code, 400)
 
     def test_preview_reports_precondition_error_as_bad_request(self):
         self._set_user_roles(["reviewer"])
