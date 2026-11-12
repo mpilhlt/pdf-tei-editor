@@ -880,7 +880,8 @@ class DocumentRulesPlugin extends Plugin {
    * the layer tabs, or hide the line when the group is not such a pair or
    * the request fails. The status describes the pair, so the line is the
    * same on both tabs. Never rejects, so callers need not await it.
-   * @returns {Promise<void>}
+   * @returns {Promise<SyncStatusResponse['status']|null>} the status shown,
+   *   or null if none is shown or a newer request superseded this one
    */
   async _refreshSyncStatus() {
     const request = ++this._syncStatusRequest
@@ -894,18 +895,18 @@ class DocumentRulesPlugin extends Plugin {
     this._syncStatusPair = pairKey
     if (!human || !machine) {
       line.style.display = 'none'
-      return
+      return null
     }
     let response
     try {
       response = await this.#client.apiClient.documentRulesSyncStatus({ human_url: human.url, machine_url: machine.url })
     } catch (error) {
-      if (request !== this._syncStatusRequest) return
+      if (request !== this._syncStatusRequest) return null
       line.style.display = 'none'
       this.#logger.warn('document-rules: could not load sync status: ' + String(error))
-      return
+      return null
     }
-    if (request !== this._syncStatusRequest) return
+    if (request !== this._syncStatusRequest) return null
     const icon = document.createElement('sl-icon')
     icon.setAttribute('name', response.status === 'in_sync' ? 'check-circle' : 'exclamation-triangle')
     icon.style.verticalAlign = '-0.125em'
@@ -920,6 +921,7 @@ class DocumentRulesPlugin extends Plugin {
       line.append('. ', this._createActionLink('Propose change upstream', 'syncStatusProposeLink', () => this._onProposeUpstreamClick()))
     }
     line.style.display = ''
+    return response.status
   }
 
   /**
@@ -1519,19 +1521,37 @@ class DocumentRulesPlugin extends Plugin {
     const btn = this._editorDialogUi.updateToUpstreamBtn
     btn.disabled = true
     btn.loading = true
+    /** @type {SyncStatusResponse['status']|null} */
+    let syncStatus = null
     try {
-      await this._updateToUpstream()
+      syncStatus = await this._updateToUpstream()
     } finally {
       btn.disabled = false
       btn.loading = false
     }
+    if (syncStatus === 'machine_outdated') await this._promptUpdateFromGuide()
   }
 
   /**
-   * The upstream status line's "Update to upstream" link: the same as the
-   * button, unless an update is already running.
+   * After "Update to upstream" re-pinned the document to a guide section
+   * that changed since the machine rules were last updated from it: ask
+   * whether to update the machine rules from the guide now, and if so open
+   * the "Update from guide" dialog. Skipped once the dialog was closed or
+   * for a read-only document.
    * @returns {Promise<void>}
    */
+  async _promptUpdateFromGuide() {
+    if (!this._editorDialogUi.open || this._documentReadOnly) return
+    const group = this._currentGroup
+    const confirmed = await this.getDependency('dialog').confirm(
+      'The guide section has changed since the machine rules were last updated from it. Update the machine rules from the guide now?',
+      'Machine rules outdated',
+      'warning'
+    )
+    if (!confirmed || !this._editorDialogUi.open || this._currentGroup !== group) return
+    await this._openUpdateDialog()
+  }
+
   /**
    * After the editor dialog was opened: if `_upstreamStatus` (loaded by
    * request number `request`) says that the document's rules are behind
@@ -1557,6 +1577,11 @@ class DocumentRulesPlugin extends Plugin {
     await this._runUpdateToUpstream()
   }
 
+  /**
+   * The upstream status line's "Update to upstream" link: the same as the
+   * button, unless an update is already running.
+   * @returns {Promise<void>}
+   */
   async _onUpdateToUpstreamLinkClick() {
     if (this._editorDialogUi.updateToUpstreamBtn.disabled) return
     await this._onUpdateToUpstream()
@@ -1564,7 +1589,9 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * The work of _onUpdateToUpstream() after its confirmation.
-   * @returns {Promise<void>}
+   * @returns {Promise<SyncStatusResponse['status']|null>} the sync status
+   *   of the human/machine pair after the update, null if the update failed
+   *   or the category has no such pair
    */
   async _updateToUpstream() {
     /** @type {RefreshResourceResponse} */
@@ -1576,13 +1603,13 @@ class DocumentRulesPlugin extends Plugin {
       })
     } catch (error) {
       notify(`Could not refresh resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
-      return
+      return null
     }
     if (refreshResult.status !== 'ok') {
       const variant = refreshResult.status === 'not_found' ? 'danger' : 'warning'
       const icon = refreshResult.status === 'not_found' ? 'exclamation-octagon' : 'exclamation-triangle'
       notify(refreshResult.message, variant, icon)
-      return
+      return null
     }
     await this._applyRefreshedRefs(refreshResult)
 
@@ -1603,13 +1630,13 @@ class DocumentRulesPlugin extends Plugin {
       response = await this.#client.apiClient.documentRulesQuery({ kind: this._currentResource.kind, url: this._currentResource.url })
     } catch (error) {
       notify(`Could not reload resource: ${error instanceof Error ? error.message : error}`, 'danger', 'exclamation-octagon')
-      return
+      return null
     }
     this._currentOverrides = response.overrides
     this._currentSelectedId = response.selected_override_id
     this._currentOriginalText = response.original_text
     this._renderEditorDialog()
-    this._refreshSyncStatus()
+    const syncStatus = this._refreshSyncStatus()
     this._refreshUpstreamStatus()
     await this._refreshOverrideIndicators()
 
@@ -1617,6 +1644,7 @@ class DocumentRulesPlugin extends Plugin {
       const removed = countUpstreamIds(removal, 'in_upstream')
       notify(`Updated to upstream: removed ${pluralizeOverrides(removed)}, kept ${countUpstreamIds(removal, 'kept')}.`, 'success', 'check-circle')
     }
+    return await syncStatus
   }
 
   /**

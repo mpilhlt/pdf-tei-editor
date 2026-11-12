@@ -19,6 +19,13 @@ from typing import BinaryIO, Iterator, Optional, Tuple
 
 DEFAULT_CACHE_TTL_SECONDS = 3600
 
+# Maximum age of a cached git branch head (branch -> commit SHA) or of a
+# branch's commit list. Shorter than the default TTL so that a commit pushed
+# or merged upstream is seen within minutes, e.g. by the document rule
+# editor's upstream check, while keeping the unauthenticated forge API
+# calls to at most one per branch and interval.
+BRANCH_HEAD_TTL_SECONDS = 120
+
 logger = logging.getLogger(__name__)
 
 
@@ -123,7 +130,7 @@ class UrlCache:
         self.cache_root = cache_root
         self.ttl_seconds = ttl_seconds
 
-    def get_text(self, url: str, ignore_ttl: bool = False) -> Optional[str]:
+    def get_text(self, url: str, ignore_ttl: bool = False, max_age_seconds: Optional[int] = None) -> Optional[str]:
         """
         Return cached text for `url`, or None if there is no cache entry or
         the URL is uncacheable (see get_cache_info()).
@@ -135,7 +142,9 @@ class UrlCache:
         git_forge_adapters.py's `is_sha_pinned()`) to return any existing
         entry regardless of age, so pinned content stays resolvable
         offline/in development long after the normal TTL would have
-        expired it.
+        expired it. `max_age_seconds` lowers the TTL for this lookup (it
+        never raises it), for content that changes faster than the cache's
+        TTL assumes, such as a branch head.
         """
         try:
             _, cache_file, _ = get_cache_info(url, self.cache_root)
@@ -144,7 +153,8 @@ class UrlCache:
             return None
         if not cache_file.is_file():
             return None
-        if not ignore_ttl and is_cache_stale(cache_file, self.ttl_seconds):
+        ttl = self.ttl_seconds if max_age_seconds is None else min(self.ttl_seconds, max_age_seconds)
+        if not ignore_ttl and is_cache_stale(cache_file, ttl):
             return None
         return cache_file.read_text(encoding="utf-8")
 
