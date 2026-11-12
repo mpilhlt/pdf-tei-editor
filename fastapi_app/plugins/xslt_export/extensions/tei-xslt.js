@@ -46,12 +46,15 @@ export default class TeiXsltExtension extends FrontendExtensionPlugin {
 
   async start() {
     const TEI_NAMESPACE = 'http://www.tei-c.org/ns/1.0';
+    // The stylesheets render the bibliographic references, so they are only offered for
+    // documents that contain biblStruct elements, whatever their variant
+    const HAS_BIBLSTRUCT = 'boolean(//tei:biblStruct)';
     const transformations = [
-      { label: 'Reference list', url: '/api/plugins/xslt-export/static/biblstruct-to-html.xslt' },
-      { label: 'Tabular data',   url: '/api/plugins/xslt-export/static/biblstruct-to-table.xslt' },
-      { label: 'CSV',            url: '/api/plugins/xslt-export/static/biblstruct-to-csv.xslt' },
-      { label: 'RIS',            url: '/api/plugins/xslt-export/static/biblstruct-to-ris.xslt' },
-      { label: 'CrossRef XML',   url: '/api/plugins/xslt-export/static/tei-to-crossref-html.xslt' }
+      { label: 'Reference list', url: '/api/plugins/xslt-export/static/biblstruct-to-html.xslt',   appliesTo: HAS_BIBLSTRUCT },
+      { label: 'Tabular data',   url: '/api/plugins/xslt-export/static/biblstruct-to-table.xslt',  appliesTo: HAS_BIBLSTRUCT },
+      { label: 'CSV',            url: '/api/plugins/xslt-export/static/biblstruct-to-csv.xslt',    appliesTo: HAS_BIBLSTRUCT },
+      { label: 'RIS',            url: '/api/plugins/xslt-export/static/biblstruct-to-ris.xslt',    appliesTo: HAS_BIBLSTRUCT },
+      { label: 'CrossRef XML',   url: '/api/plugins/xslt-export/static/tei-to-crossref-html.xslt', appliesTo: HAS_BIBLSTRUCT }
     ];
 
     try {
@@ -70,7 +73,8 @@ export default class TeiXsltExtension extends FrontendExtensionPlugin {
         xslViewer.register({
           label: t.label,
           xmlns: TEI_NAMESPACE,
-          xslDoc
+          xslDoc,
+          appliesTo: t.appliesTo
         });
       }
     } catch (error) {

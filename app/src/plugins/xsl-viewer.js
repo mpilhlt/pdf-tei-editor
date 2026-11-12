@@ -9,12 +9,15 @@
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { SlDropdown, SlMenu, SlMenuItem } from '../ui.js'
  * @import { xslViewerOverlayPart } from '../templates/xsl-viewer-overlay.types.js'
+ * @import { XslAppliesTo } from '../modules/xsl-applicability.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js';
 import { notify } from '../modules/sl-utils.js';
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import { prettyPrintNode } from '../modules/tei-utils.js';
+import { stylesheetAppliesTo } from '../modules/xsl-applicability.js';
+import { XMLEditor } from '../modules/xmleditor.js';
 
 // Register templates at module level
 await registerTemplate('xsl-viewer-button', 'xsl-viewer-button.html');
@@ -26,6 +29,10 @@ await registerTemplate('xsl-viewer-overlay', 'xsl-viewer-overlay.html');
  * @property {string} label - Display label for the stylesheet
  * @property {string} xmlns - XML namespace this stylesheet applies to
  * @property {Document} xslDoc - Pre-parsed XSLT document
+ * @property {XslAppliesTo} [appliesTo] - Test deciding whether the stylesheet makes sense for the
+ *   current document: an XPath expression (prefixes `tei` and `xml` bound, result converted to a
+ *   boolean) or a function receiving the document and returning a boolean. Without it, the
+ *   stylesheet is offered for every document whose root element is in `xmlns`.
  */
 
 /**
@@ -137,6 +144,8 @@ export class XslViewerPlugin extends Plugin {
     const tooltip = /** @type {import('../ui.js').SlTooltip} */ (buttonElement.closest('sl-tooltip'));
     if (dropdown) {
       dropdown.addEventListener('sl-show', () => {
+        // The document may have changed since the last check (e.g. references added)
+        this.updateMenu();
         dropdown.closest('tool-bar')?.classList.add('dropdown-open');
         // Hide tooltip when dropdown opens so it doesn't obscure the menu
         if (tooltip) tooltip.hide();
@@ -185,68 +194,72 @@ export class XslViewerPlugin extends Plugin {
       }
     });
 
+    // Re-check the applicable stylesheets when a document is loaded and after edits are synced
+    xmlEditorApi.on(XMLEditor.EVENT_EDITOR_AFTER_LOAD, () => this.#refresh());
+    xmlEditorApi.on(XMLEditor.EVENT_EDITOR_XML_WELL_FORMED, () => this.updateButtonState());
+
     // Initialize menu with empty state
     this.updateMenu();
+    this.updateButtonState();
   }
 
   /**
-   * Update menu items based on registered stylesheets and current document
+   * Updates menu and button for the current document
+   */
+  #refresh() {
+    this.updateMenu();
+    this.updateButtonState();
+  }
+
+  /**
+   * Update menu items: lists the stylesheets that apply to the current document
    */
   updateMenu() {
     if (!this.#xslViewerMenu) return;
 
     this.#xslViewerMenu.innerHTML = '';
 
-    const currentXmlns = this.getCurrentDocumentXmlns();
-
-    if (registeredStylesheets.length === 0) {
+    const applicable = this.getApplicableStylesheets();
+    if (applicable.length === 0) {
       const item = document.createElement('sl-menu-item');
-      item.textContent = 'No stylesheets registered';
+      item.textContent = 'No transformations for this document';
       item.disabled = true;
       this.#xslViewerMenu.appendChild(item);
       return;
     }
 
-    registeredStylesheets.forEach(stylesheet => {
+    applicable.forEach(stylesheet => {
       const item = /** @type {SlMenuItem} */ (document.createElement('sl-menu-item'));
       item.textContent = stylesheet.label;
       item.dataset.label = stylesheet.label;
-      item.disabled = !currentXmlns || stylesheet.xmlns !== currentXmlns;
       this.#xslViewerMenu.appendChild(item);
     });
   }
 
   /**
-   * Update button enabled state based on available stylesheets
+   * Update button enabled state: disabled if no stylesheet applies to the current document
    */
   updateButtonState() {
     if (!this.#xslViewerBtn) return;
-
-    const hasStylesheets = registeredStylesheets.length > 0;
-    const hasMatchingXmlns = this.hasMatchingStylesheet();
-    this.#xslViewerBtn.disabled = !hasStylesheets || !hasMatchingXmlns;
+    this.#xslViewerBtn.disabled = !this.hasMatchingStylesheet();
   }
 
   /**
-   * Get the xmlns of the current document's root element
-   * @returns {string|null}
+   * Get the stylesheets that apply to the current document, in registration order
+   * @returns {XslStylesheetRegistration[]}
    */
-  getCurrentDocumentXmlns() {
+  getApplicableStylesheets() {
     const xmlTree = this.#xmlEditor.getXmlTree();
-    if (!xmlTree || !xmlTree.documentElement) {
-      return null;
-    }
-    return xmlTree.documentElement.namespaceURI;
+    return registeredStylesheets.filter(s => stylesheetAppliesTo(s, xmlTree));
   }
 
   /**
-   * Check if any stylesheet matches the current document
+   * Check if any stylesheet applies to the current document
    * @returns {boolean}
    */
   hasMatchingStylesheet() {
-    const xmlns = this.getCurrentDocumentXmlns();
-    if (!xmlns) return false;
-    return registeredStylesheets.some(s => s.xmlns === xmlns);
+    const xmlTree = this.#xmlEditor.getXmlTree();
+    return registeredStylesheets.some(s => stylesheetAppliesTo(s, xmlTree));
   }
 
   /**
@@ -254,7 +267,7 @@ export class XslViewerPlugin extends Plugin {
    * @param {string} label
    */
   applyStylesheet(label) {
-    const stylesheet = registeredStylesheets.find(s => s.label === label);
+    const stylesheet = this.getApplicableStylesheets().find(s => s.label === label);
     if (!stylesheet) {
       notify('Stylesheet not found', 'danger', 'exclamation-octagon');
       return;
@@ -388,8 +401,7 @@ export class XslViewerPlugin extends Plugin {
   }
 
   onXmlChange() {
-    this.updateButtonState();
-    this.updateMenu();
+    this.#refresh();
     this.hideOverlay();
   }
 }
