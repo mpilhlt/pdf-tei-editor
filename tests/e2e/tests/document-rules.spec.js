@@ -874,7 +874,7 @@ test.describe('Document rules registry', () => {
       }
     });
 
-    test('refreshes outdated document rules after loading, without the rule editor', async ({ page }) => {
+    test('refreshes outdated document rules for an annotator after loading, without the rule editor', async ({ page }) => {
       // Preview and execute are mocked: the local rules server cannot show a changed upstream
       const consoleLogs = setupTestConsoleCapture(page);
       const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
@@ -882,6 +882,8 @@ test.describe('Document rules registry', () => {
       let server = null;
       /** @type {any[]} */
       const executeRequests = [];
+      /** @type {string | null} */
+      let versionId = null;
 
       try {
         server = await startRulesServer(TWO_LAYER_PORT);
@@ -895,8 +897,19 @@ test.describe('Document rules registry', () => {
           });
         });
 
-        await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+        await navigateAndLogin(page, 'testannotator', 'annotatorpass');
         await loadFixtureDocument(page, 'document-rules-two-layer-fixture');
+        // The fixture is gold, which is read-only for an annotator: work on a version of it, as annotators do
+        versionId = await page.evaluate(async () => {
+          const xml_string = /** @type {any} */ (window).app.getDependency('xmleditor').getXML();
+          const res = await /** @type {any} */ (window).client.apiClient.filesSave({ xml_string, file_id: 'document-rules-drift-probe', new_version: true });
+          return res.file_id;
+        });
+        await page.evaluate((id) => /** @type {any} */ (window).app.getDependency('services').load({ xml: id }), versionId);
+        await page.waitForFunction((expectedXml) => {
+          const state = /** @type {any} */ (window).app.getCurrentState();
+          return state.xml === expectedXml && state.editorReadOnly === false;
+        }, versionId, { timeout: 20000 });
 
         // Shortly after loading: warns about the outdated rules; accepted here
         const confirmDialog = page.locator('sl-dialog[name="dialog"]');
@@ -910,9 +923,13 @@ test.describe('Document rules registry', () => {
         expect(executeRequests).toHaveLength(1);
         await expect(page.locator('sl-dialog[name="documentRulesEditorDialog"]')).not.toHaveAttribute('open', '');
       } finally {
+        await releaseAllLocks(page);
+        if (versionId) {
+          await page.evaluate(async (id) => { await /** @type {any} */ (window).client.apiClient.filesDelete({ files: [id] }); }, versionId)
+            .catch((err) => console.warn('document-rules E2E cleanup failed:', err));
+        }
         server?.close();
         stopErrorMonitoring();
-        await releaseAllLocks(page);
       }
     });
 

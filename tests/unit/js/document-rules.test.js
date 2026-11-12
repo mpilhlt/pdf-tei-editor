@@ -1338,6 +1338,17 @@ describe('DocumentRulesPlugin.onUserChange / role gating', () => {
     assert.strictEqual(plugin._editMenuItem.style.display, 'none');
   });
 
+  it('shows the refresh menu item, but not "Edit document rules", for an annotator', async () => {
+    const plugin = makePlugin();
+    plugin._refreshMenuItem = document.createElement('sl-menu-item');
+    plugin._editMenuItem = { style: {}, documentRulesEditSubmenu: document.createElement('sl-menu') };
+    wireOverrideIndicatorStubs(plugin);
+    plugin.onUserChange({ roles: ['annotator'] });
+    await flushMicrotasks();
+    assert.strictEqual(plugin._refreshMenuItem.style.display, '');
+    assert.strictEqual(plugin._editMenuItem.style.display, 'none');
+  });
+
   it('shows the refresh menu item for a reviewer', async () => {
     const plugin = makePlugin();
     plugin._refreshMenuItem = document.createElement('sl-menu-item');
@@ -1494,8 +1505,8 @@ describe('DocumentRulesPlugin._checkDrift', () => {
    * @param {{ changed: boolean, confirm: boolean }} options
    */
   function makeDriftPlugin({ changed, confirm }) {
-    const plugin = makePlugin(['reviewer']);
-    Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', editorReadOnly: false, user: { username: 'u', roles: ['reviewer'] } }), configurable: true });
+    const plugin = makePlugin(['annotator']);
+    Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', editorReadOnly: false, user: { username: 'u', roles: ['annotator'] } }), configurable: true });
     plugin._editorDialogUi = /** @type {any} */ ({ open: false });
     plugin._driftCheckXml = 'stable123';
     const calls = { confirm: /** @type {string[]} */ ([]), execute: 0, load: 0 };
@@ -1538,6 +1549,17 @@ describe('DocumentRulesPlugin._checkDrift', () => {
     await plugin._checkDrift('stable123');
     assert.strictEqual(calls.confirm.length, 1);
     assert.strictEqual(calls.execute, 0);
+  });
+
+  it('is scheduled for an annotator but not for a user without an editing role', () => {
+    const { plugin } = makeDriftPlugin({ changed: true, confirm: true });
+    plugin._scheduleDriftCheck();
+    assert.ok(plugin._driftCheckTimer, 'expected a scheduled check for an annotator');
+    clearTimeout(plugin._driftCheckTimer);
+    plugin._driftCheckTimer = null;
+    Object.defineProperty(plugin, 'state', { get: () => ({ xml: 'stable123', editorReadOnly: false, user: { username: 'u', roles: ['user'] } }), configurable: true });
+    plugin._scheduleDriftCheck();
+    assert.strictEqual(plugin._driftCheckTimer, null);
   });
 
   it('skips a read-only document', async () => {

@@ -28,6 +28,7 @@ from ..lib.core.dependencies import (
     get_document_rules_store,
     get_file_storage,
     require_authenticated_user,
+    require_annotator_reviewer_or_admin,
     require_reviewer_or_admin,
 )
 from ..lib.core.git_forge_adapters import GitForgeAdapterRegistry, GitHubAdapter
@@ -377,13 +378,10 @@ def _outcome_response(outcome) -> RefreshOutcomeResponse:
 @router.post("/refresh/preview", response_model=RefreshOutcomeResponse)
 def refresh_preview(
     request: RefreshRequest,
-    # Only these two refresh endpoints are reviewer/admin-gated - the rest
-    # of this router is intentionally open to any authenticated user (see
-    # validation.py's own comment on why schema overrides aren't
-    # reviewer-gated: they only ever affect the calling user's own
-    # validation/extraction, unlike a refresh, which rewrites the shared
-    # document).
-    user: dict = Depends(require_reviewer_or_admin),
+    # A refresh rewrites the shared document: annotators, reviewers and
+    # admins may run it, and resolve_refresh_target() also requires edit
+    # access to the document.
+    user: dict = Depends(require_annotator_reviewer_or_admin),
     db: DatabaseManager = Depends(get_db),
     file_storage: FileStorage = Depends(get_file_storage),
 ) -> RefreshOutcomeResponse:
@@ -402,7 +400,7 @@ def refresh_preview(
 @router.post("/refresh/execute", response_model=RefreshOutcomeResponse)
 async def refresh_execute(
     request: RefreshRequest,
-    user: dict = Depends(require_reviewer_or_admin),
+    user: dict = Depends(require_annotator_reviewer_or_admin),
     db: DatabaseManager = Depends(get_db),
     file_storage: FileStorage = Depends(get_file_storage),
 ) -> RefreshOutcomeResponse:

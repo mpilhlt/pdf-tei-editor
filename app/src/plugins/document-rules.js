@@ -86,6 +86,9 @@ const PULL_REQUEST_MERGE_INSTRUCTIONS = 'Once the pull request has been merged, 
  */
 const DRIFT_CHECK_DELAY_MS = 2000
 
+/** Roles that may run "Refresh document rules" (the server also requires edit access). */
+const REFRESH_ROLES = ['annotator', 'reviewer', 'admin']
+
 const UNSAVED_CHANGES_MESSAGE = 'The selected override has unsaved changes. Save them? Otherwise they are lost.'
 const UNSAVED_PROPOSAL_NOTICE = 'Unsaved changes in the editor are not included. Save them first.'
 
@@ -547,7 +550,7 @@ class DocumentRulesPlugin extends Plugin {
     // (triggered by the _refreshResources() call below) is the only place
     // that ever shows it, and only once its own role check passes.
     this._editMenuItem.style.display = 'none'
-    this._refreshMenuItem.style.display = userHasRole(this.state.user, ['reviewer', 'admin']) ? '' : 'none'
+    this._refreshMenuItem.style.display = userHasRole(this.state.user, REFRESH_ROLES) ? '' : 'none'
     this._refreshResources()
   }
 
@@ -559,21 +562,25 @@ class DocumentRulesPlugin extends Plugin {
     this._driftCheckXml = this.state.xml
     if (this._driftCheckTimer) clearTimeout(this._driftCheckTimer)
     this._driftCheckTimer = null
-    this._refreshResources()
+    // Also for a user without the role the resource list needs: the check only needs the document
+    ;(async () => {
+      await this._refreshResources()
+      this._scheduleDriftCheck()
+    })().catch(error => { this.#logger.warn('document-rules: could not schedule the drift check: ' + String(error)) })
   }
 
   /**
-   * Show/hide the reviewer/admin-gated "Refresh document rules" item, and
-   * re-run resource discovery so "Edit document rules" picks up the same
-   * role gate applied in #doRefreshResources() (hidden entirely for a user
-   * without the role, whatever the open document's resources are) - both
-   * items are gated the same way so tools.js's category-label auto-hide
-   * (see its module doc-comment) collapses the whole "Document rules"
-   * section for a plain user, not just the refresh item.
+   * Show/hide the "Refresh document rules" item (annotators, reviewers and
+   * admins), and re-run resource discovery so "Edit document rules" picks
+   * up the reviewer/admin gate applied in #doRefreshResources() (hidden
+   * entirely for a user without the role, whatever the open document's
+   * resources are). For a user with neither, tools.js's category-label
+   * auto-hide (see its module doc-comment) collapses the whole "Document
+   * rules" section.
    * @param {UserData|null} newUser
    */
   onUserChange(newUser) {
-    this._refreshMenuItem.style.display = userHasRole(newUser, ['reviewer', 'admin']) ? '' : 'none'
+    this._refreshMenuItem.style.display = userHasRole(newUser, REFRESH_ROLES) ? '' : 'none'
     this._refreshResources()
   }
 
@@ -592,15 +599,15 @@ class DocumentRulesPlugin extends Plugin {
 
   /**
    * Check the rules of the loaded document for drift, DRIFT_CHECK_DELAY_MS
-   * after its resources were listed, so that editing is not delayed. Only
-   * once per load, for an editable document and a reviewer or admin (whom
-   * "Refresh document rules" is reserved for). A read-only document is
-   * checked once it becomes editable.
+   * after it was loaded, so that editing is not delayed. Only once per
+   * load, for an editable document and a user who may run "Refresh document
+   * rules" (REFRESH_ROLES). A read-only document is checked once it becomes
+   * editable.
    */
   _scheduleDriftCheck() {
     const xml = this.state?.xml
     if (!xml || this._driftCheckXml !== xml || this._documentReadOnly) return
-    if (!userHasRole(this.state.user, ['reviewer', 'admin'])) return
+    if (!userHasRole(this.state.user, REFRESH_ROLES)) return
     if (this._driftCheckTimer) clearTimeout(this._driftCheckTimer)
     this._driftCheckTimer = setTimeout(() => {
       this._driftCheckTimer = null
@@ -724,7 +731,6 @@ class DocumentRulesPlugin extends Plugin {
     this._editMenuItem.disabled = this._resources.length === 0
     this._populateSubmenu()
     await this._refreshOverrideIndicators()
-    this._scheduleDriftCheck()
   }
 
   /**
