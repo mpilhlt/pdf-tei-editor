@@ -2,6 +2,14 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.84.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.84.0...v0.84.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **document-rules:** let annotators refresh outdated document rules ([01040de](https://github.com/mpilhlt/pdf-tei-editor/commit/01040de6fd6e1582ba097260d25bc4ed58f773bf))
+* **document-rules:** refresh the document rules on drift instead of opening the rule editor ([343d03d](https://github.com/mpilhlt/pdf-tei-editor/commit/343d03dfcc9c43d5457027f5ee49623c695b7e86))
+
 # [0.84.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.83.0...v0.84.0) (2026-11-12)
 
 
