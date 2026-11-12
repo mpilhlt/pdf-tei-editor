@@ -104,7 +104,7 @@ Work in your copy as described in [Document Editing](editing-workflow.md). Your 
 
 ![Focus mode: the current <bibl> is highlighted, the rest of the document is dimmed. The "LLM Review" button is in the bottom right corner of the unit](../images/review-workflow-03b-focus-mode.png)
 
-**Let the LLM Reviewer suggest corrections (if configured).** If your installation has the [LLM Reviewer](https://github.com/mpilhlt/pte-plugins/blob/main/plugins/annotation-review/README.md) and the document links to machine-readable annotation rules, click **LLM Review** in the bottom right corner of the focused unit (or **Tools → Review document annotations** for the whole document). The model checks the unit against the rules, and its suggestions appear in the **Diagnostics** drawer and as highlights in the editor. **Propose fix** on a suggestion shows the change in the merge view: accept it with **Incoming**, or keep your text with **Current**. To apply several suggestions at once, check them in the drawer and click **Apply**. Treat the suggestions as a draft: check each one against the PDF and the annotation guide before you accept it, and dismiss the ones that are wrong. See [LLM reviewer](unit-review.md#llm-reviewer) and [Diagnostics drawer](editing-workflow.md#diagnostics-drawer).
+**Let the LLM Reviewer suggest corrections (if configured).** If your installation has the [LLM Reviewer](https://github.com/mpilhlt/pte-plugins/blob/main/plugins/annotation-review/README.md) and the document links to machine-readable annotation rules, click **LLM Review** in the bottom right corner of the focused unit (or **Tools → Review document annotations** for the whole document). The model checks the unit against the rules, and its suggestions appear in the **Diagnostics** drawer and as highlights in the editor. **Propose fix** on a suggestion shows the change in the merge view: accept it with **Incoming**, or keep your text with **Current**. **Apply fix** applies the suggestion directly, without the merge view. To apply several suggestions at once, check them in the drawer and click **Apply**. Treat the suggestions as a draft: check each one against the PDF and the annotation guide before you accept it, and dismiss the ones that are wrong. See [LLM reviewer](unit-review.md#llm-reviewer) and [Diagnostics drawer](editing-workflow.md#diagnostics-drawer).
 
 **Ask when you are unsure.** If the guide does not answer a question about a unit, add a [unit comment](unit-comments.md) to it (`Ctrl+Shift+M`, or **Comment…** in the context menu) and mention a reviewer with `@`. Comments are the channel for questions and discussions in both directions: everybody can reply, and every reply notifies the others in the thread. Review marks, in contrast, go only one way, from the reviewer to you.
 
@@ -141,7 +141,7 @@ Review mode is switched on with the **Review** button (clipboard icon). Then go 
 
 ![A unit marked as not OK, with the reviewer's comment, in the review popover and in the diagnostics drawer](../images/review-workflow-07-not-ok.png)
 
-The strip left of the line numbers shows the result: green for OK, red for not OK. The progress meter in the status bar counts the units that are OK, not OK and still open.
+The strip left of the line numbers shows the result: green for OK, red for not OK. The progress bar in the status bar shows the share of units that are OK, not OK and still open; hover over it to see the counts.
 
 For questions and remarks that are not a verdict on a unit, use a [unit comment](unit-comments.md) (`Ctrl+Shift+M`, or **Comment…** in the context menu). A comment only notifies the users mentioned in it, so mention the annotator with `@` (for example `@annotator`) if they should react to it.
 
@@ -196,7 +196,7 @@ A resolved thread is no longer listed in the diagnostics drawer, but it stays wi
 
 ### Disputed units
 
-If several reviewers have marked a unit, their marks are combined (see [Combining the marks of several reviewers](unit-review.md#combining-the-marks-of-several-reviewers)). With as many OK as not-OK marks, the unit is *disputed*: the strip shows it red and green, and the diagnostics drawer lists it as *Review disputed*, with the marks and comments of the other reviewers. This happens, for example, when the [LLM reviewer](unit-review.md#llm-reviewer) marked a unit as not OK that a person found OK, or the other way round.
+If several reviewers have marked a unit, their marks are combined (see [Combining the marks of several reviewers](unit-review.md#combining-the-marks-of-several-reviewers)). With as many OK as not-OK marks, the unit is *disputed*: the strip shows it dotted red and green, and the diagnostics drawer lists it as *Review disputed*, with the marks and comments of the other reviewers. This happens, for example, when the [LLM reviewer](unit-review.md#llm-reviewer) marked a unit as not OK that a person found OK, or the other way round.
 
 A disputed unit needs another review to break the tie. Click **✓ OK** or **✕ Not OK** in the drawer, or **Open review** to see the other reviews in the review popover first: under *Other reviews* it lists each mark with its comment and shows the combined result. `Shift+F7` also stops at disputed units.
 
@@ -208,7 +208,7 @@ If the dispute comes from a wrong LLM review, consider whether the machine rules
 
 *Reviewer*
 
-When all units are OK (the progress meter shows *0 not OK · 0 open*, and the editor tells you *All units are reviewed*), approve the document: click **Save revision**, describe the result (for example "Review complete, approved"), set **Status** to *Approved* and click **Save Revision**.
+When all units are OK (the tooltip of the progress bar shows *0 not OK · 0 open*, and the editor tells you *All units are reviewed*), approve the document: click **Save revision**, describe the result (for example "Review complete, approved"), set **Status** to *Approved* and click **Save Revision**.
 
 ![Save Revision dialog: approving the document](../images/review-workflow-12-approve.png)
 
@@ -236,7 +236,7 @@ The approved version replaces the annotator's version in the review queue (which
 - Never edit an annotator's version. Give feedback with marks and comments, so that the annotator learns from it and the correction is documented.
 - One not-OK mark per problem, with a comment that says what to change. "Wrong" is not a comment.
 - Mention the annotator in comments that need an answer; comments without a mention notify nobody.
-- Approve only when the progress meter shows no not-OK and no open units.
+- Approve only when the progress bar tooltip shows no not-OK and no open units.
 - If several reviewers review the same document, agree on how marks are combined (see [Combining the marks of several reviewers](unit-review.md#combining-the-marks-of-several-reviewers)).
 
 ## For administrators

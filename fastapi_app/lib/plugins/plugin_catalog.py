@@ -12,6 +12,8 @@ default branch::
       "engines": {"pte": ">=0.76.0"}}]}
 
 ``requires`` lists the ids of the plugins it requires, ``dependencies`` its other Python requirements.
+An optional ``readme`` (http(s) URL) links the plugin's documentation; without it, the README of the
+plugin's ``path`` on the default branch is linked.
 
 A repository with a single plugin lists it with ``"path": "."``. Installable versions are the
 repository's GitHub releases: the tag is ``<id>-v<version>`` (``v<version>`` in a single-plugin
@@ -26,6 +28,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import quote, urlparse
 
 import requests
 
@@ -41,6 +44,7 @@ from fastapi_app.lib.plugins.plugin_install_policy import (
 logger = logging.getLogger(__name__)
 
 API_URL = "https://api.github.com"
+GITHUB_URL = "https://github.com"
 RAW_URL = "https://raw.githubusercontent.com"
 INDEX_FILE = "pte-plugins.json"
 CHECKSUMS_ASSET = "SHA256SUMS"
@@ -140,6 +144,7 @@ class CatalogEntry:
     engines: dict[str, str]
     trusted: bool
     dependencies: list[str] = field(default_factory=list)  # Python requirements besides plugins
+    readme_url: str | None = None
     releases: list[CatalogRelease] = field(default_factory=list)
 
     @property
@@ -165,6 +170,29 @@ class Catalog:
 def _release_tag_pattern(plugin_id: str, single: bool) -> re.Pattern[str]:
     prefix = "" if single else re.escape(plugin_id) + "-"
     return re.compile(rf"^{prefix}v(?P<version>\d+\.\d+\.\d+(?:[-+.][0-9A-Za-z.-]+)?)$")
+
+
+def _readme_url(repository: str, branch: str, path: str, readme: object) -> str:
+    """
+    README link of a plugin in a repository's index.
+
+    Args:
+        repository: ``owner/repo``
+        branch: Default branch of the repository
+        path: Path of the plugin in the repository (``.`` in a single-plugin repository)
+        readme: The entry's ``readme`` value
+
+    Returns:
+        ``readme`` if it is an http(s) URL, otherwise the GitHub page of the plugin's directory, anchored at its README
+    """
+    if isinstance(readme, str):
+        parsed = urlparse(readme)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            return readme
+    directory = path.strip("/")
+    if directory in ("", "."):
+        return f"{GITHUB_URL}/{repository}#readme"
+    return f"{GITHUB_URL}/{repository}/tree/{quote(branch)}/{quote(directory)}#readme"
 
 
 def _wheel_prefix(module: str, version: str) -> str:
@@ -270,6 +298,7 @@ class PluginCatalog:
                 trusted=trusted,
                 dependencies=[str(d) for d in item.get("dependencies", []) if isinstance(d, str)],
             )
+            entry.readme_url = _readme_url(repository, branch, entry.path, item.get("readme"))
             entry.releases = self._releases(entry, releases, single)
             entries.append(entry)
         return entries

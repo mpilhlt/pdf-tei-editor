@@ -129,7 +129,7 @@ test.describe('Unit comments', () => {
       expect(text).toContain('<note type="comment">check the year</note>');
       expect(text).toMatch(/<respStmt>\s*<persName xml:id="testannotator">/);
       await expect(page.locator('#codemirror-container .cm-content')).not.toContainText('check the year');
-      await expect(page.getByTestId('unit-comment-meter')).toHaveText('💬 1 open comment');
+      await expect(page.getByTestId('unit-comment-meter')).toHaveText('💬 1');
       await expect(page.locator('.cm-uc-open')).toHaveCount(1);
 
       // clicking the meter leaves the cursor where it is

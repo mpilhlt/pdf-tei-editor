@@ -7,7 +7,7 @@ Unit review lets reviewers go through a document unit by unit (for example each 
 Click the **Review** button (clipboard icon) in the XML editor toolbar. Review mode adds:
 
 - the status strip left of the line numbers,
-- a progress meter in the status bar (`12 OK · 2 not OK · 30 open`); clicking it shows the diagnostics drawer,
+- a progress bar in the status bar; hover over it to see the counts (`12 OK · 2 not OK · 30 open`), click it to show the diagnostics drawer,
 - a **Review** row of buttons at the top of the editor's context menu, and keyboard shortcuts.
 
 Hover over the **Review** button to see the list of shortcuts.
@@ -51,7 +51,7 @@ Marks are part of the document: they are saved with it, can be undone with `Ctrl
 | --- | --- |
 | Green | OK |
 | Red | Not OK |
-| Red/green | Disputed: as many OK as not-OK votes, needs another reviewer |
+| Dotted red/green | Disputed: as many OK as not-OK votes, needs another reviewer |
 | Grey dashes | The unit was edited after it was reviewed and needs a new review |
 | Amber | Several units with different states share the line |
 | None | Not reviewed yet |
@@ -67,7 +67,7 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 
 When review mode is on and you run **Review document annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
 
-The model's suggestions are listed in the diagnostics drawer, most of them with a fix. If you are a reviewer (or an admin) and apply such a fix, from the diagnostics drawer or with **Propose fix** in the comparison view, you agree with the model: if the unit was marked not OK, it is marked OK in your name and the model's mark is removed, instead of the unit being listed as *Changed after a not-OK review*. A unit with other suggestions of the model that you have not applied keeps its marks. Fixes applied by annotators still need the reviewer to check the unit again.
+The model's suggestions are listed in the diagnostics drawer, most of them with a fix. If you are a reviewer (or an admin) and apply such a fix, from the diagnostics drawer (**Apply fix** or **Apply**) or with **Propose fix** in the comparison view, you agree with the model: if the unit was marked not OK, it is marked OK in your name and the model's mark is removed, instead of the unit being listed as *Changed after a not-OK review*. A unit with other suggestions of the model that you have not applied keeps its marks. Fixes applied by annotators still need the reviewer to check the unit again.
 
 ### Adjusting the rules the model uses
 
@@ -141,7 +141,7 @@ Overrides of the whole guide file that were created before this change are cut d
 
 ### After a proposal is merged
 
-Once a proposal has been merged, the editor marks each of your overrides whose text the guide upstream now contains with a cloud icon, and a status line says how many overrides are now in upstream, with a link that does the same as the **Update to upstream** button. The button then applies the current upstream rules to the document and removes only those overrides. Overrides that differ from upstream are kept. A confirmation names the counts before anything is changed. When you open the editor and the document's rules are behind upstream (the guide changed upstream since the document was annotated, or upstream contains some of your overrides), a warning says so and asks whether to update to upstream; **Confirm** does the same as the button, without a second confirmation. The warning is not shown for a read-only document. After the document is updated, the server checks again, against the rules the document is now pinned to, that they contain each override before it deletes it: an override is only removed when the version of the rules the document now references contains its text. If a deletion fails partway, the message says how many overrides were already removed.
+Once a proposal has been merged, the editor marks each of your overrides whose text the guide upstream now contains with a cloud icon, and a status line says how many overrides are now in upstream, with a link that does the same as the **Update to upstream** button. The button then applies the current upstream rules to the document and removes only those overrides. Overrides that differ from upstream are kept. A confirmation names the counts before anything is changed. When you open the editor and the document's rules are behind upstream (the guide changed upstream since the document was annotated, or upstream contains some of your overrides), a warning says so and asks whether to update to upstream; **Confirm** does the same as the button, without a second confirmation. The warning is not shown for a read-only document. The same check runs in the background shortly after you load a document you can edit, without opening the editor: if the rules of a rule category are behind upstream, a warning names the category and asks whether to update to upstream, and **Confirm** opens the editor on it and runs the update. If they are not behind upstream but the machine rules are outdated against the guide, the warning asks whether to update the machine rules, and **Confirm** opens the editor with **Update from guide**. The check asks about one category per load and does not ask again about a document whose warning you declined, until you reload the page. The editor learns about a change merged upstream within two minutes, since it keeps the latest commit of the guide repository for no longer than that. If the update brings a guide section that changed since the machine rules were last updated from it, a second confirmation asks whether to update the machine rules now; **Confirm** opens **Update from guide**. After the document is updated, the server checks again, against the rules the document is now pinned to, that they contain each override before it deletes it: an override is only removed when the version of the rules the document now references contains its text. If a deletion fails partway, the message says how many overrides were already removed.
 
 ## Edited units
 

@@ -348,6 +348,22 @@ test.describe('Unit review', () => {
       await expect.poll(async () => editorText(page)).not.toContain('unit-review');
       expect(await editorText(page)).not.toContain('<standOff');
       await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 open');
+      // the new version opens with the header folded, as the toggle shows
+      const headerFoldState = () => page.evaluate(() => {
+        const w = /** @type {any} */ (window);
+        return {
+          folded: w.app.getDependency('xmleditor').isFoldedByXpath('//tei:teiHeader'),
+          toggleChecked: w.ui.xmlEditor.toolbar.headerGroup.headerFoldToggle.checked
+        };
+      });
+      await expect.poll(headerFoldState).toEqual({ folded: true, toggleChecked: false });
+      // a change that drops the header's fold without an unfold effect folds it again
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: view.state.doc.toString() } });
+      });
+      await waitForTestMessage(consoleLogs, 'TEI_HEADER_REFOLDED');
+      await expect.poll(headerFoldState).toEqual({ folded: true, toggleChecked: false });
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);
@@ -579,6 +595,15 @@ test.describe('Unit review', () => {
       });
       expect(await editorText(page)).toContain('<bibl>Gamma <date>2003</date>');
       await expect.poll(async () => (await summary(page)).ok, { timeout: 5000 }).toBe(2);
+
+      // fix applied with the drawer's "Apply fix" button, without checking it first
+      await addLlmFinding(page, 'Alpha 2001', '2001', '<date>2001</date>');
+      const alpha = page.locator('.diagnostics-drawer-item', { hasText: 'LLM: tag 2001' });
+      await alpha.locator('sl-checkbox').click();
+      await expect(alpha.locator('sl-checkbox')).toHaveJSProperty('checked', false);
+      await alpha.locator('.diagnostics-drawer-apply-fix').click();
+      await expect.poll(async () => editorText(page)).toContain('<bibl>Alpha <date>2001</date></bibl>');
+      await expect.poll(async () => (await summary(page)).ok, { timeout: 5000 }).toBe(3);
       await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Changed after a not-OK review');
       // the reviewer agreed with the LLM Reviewer: its marks are removed, so nothing is disputed
       expect((await summary(page)).disputed).toBe(0);

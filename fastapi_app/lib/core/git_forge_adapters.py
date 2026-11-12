@@ -24,7 +24,7 @@ from urllib.parse import quote, urlencode, urlsplit
 
 import requests
 
-from fastapi_app.lib.core.url_cache import UrlCache
+from fastapi_app.lib.core.url_cache import BRANCH_HEAD_TTL_SECONDS, UrlCache
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +103,10 @@ class BaseGitForgeAdapter(ABC):
         """
         Return the full SHAs of the commits that touched the file `url`
         points to, newest first, on the URL's ref if that is a branch, else
-        (SHA-pinned URL) on the repo's default branch. Cached with the normal
-        TTL. Raises on HTTP errors; callers handle them. Optional: the
-        default raises NotImplementedError.
+        (SHA-pinned URL) on the repo's default branch. Cached for at most
+        BRANCH_HEAD_TTL_SECONDS, since the branch moves. Raises on HTTP
+        errors; callers handle them. Optional: the default raises
+        NotImplementedError.
         """
         raise NotImplementedError(f"{type(self).__name__} does not support listing file commits")
 
@@ -152,7 +153,7 @@ class GitHubAdapter(BaseGitForgeAdapter):
         if _SHA_RE.match(ref):
             return url
         api_url = f"https://api.github.com/repos/{m['owner']}/{m['repo']}/commits/{ref}"
-        sha = cache.get_text(api_url)
+        sha = cache.get_text(api_url, max_age_seconds=BRANCH_HEAD_TTL_SECONDS)
         if sha is None:
             response = requests.get(
                 api_url, timeout=10, headers={"Accept": "application/vnd.github+json"}
@@ -247,7 +248,7 @@ class GitHubAdapter(BaseGitForgeAdapter):
         # Distinct from the "/commits/{ref}" and "/_default_branch" keys above,
         # so the cache path never doubles as both a file and a directory.
         cache_key = f"{api_url}/_file_commits/{ref}/{path}"
-        cached = cache.get_text(cache_key)
+        cached = cache.get_text(cache_key, max_age_seconds=BRANCH_HEAD_TTL_SECONDS)
         if cached is not None:
             return _full_shas(json.loads(cached))
         response = requests.get(
@@ -302,7 +303,7 @@ class GitLabAdapter(BaseGitForgeAdapter):
             return url
         encoded_project = quote(project_path, safe="")
         api_url = f"{origin}/api/v4/projects/{encoded_project}/repository/commits/{ref}"
-        sha = cache.get_text(api_url)
+        sha = cache.get_text(api_url, max_age_seconds=BRANCH_HEAD_TTL_SECONDS)
         if sha is None:
             response = requests.get(api_url, timeout=10)
             response.raise_for_status()
@@ -377,7 +378,7 @@ class GitLabAdapter(BaseGitForgeAdapter):
         # Distinct from the "/repository/commits/{ref}" and "/_default_branch"
         # keys above, so the cache path never doubles as both a file and a directory.
         cache_key = f"{api_url}/_file_commits/{ref}/{file_path}"
-        cached = cache.get_text(cache_key)
+        cached = cache.get_text(cache_key, max_age_seconds=BRANCH_HEAD_TTL_SECONDS)
         if cached is not None:
             return _full_shas(json.loads(cached))
         response = requests.get(

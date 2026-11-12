@@ -9,14 +9,16 @@
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { StatusToggleButton } from '../modules/panels/widgets/status-toggle-button.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { EditorState } from '@codemirror/state'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { userIsAnnotatorOnly } from '../modules/acl-utils.js'
-import { foldEffect, unfoldEffect, syntaxTree, foldInside } from '@codemirror/language'
+import { foldEffect, unfoldEffect, syntaxTree, foldInside, foldedRanges } from '@codemirror/language'
 import ui from '../ui.js'
+import { testLog } from '../modules/test-log.js'
 
 // Register templates
 await registerTemplate('tei-revision-history-drawer', 'tei-revision-history-drawer.html')
@@ -100,6 +102,11 @@ class TeiToolsPlugin extends Plugin {
         effect.is(foldEffect) && /<teiHeader\b[^>]*>$/.test(tr.startState.doc.sliceString(Math.max(0, effect.value.from - 200), effect.value.from))
       ))
       if (headerFolded) setTimeout(() => this.#foldStandOff(), 0)
+      // CodeMirror drops a fold whose range is replaced without an unfold effect, e.g. when the
+      // whole document text is replaced. While the toggle shows the header as folded, fold it again.
+      if ((update.docChanged || update.transactions.some((tr) => tr.reconfigured)) && !foldChanged && !this.#headerFoldToggle.checked) {
+        setTimeout(() => this.#refoldTeiHeader(), 0)
+      }
     })
   }
 
@@ -179,6 +186,40 @@ class TeiToolsPlugin extends Plugin {
     if (!userIsAnnotatorOnly(this.state.user)) {
       this.uiStorage.set('teiHeaderVisible', visible)
     }
+  }
+
+  /**
+   * Returns the fold range of the teiHeader's content from the syntax tree, which, unlike the DOM
+   * tree, is up to date right after an edit.
+   * @param {EditorState} state
+   * @returns {{from: number, to: number}|null} The range, or null without a teiHeader
+   */
+  #teiHeaderFoldRange(state) {
+    const root = syntaxTree(state).topNode.getChild('Element')
+    for (const child of root?.getChildren('Element') ?? []) {
+      const nameNode = child.getChild('OpenTag')?.getChild('TagName')
+      if (nameNode && state.doc.sliceString(nameNode.from, nameNode.to).split(':').pop() === 'teiHeader') return foldInside(child)
+    }
+    return null
+  }
+
+  /**
+   * Folds the teiHeader again if its fold was dropped while the toggle shows it as folded.
+   */
+  #refoldTeiHeader() {
+    if (this.#headerFoldToggle.checked) return
+    const view = this.#xmlEditorApi.getView()
+    const range = this.#teiHeaderFoldRange(view.state)
+    if (!range) return
+    let folded = false
+    // the same test as XMLEditor.isFoldedByXpath(), from which the toggle is synced
+    foldedRanges(view.state).between(range.from, range.to, () => {
+      folded = true
+      return false
+    })
+    if (folded) return
+    view.dispatch({ effects: foldEffect.of(range) })
+    testLog('TEI_HEADER_REFOLDED', {})
   }
 
   /**

@@ -154,19 +154,22 @@ class StatusBar extends HTMLElement {
   }
 
   /**
-   * Hides each separator whose preceding widget in the same slot is hidden
-   * (or which has no preceding widget), and shows the others
+   * Hides each separator whose preceding or following widget in the same slot is hidden
+   * (or missing), and shows the others
    */
   syncSeparators() {
+    /** @param {Element | undefined} element */
+    const isHidden = element => !element || element.hasAttribute('data-overflow-hidden') || element.getBoundingClientRect().width === 0;
     this.shadowRoot.querySelectorAll('slot').forEach(slot => {
+      const elements = slot.assignedElements();
       let previous = null;
-      for (const element of slot.assignedElements()) {
+      for (const [index, element] of elements.entries()) {
         if (!this.isSeparator(element)) {
           previous = element;
           continue;
         }
-        const previousHidden = !previous || previous.hasAttribute('data-overflow-hidden') || previous.getBoundingClientRect().width === 0;
-        if (previousHidden) {
+        const next = elements.slice(index + 1).find(candidate => !this.isSeparator(candidate));
+        if (isHidden(previous) || isHidden(next)) {
           element.setAttribute('data-overflow-hidden', '');
         } else {
           element.removeAttribute('data-overflow-hidden');

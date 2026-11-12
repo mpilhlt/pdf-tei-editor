@@ -90,8 +90,10 @@ class DialogPlugin extends Plugin {
       this.#ui.cancelBtn.style.display = '';
       this.#ui.confirmBtn.style.display = '';
 
-      const handleConfirm = () => { cleanup(); this.#ui.hide(); resolve(true); };
-      const handleCancel = () => { cleanup(); this.#ui.hide(); resolve(false); };
+      // Resolved once the dialog is hidden, so that a caller can show the next dialog right away:
+      // shown while the hide animation runs, it would receive this one's late `sl-hide`
+      const handleConfirm = () => { cleanup(); this.#ui.hide().then(() => resolve(true)); };
+      const handleCancel = () => { cleanup(); this.#ui.hide().then(() => resolve(false)); };
       const handleHide = () => { cleanup(); resolve(false); };
 
       const cleanup = () => {
