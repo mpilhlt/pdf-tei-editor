@@ -67,7 +67,7 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 
 When review mode is on and you run **Review document annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
 
-The model's suggestions are listed in the diagnostics drawer, most of them with a fix. If you are a reviewer (or an admin) and apply such a fix, from the diagnostics drawer or with **Propose fix** in the comparison view, you agree with the model: if the unit was marked not OK, it is marked OK in your name and the model's mark is removed, instead of the unit being listed as *Changed after a not-OK review*. A unit with other suggestions of the model that you have not applied keeps its marks. Fixes applied by annotators still need the reviewer to check the unit again.
+The model's suggestions are listed in the diagnostics drawer, most of them with a fix. If you are a reviewer (or an admin) and apply such a fix, from the diagnostics drawer (**Apply fix** or **Apply**) or with **Propose fix** in the comparison view, you agree with the model: if the unit was marked not OK, it is marked OK in your name and the model's mark is removed, instead of the unit being listed as *Changed after a not-OK review*. A unit with other suggestions of the model that you have not applied keeps its marks. Fixes applied by annotators still need the reviewer to check the unit again.
 
 ### Adjusting the rules the model uses
 

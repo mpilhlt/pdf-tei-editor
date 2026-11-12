@@ -20,7 +20,8 @@
  * (e.g. after a re-validation) and those whose text was edited count as known, not as added.
  *
  * Clicking a diagnostic selects the text it applies to in the editor. Each
- * diagnostic shows its actions (e.g. "Propose fix") as buttons. The footer
+ * diagnostic shows its actions (e.g. "Propose fix") as buttons, and diagnostics with a fix an
+ * "Apply fix" button that applies only that fix. The footer
  * applies the fixes (`replacement`, see lint-utils.js) of, or dismisses, the
  * checked diagnostics; both switch off the merge view first.
  */
@@ -160,7 +161,8 @@ class DiagnosticsDrawerPlugin extends Plugin {
       // a newly loaded document shows its diagnostics
       if (state.xml) this.#setExpanded(true)
     }
-    if (changedKeys.includes('editorReadOnly') || changedKeys.includes('user')) this.#updateFooter()
+    if (changedKeys.includes('editorReadOnly')) this.#render()
+    else if (changedKeys.includes('user')) this.#updateFooter()
   }
 
   //
@@ -179,27 +181,29 @@ class DiagnosticsDrawerPlugin extends Plugin {
     await this.#pendingRemerges()
     const view = this.#xmlEditor.getView()
     const checked = this.#checkedDiagnostics(view)
-    const { changes, applied } = fixChanges(checked)
-    // test each fix on its own: a transaction filter (e.g. the annotator edit guard)
-    // rejects a whole transaction if any of its changes touches protected text
-    const accepted = applied.filter((_d, i) => {
-      const tr = view.state.update({ changes: changes[i], userEvent: 'input' })
-      return tr.docChanged && tr.newDoc.sliceString(changes[i].from, changes[i].from + changes[i].insert.length) === changes[i].insert
-    })
-    if (accepted.length) {
-      // dismiss first, while the diagnostics still cover the text they are keyed by
-      for (const d of accepted) this.#checked.delete(diagnosticKey(view.state, d))
-      dismissDiagnostics(view, accepted)
-      view.dispatch({ changes: changes.filter((_c, i) => accepted.includes(applied[i])), userEvent: 'input' })
-    }
-    const rejected = applied.length - accepted.length
-    if (rejected) {
-      notify(`${rejected} fix(es) could not be applied because they change protected text.`, 'warning', 'exclamation-triangle')
-    }
-    const kept = checked.length - applied.length
+    const applied = this.#applyFixes(view, checked)
+    const kept = checked.length - applied
     if (kept) {
       notify(`${kept} selected diagnostic(s) have no applicable fix and were kept.`, 'warning', 'exclamation-triangle')
     }
+    this.#scheduleRefresh()
+  }
+
+  /**
+   * Applies the fix of the diagnostic with the given key (see {@link diagnosticKey}) without
+   * confirmation and removes the diagnostic, leaving the checks of the others as they are.
+   * Switches off the merge view first.
+   * @param {string} key
+   * @returns {Promise<void>}
+   */
+  async applyFix(key) {
+    if (this.state?.editorReadOnly) return
+    await this.#switchOffMergeView()
+    await this.#pendingRemerges()
+    const view = this.#xmlEditor.getView()
+    const diagnostic = collectDiagnostics(view.state).find(d => diagnosticKey(view.state, d) === key)
+    if (!diagnostic) return
+    this.#applyFixes(view, [diagnostic])
     this.#scheduleRefresh()
   }
 
@@ -218,6 +222,34 @@ class DiagnosticsDrawerPlugin extends Plugin {
     deleteDiagnostics(view, this.#checkedDiagnostics(view))
     this.#checked.clear()
     this.#scheduleRefresh()
+  }
+
+  /**
+   * Applies the fixes of the given diagnostics and removes the diagnostics whose fix was applied.
+   * Warns about fixes that change protected text.
+   * @param {EditorView} view
+   * @param {FixableDiagnostic[]} diagnostics - With positions in the current editor state
+   * @returns {number} The number of diagnostics with a fix, applied or not
+   */
+  #applyFixes(view, diagnostics) {
+    const { changes, applied } = fixChanges(diagnostics)
+    // test each fix on its own: a transaction filter (e.g. the annotator edit guard)
+    // rejects a whole transaction if any of its changes touches protected text
+    const accepted = applied.filter((_d, i) => {
+      const tr = view.state.update({ changes: changes[i], userEvent: 'input' })
+      return tr.docChanged && tr.newDoc.sliceString(changes[i].from, changes[i].from + changes[i].insert.length) === changes[i].insert
+    })
+    if (accepted.length) {
+      // dismiss first, while the diagnostics still cover the text they are keyed by
+      for (const d of accepted) this.#checked.delete(diagnosticKey(view.state, d))
+      dismissDiagnostics(view, accepted)
+      view.dispatch({ changes: changes.filter((_c, i) => accepted.includes(applied[i])), userEvent: 'input' })
+    }
+    const rejected = applied.length - accepted.length
+    if (rejected) {
+      notify(`${rejected} fix(es) could not be applied because they change protected text.`, 'warning', 'exclamation-triangle')
+    }
+    return applied.length
   }
 
   /**
@@ -445,6 +477,20 @@ class DiagnosticsDrawerPlugin extends Plugin {
         const current = this.#findCurrent(key)
         if (!current) return
         action.apply(this.#xmlEditor.getView(), current.from, current.to)
+      })
+      meta.append(button)
+    }
+    // one-click alternative to checking the diagnostic and clicking Apply
+    if (typeof diagnostic.replacement === 'string') {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'diagnostics-drawer-action diagnostics-drawer-apply-fix'
+      button.textContent = 'Apply fix'
+      button.title = 'Apply this fix without confirmation'
+      button.disabled = Boolean(this.state?.editorReadOnly)
+      button.addEventListener('click', event => {
+        event.stopPropagation()
+        this.applyFix(key)
       })
       meta.append(button)
     }

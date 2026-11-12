@@ -904,8 +904,13 @@ sl-drawer.diagnostics-drawer::part(footer) {
   cursor: pointer;
 }
 
-.diagnostics-drawer-action:hover {
+.diagnostics-drawer-action:hover:not(:disabled) {
   background: var(--sl-color-primary-100);
+}
+
+.diagnostics-drawer-action:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .diagnostics-drawer-footer {
