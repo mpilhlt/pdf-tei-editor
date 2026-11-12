@@ -37,7 +37,7 @@ function withWidth(element, width) {
 /**
  * Creates a status bar of the given width with the right-hand widgets of the XML editor
  * @param {number} barWidth
- * @returns {{bar: StatusBar, indent: HTMLElement, separator: HTMLElement, cursor: HTMLElement, reviewMeter: HTMLElement, commentMeter: HTMLElement}}
+ * @returns {{bar: StatusBar, indent: HTMLElement, separator: HTMLElement, cursor: HTMLElement, navigation: HTMLElement, reviewMeter: HTMLElement, commentMeter: HTMLElement}}
  */
 function createBar(barWidth) {
   const bar = /** @type {StatusBar} */ (document.createElement('status-bar'));
@@ -46,14 +46,16 @@ function createBar(barWidth) {
   const indent = withWidth(document.createElement('span'), 100);
   const separator = withWidth(document.createElement('status-separator'), 10);
   const cursor = withWidth(document.createElement('span'), 80);
+  const navigation = withWidth(document.createElement('span'), 120);
   const reviewMeter = withWidth(document.createElement('span'), 120);
-  const commentMeter = withWidth(document.createElement('span'), 120);
+  const commentMeter = withWidth(document.createElement('span'), 60);
+  bar.add(navigation, 'center', 5);
   bar.add(indent, 'right', -2);
   bar.add(separator, 'right', -2);
-  bar.add(cursor, 'right', -1);
+  bar.add(cursor, 'right', -10);
   bar.add(reviewMeter, 'right', 4);
-  bar.add(commentMeter, 'right', 5);
-  return { bar, indent, separator, cursor, reviewMeter, commentMeter };
+  bar.add(commentMeter, 'right', 6);
+  return { bar, indent, separator, cursor, navigation, reviewMeter, commentMeter };
 }
 
 /** @param {HTMLElement} element */
@@ -63,23 +65,30 @@ describe('StatusBar overflow', () => {
   it('shows all widgets when they fit', () => {
     const w = createBar(1000);
     w.bar.checkAndResolveOverflow();
-    assert.deepStrictEqual([w.indent, w.separator, w.cursor, w.reviewMeter, w.commentMeter].map(hidden), [false, false, false, false, false]);
+    assert.deepStrictEqual([w.indent, w.separator, w.cursor, w.navigation, w.reviewMeter, w.commentMeter].map(hidden), [false, false, false, false, false, false]);
   });
 
-  it('hides indentation and its separator first, then the cursor position', () => {
-    const w = createBar(400);
+  it('hides the cursor position first, then indentation and its separator, then the review meter before the navigation', () => {
+    const w = createBar(500);
     w.bar.checkAndResolveOverflow();
-    assert.strictEqual(hidden(w.indent), true);
-    assert.strictEqual(hidden(w.separator), true, 'separator goes with the widget before it');
-    assert.strictEqual(hidden(w.cursor), false);
+    assert.strictEqual(hidden(w.cursor), true);
+    assert.strictEqual(hidden(w.indent), false);
+    assert.strictEqual(hidden(w.separator), true, 'separator goes with the widget after it');
     assert.strictEqual(hidden(w.reviewMeter), false);
-    assert.strictEqual(hidden(w.commentMeter), false);
 
-    const narrow = createBar(300);
+    const narrow = createBar(400);
     narrow.bar.checkAndResolveOverflow();
     assert.strictEqual(hidden(narrow.cursor), true);
+    assert.strictEqual(hidden(narrow.indent), true);
+    assert.strictEqual(hidden(narrow.separator), true);
     assert.strictEqual(hidden(narrow.reviewMeter), false);
-    assert.strictEqual(hidden(narrow.commentMeter), false);
+    assert.strictEqual(hidden(narrow.navigation), false);
+
+    const narrower = createBar(260);
+    narrower.bar.checkAndResolveOverflow();
+    assert.strictEqual(hidden(narrower.reviewMeter), true);
+    assert.strictEqual(hidden(narrower.navigation), false);
+    assert.strictEqual(hidden(narrower.commentMeter), false);
   });
 
   it('shows hidden widgets again when space becomes available', () => {
@@ -97,6 +106,14 @@ describe('StatusBar overflow', () => {
     withWidth(w.indent, 0);
     w.bar.checkAndResolveOverflow();
     assert.strictEqual(hidden(w.separator), true);
+  });
+
+  it('hides a separator whose following widget is hidden', () => {
+    const w = createBar(1000);
+    withWidth(w.cursor, 0);
+    w.bar.checkAndResolveOverflow();
+    assert.strictEqual(hidden(w.separator), true);
+    assert.strictEqual(hidden(w.indent), false);
   });
 
   it('is exported as StatusBar', () => {

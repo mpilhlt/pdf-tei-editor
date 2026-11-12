@@ -15,7 +15,7 @@ Shows the artifact type prefix (**Gold:** or **Version:**), the artifact label, 
 Contains action buttons grouped by function. What buttons are visible depends on the document state and your role (see [Toolbar buttons](#toolbar-buttons)).
 
 **Statusbar** (bottom strip)
-Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls and the **Focus** toggle. Right side: the review and comment counters (when the document has review marks or comments), indentation style, cursor position and, at the far right, the editor theme picker (palette icon). When the editor is narrow, the theme picker is the first item to be hidden.
+Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls and the **Focus** toggle. Right side: the review progress bar and the open comments counter (when the document has review marks or comments), indentation style, cursor position and, at the far right, the editor theme picker (palette icon). When the editor is narrow, items are hidden in this order: cursor position, theme picker, indentation style, then the left-side items, the review progress bar and the navigation controls. The open comments counter is hidden last.
 
 ---
 
