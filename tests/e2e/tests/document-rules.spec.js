@@ -550,6 +550,8 @@ test.describe('Document rules registry', () => {
         // A human override with changed text makes the machine rules outdated.
         await dialog.locator('sl-tab[name="humanLayerTab"]').click();
         await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+        // Type only once the new override is selected, which re-renders the editor and would drop earlier input
+        await expect(dialog.locator('[name="overrideRow"] sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
         const mdContent = dialog.locator('[name="mdContainer"] .cm-content');
         await mdContent.click();
         await page.keyboard.press('ControlOrMeta+End');
@@ -632,6 +634,8 @@ test.describe('Document rules registry', () => {
         for (const tab of ['machineLayerTab', 'humanLayerTab']) {
           await dialog.locator(`sl-tab[name="${tab}"]`).click();
           await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+          // Type only once the new override is selected, which re-renders the editor and would drop earlier input
+          await expect(dialog.locator('[name="overrideRow"] sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
           await mdContent.click();
           await page.keyboard.press('ControlOrMeta+End');
           await page.keyboard.type(' Changed.');
@@ -709,6 +713,8 @@ test.describe('Document rules registry', () => {
         for (const tab of ['machineLayerTab', 'humanLayerTab']) {
           await dialog.locator(`sl-tab[name="${tab}"]`).click();
           await dialog.locator('sl-button[name="newOverrideBtn"]').click();
+          // Type only once the new override is selected, which re-renders the editor and would drop earlier input
+          await expect(dialog.locator('[name="overrideRow"] sl-button:has-text("Override 1")')).toHaveAttribute('variant', 'primary');
           await mdContent.click();
           await page.keyboard.press('ControlOrMeta+End');
           await page.keyboard.type(' Changed.');
