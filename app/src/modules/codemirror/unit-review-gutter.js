@@ -91,7 +91,7 @@ const theme = View.baseTheme({
   '.cm-ur-strip': { width: '4px', height: '100%' },
   '.cm-ur-ok': { background: '#2f9e57' },
   '.cm-ur-not-ok': { background: '#d64545' },
-  '.cm-ur-disputed': { background: 'linear-gradient(180deg, #d64545 0 50%, #2f9e57 50% 100%)' },
+  '.cm-ur-disputed': { background: 'repeating-linear-gradient(180deg, #d64545 0 3px, #2f9e57 3px 6px)' },
   '.cm-ur-stale': { background: 'repeating-linear-gradient(180deg, #8a8f98 0 3px, transparent 3px 6px)' },
   '.cm-ur-uncertain': { background: '#e0a020' },
   '.cm-ur-drag': { background: '#0b6bcb' }

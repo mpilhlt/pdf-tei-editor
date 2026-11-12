@@ -51,7 +51,7 @@ Marks are part of the document: they are saved with it, can be undone with `Ctrl
 | --- | --- |
 | Green | OK |
 | Red | Not OK |
-| Red/green | Disputed: as many OK as not-OK votes, needs another reviewer |
+| Dotted red/green | Disputed: as many OK as not-OK votes, needs another reviewer |
 | Grey dashes | The unit was edited after it was reviewed and needs a new review |
 | Amber | Several units with different states share the line |
 | None | Not reviewed yet |
