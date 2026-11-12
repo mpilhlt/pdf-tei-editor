@@ -196,7 +196,7 @@ A resolved thread is no longer listed in the diagnostics drawer, but it stays wi
 
 ### Disputed units
 
-If several reviewers have marked a unit, their marks are combined (see [Combining the marks of several reviewers](unit-review.md#combining-the-marks-of-several-reviewers)). With as many OK as not-OK marks, the unit is *disputed*: the strip shows it red and green, and the diagnostics drawer lists it as *Review disputed*, with the marks and comments of the other reviewers. This happens, for example, when the [LLM reviewer](unit-review.md#llm-reviewer) marked a unit as not OK that a person found OK, or the other way round.
+If several reviewers have marked a unit, their marks are combined (see [Combining the marks of several reviewers](unit-review.md#combining-the-marks-of-several-reviewers)). With as many OK as not-OK marks, the unit is *disputed*: the strip shows it dotted red and green, and the diagnostics drawer lists it as *Review disputed*, with the marks and comments of the other reviewers. This happens, for example, when the [LLM reviewer](unit-review.md#llm-reviewer) marked a unit as not OK that a person found OK, or the other way round.
 
 A disputed unit needs another review to break the tie. Click **✓ OK** or **✕ Not OK** in the drawer, or **Open review** to see the other reviews in the review popover first: under *Other reviews* it lists each mark with its comment and shows the combined result. `Shift+F7` also stops at disputed units.
 
