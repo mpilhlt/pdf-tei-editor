@@ -2,6 +2,36 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.83.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.82.0...v0.83.0) (2026-11-12)
+
+
+### Bug Fixes
+
+* **file-selection:** don't load a deleted version after deleting it ([fa74d5c](https://github.com/mpilhlt/pdf-tei-editor/commit/fa74d5cbffe3408a91234b5b0c09432620c9393f))
+* **filedata:** queue file data reloads instead of dropping them ([b9a0510](https://github.com/mpilhlt/pdf-tei-editor/commit/b9a05105f731b11b26cd551417fb2263b4825dc9)), closes [#734](https://github.com/mpilhlt/pdf-tei-editor/issues/734)
+* **locks:** keep the lock after a reload and say who holds a lock ([586942a](https://github.com/mpilhlt/pdf-tei-editor/commit/586942ab71fd8b4e90055ef025a8ca572654c31b)), closes [#742](https://github.com/mpilhlt/pdf-tei-editor/issues/742)
+* **pdfviewer:** make PDF links non-interactive ([9e2ca2e](https://github.com/mpilhlt/pdf-tei-editor/commit/9e2ca2edad6f923a3066cfa6e6982955a4f34485))
+* **plugin-admin:** show a spinner on the install button and notify when the install has finished ([fc56506](https://github.com/mpilhlt/pdf-tei-editor/commit/fc56506b1be54f30b5c3b20fc0b89506bb14261a))
+* **plugins:** a runtime-installed plugin that fails to load keeps its id ([d0082df](https://github.com/mpilhlt/pdf-tei-editor/commit/d0082df1e8d1a82f89b6235f3fed1af4a6c04d0d))
+* **plugins:** install packages that a plugin requires by direct reference ([f8017fb](https://github.com/mpilhlt/pdf-tei-editor/commit/f8017fb8110c6847dfad6260b5f06b13ffe6994c))
+* **plugins:** installing a plugin replaces an unpacked version directory ([edf1936](https://github.com/mpilhlt/pdf-tei-editor/commit/edf19367c177f669552d8df41916e884d01cda30))
+* **plugins:** update google-llm to 1.2.0 (rate-limit state) ([d36b76e](https://github.com/mpilhlt/pdf-tei-editor/commit/d36b76ebdf0318c52e0f969ad072351c51f3e84e)), closes [mpilhlt/pte-plugins#39](https://github.com/mpilhlt/pte-plugins/issues/39)
+* **plugins:** update the first-party plugins to the rate-limit releases ([a74174e](https://github.com/mpilhlt/pdf-tei-editor/commit/a74174e65212bd9cb95c1c0da5fb062fb05cdfbd)), closes [mpilhlt/pte-plugins#36](https://github.com/mpilhlt/pte-plugins/issues/36) [#721](https://github.com/mpilhlt/pdf-tei-editor/issues/721)
+* **xmleditor:** saving waits for an auto-save in flight and retries a dropped save ([18fde0d](https://github.com/mpilhlt/pdf-tei-editor/commit/18fde0d5905f75aa38527c5f003f931d8d8be20a))
+
+
+### Features
+
+* **diagnostics:** Delete button removes review marks and comments ([5f78e94](https://github.com/mpilhlt/pdf-tei-editor/commit/5f78e94a8729d24ff39d996142db2cb05a69c800))
+* **diagnostics:** reviewers' Dismiss removes review and comment entries ([4f661c7](https://github.com/mpilhlt/pdf-tei-editor/commit/4f661c7f3fd0bc0dcb5f9978e418318c6a24928a))
+* **document-rules:** alert dialogs for a created pull request and outdated rules ([a08c60f](https://github.com/mpilhlt/pdf-tei-editor/commit/a08c60f87c282c9bc34a9c46511c78850ae40bd8))
+* **llm:** LLMProvider.for_user() hook for per-user providers ([4bcaf62](https://github.com/mpilhlt/pdf-tei-editor/commit/4bcaf62016e342295431697f357f5501a20503a3))
+* **manual:** manual links, TOC drop-up and heading links in the user manual ([b1d83a8](https://github.com/mpilhlt/pdf-tei-editor/commit/b1d83a8a51011e9ead062354a60af82deb0d3a45)), closes [page#anchor](https://github.com/page/issues/anchor)
+* **plugins:** open plugin pages with launch tokens instead of the session id ([f4eb517](https://github.com/mpilhlt/pdf-tei-editor/commit/f4eb517583de665c829de41fca5180cf6b0b18d2)), closes [#731](https://github.com/mpilhlt/pdf-tei-editor/issues/731) [#246](https://github.com/mpilhlt/pdf-tei-editor/issues/246)
+* **plugins:** send the opening tab's session with plugin page requests ([73dae17](https://github.com/mpilhlt/pdf-tei-editor/commit/73dae176649f072cc295da059ac49bb54898aae5)), closes [#731](https://github.com/mpilhlt/pdf-tei-editor/issues/731)
+* **unit-review:** accept units in which a reviewer applies an LLM fix ([2db8bd5](https://github.com/mpilhlt/pdf-tei-editor/commit/2db8bd5d028eb3e4ea8fe491de2b30380a35e24e))
+* **unit-review:** color lint markers of reviewed lines like the review gutter ([2089f19](https://github.com/mpilhlt/pdf-tei-editor/commit/2089f1982fba1851dc32a097ccb959e670151ea5))
+
 # [0.82.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.81.0...v0.82.0) (2026-11-10)
 
 
