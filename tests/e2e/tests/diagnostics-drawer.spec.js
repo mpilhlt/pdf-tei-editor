@@ -300,7 +300,7 @@ test.describe('Diagnostics drawer', () => {
       expect(selected).toBe('<body');
 
       // a diagnostic's actions are buttons called with its current range
-      await page.locator('.diagnostics-drawer-item', { hasText: 'fix A' }).locator('.diagnostics-drawer-action').click();
+      await page.locator('.diagnostics-drawer-item', { hasText: 'fix A' }).locator('.diagnostics-drawer-action', { hasText: 'Propose fix' }).click();
       const proposed = await page.evaluate(() => {
         const w = /** @type {any} */ (window);
         const text = w.app.getDependency('xmleditor').getView().state.doc.toString();
@@ -331,17 +331,27 @@ test.describe('Diagnostics drawer', () => {
       expect(afterApply.mergeView).toBe(false);
       expect(afterApply.text).toContain('<!--A--><front');
 
+      // only diagnostics with a fix have an "Apply fix" button
+      await expect(page.locator('.diagnostics-drawer-item', { hasText: 'no fix C' }).locator('.diagnostics-drawer-apply-fix')).toHaveCount(0);
+
       // Dismiss: removes the checked diagnostic (C is still checked)
       await page.locator('sl-button[name="dismissBtn"]').click();
       await expect.poll(async () => (await drawerState(page)).messages).toEqual(['fix B']);
 
-      // Select all + Apply
-      await page.locator('sl-checkbox[name="selectAll"]').click();
-      await page.locator('sl-button[name="applyBtn"]').click();
+      // "Apply fix": switches off the merge view and applies only this fix, although it is unchecked
+      await page.evaluate(async () => {
+        const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        await xmleditor.showMergeView(xmleditor.getView().state.doc.toString().replace('<front', '<front '));
+      });
+      expect((await drawerEntries(page)).find(e => e.message === 'fix B')?.checked).toBe(false);
+      await page.locator('.diagnostics-drawer-item', { hasText: 'fix B' }).locator('.diagnostics-drawer-apply-fix').click();
       await expect.poll(async () => (await drawerState(page)).messages).toEqual([]);
-      const text = await page.evaluate(() =>
-        (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
-      expect(text).toContain('<!--B--><body');
+      const afterApplyFix = await page.evaluate(() => {
+        const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        return { mergeView: xmleditor.isMergeViewActive(), text: xmleditor.getView().state.doc.toString() };
+      });
+      expect(afterApplyFix.mergeView).toBe(false);
+      expect(afterApplyFix.text).toContain('<!--B--><body');
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);
