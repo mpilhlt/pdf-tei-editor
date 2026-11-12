@@ -128,6 +128,7 @@ test.describe('Plugin manager', () => {
           plugins: [
             {
               id: 'demo-plugin', repository: 'mpilhlt/pte-plugins', description: 'A trusted plugin', index_version: '1.0.0',
+              readme_url: 'https://github.com/mpilhlt/pte-plugins/tree/main/plugins/demo-plugin#readme',
               latest_version: '1.0.0', latest_tag: 'demo-plugin-v1.0.0', versions: ['1.0.0'], installed_version: null,
               installed_source: null, requires: [], unmet_requirements: [], trusted: true, compatible: true, incompatible_reason: null,
               installable: true, update_available: false
@@ -158,6 +159,9 @@ test.describe('Plugin manager', () => {
       await availableTab.click();
       await expect(page.locator('[data-available="demo-plugin"]')).toContainText('Trusted');
       await expect(page.locator('[data-available="stranger-plugin"]')).toContainText('Unverified');
+      await expect(page.locator('[data-available="demo-plugin"] sl-button[href]', { hasText: 'README' }))
+        .toHaveAttribute('href', 'https://github.com/mpilhlt/pte-plugins/tree/main/plugins/demo-plugin#readme');
+      await expect(page.locator('[data-available="stranger-plugin"] sl-button[href]')).toHaveCount(0);
 
       // Installing from an untrusted repository requires typing its name
       await page.locator('sl-button[data-install="stranger-plugin"]').click();

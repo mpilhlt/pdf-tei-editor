@@ -103,6 +103,7 @@ class AvailablePlugin(BaseModel):
     id: str
     repository: str
     description: str
+    readme_url: str | None = None
     index_version: str
     latest_version: str | None
     latest_tag: str | None
