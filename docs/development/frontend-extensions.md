@@ -162,8 +162,15 @@ ui.pdfViewer.statusbar.add(widget, 'right', 3);
 
 **Register an XSL stylesheet:**
 ```javascript
-this.getDependency('xsl-viewer').register({ label: 'My View', xmlns: 'http://...', xslDoc });
+this.getDependency('xsl-viewer').register({
+  label: 'Reference list',
+  xmlns: 'http://www.tei-c.org/ns/1.0',
+  xslDoc,
+  appliesTo: 'boolean(//tei:biblStruct)'
+});
 ```
+
+The toolbar menu lists only the stylesheets that apply to the open document, and the button is disabled when none does. A stylesheet applies when the document's root element is in `xmlns` and its optional `appliesTo` test passes. `appliesTo` is either an XPath expression, evaluated against the document with the prefixes `tei` and `xml` bound and converted to a boolean, or a function `(xmlDoc) => boolean` for tests XPath cannot express. Without `appliesTo`, the stylesheet is offered for every document in the namespace. Prefer a test on the elements the stylesheet transforms over a test on the document's variant, so that it works for every document type containing them.
 
 **React to state with per-key handler:**
 ```javascript
