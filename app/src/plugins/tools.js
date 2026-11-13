@@ -89,7 +89,8 @@ class ToolsPlugin extends Plugin {
    * Add menu items to the native frontend dropdown.
    * @param {HTMLElement[]} elements - Items to add
    * @param {string} [category] - Optional category name. A formatted label is inserted
-   *   automatically and hidden via MutationObserver when all its items are hidden.
+   *   automatically and hidden via MutationObserver when all its items are hidden. Items of an
+   *   existing category are inserted after its last item, not at the end of the menu.
    */
   addMenuItems(elements, category) {
     const menu = this.#ui.toolsDropdown.toolsMenu
@@ -108,8 +109,11 @@ class ToolsPlugin extends Plugin {
         group = { label, divider, items: [] }
         this.#categoryGroups.set(category, group)
       }
+      // after the category's last item, so that items added later by another plugin stay in their category
+      let anchor = group.items.at(-1) ?? group.label
       elements.forEach(el => {
-        menu.appendChild(el)
+        anchor.after(el)
+        anchor = el
         group.items.push(el)
         this.#observer.observe(el, { attributes: true, attributeFilter: ['style'] })
       })
