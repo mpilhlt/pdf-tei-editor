@@ -2,6 +2,19 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.85.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.84.1...v0.85.0) (2026-11-13)
+
+
+### Bug Fixes
+
+* **document-rules:** let the "both changed" sync notice record the sync ([971c403](https://github.com/mpilhlt/pdf-tei-editor/commit/971c403bb400947b105a56eea600188f469b4a8b))
+* **tools:** keep menu items in their category ([014e4a5](https://github.com/mpilhlt/pdf-tei-editor/commit/014e4a5d360f00353dec635aa0054f8f6ace1b6a))
+
+
+### Features
+
+* **progress:** let a progress widget start minimized ([c8cc3d2](https://github.com/mpilhlt/pdf-tei-editor/commit/c8cc3d2fc3a9e06c8a16e76eb4ceeb6d2b946b9d))
+
 ## [0.84.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.84.0...v0.84.1) (2026-11-12)
 
 
