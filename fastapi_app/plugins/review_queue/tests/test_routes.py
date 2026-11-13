@@ -72,6 +72,28 @@ class TestReviewQueueRoute(unittest.TestCase):
 
         self.assertEqual(self._get()["documents"], [])
 
+    def test_skips_frozen_versions_even_when_updated_after_their_copy(self):
+        reviewed = self.files.add("doc-a", collections=["c1"], status="in-review")
+        final = self.files.add("doc-a", collections=["c1"], status="approved", parent_stable_id=reviewed.stable_id)
+        self.files.set_updated_at(final.stable_id, "2026-10-01 10:00:00")
+        self.files.set_updated_at(reviewed.stable_id, "2026-10-02 10:00:00")
+
+        self.assertEqual(self._get()["documents"], [])
+
+    def test_lists_a_copy_in_review_although_its_frozen_parent_was_updated_later(self):
+        approved = self.files.add("doc-a", collections=["c1"], status="approved")
+        copy = self.files.add("doc-a", collections=["c1"], status="in-review", parent_stable_id=approved.stable_id)
+        self.files.set_updated_at(copy.stable_id, "2026-10-01 10:00:00")
+        self.files.set_updated_at(approved.stable_id, "2026-10-02 10:00:00")
+
+        self.assertEqual([d["stable_id"] for d in self._get()["documents"]], [copy.stable_id])
+
+    def test_skips_the_users_own_versions(self):
+        self.files.add("doc-a", collections=["c1"], status="in-review", created_by="alice")
+        self.files.add("doc-b", collections=["c1"], status="in-review", created_by="bob")
+
+        self.assertEqual([d["doc_id"] for d in self._get()["documents"]], ["doc-b"])
+
     def test_lists_each_variant_separately_and_supports_several_statuses(self):
         self.statuses = ["in-review", "checked"]
         self.files.add("doc-a", collections=["c1"], status="in-review", variant="v1")

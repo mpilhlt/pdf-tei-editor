@@ -36,6 +36,8 @@ class TempFileRepository:
         variant: str | None = None,
         title: str | None = None,
         label: str | None = None,
+        parent_stable_id: str | None = None,
+        created_by: str | None = None,
     ) -> FileMetadata:
         """Insert a file; `title` is stored as document metadata."""
         self._counter += 1
@@ -50,6 +52,8 @@ class TempFileRepository:
             doc_collections=collections or [],
             doc_metadata={"title": title} if title else {},
             label=label,
+            parent_stable_id=parent_stable_id,
+            created_by=created_by,
         ))
 
     def set_updated_at(self, stable_id: str, timestamp: str) -> None:
