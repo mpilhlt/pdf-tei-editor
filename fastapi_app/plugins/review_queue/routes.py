@@ -20,8 +20,9 @@ async def review_queue_documents(
 ) -> dict[str, Any]:
     """Return the accessible documents whose status is one of `plugin.review-queue.statuses`.
 
-    A document (per variant) is listed if its most recently updated TEI file has one of the
-    statuses, so documents that moved on in a newer version are not listed. Newest first,
+    A document (per variant) is listed if its most recently updated TEI file that is not frozen
+    has one of the statuses, so documents that moved on in a newer version are not listed, even
+    when the older version was changed after the newer one was copied from it. Newest first,
     each with the name of the most specific project that contains it. Documents of archived
     projects are not listed. Users without the reviewer or admin role get an empty list.
     """
@@ -42,15 +43,18 @@ async def review_queue_documents(
     projects = sorted(get_visible_projects(user, settings.db_dir), key=project_specificity)
     resolver = DocumentInfoResolver(file_repo, get_archived_collection_ids(settings.db_dir))
 
+    frozen = file_repo.get_frozen_stable_ids()
     documents: list[dict[str, Any]] = []
     seen: set[tuple[str, str | None]] = set()
     for tei_file in file_repo.get_tei_files_by_status(statuses):
+        if tei_file.stable_id in frozen:
+            continue
         key = (tei_file.doc_id, tei_file.variant)
         if key in seen or resolver.is_archived(tei_file):
             continue
         seen.add(key)
         latest = max(
-            (f for f in file_repo.get_files_by_doc_id(tei_file.doc_id) if f.file_type == "tei" and f.variant == tei_file.variant),
+            (f for f in file_repo.get_files_by_doc_id(tei_file.doc_id) if f.file_type == "tei" and f.variant == tei_file.variant and f.stable_id not in frozen),
             key=lambda f: f.updated_at,
             default=tei_file,
         )
