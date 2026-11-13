@@ -22,7 +22,8 @@ async def review_queue_documents(
 
     A document (per variant) is listed if its most recently updated TEI file that is not frozen
     has one of the statuses, so documents that moved on in a newer version are not listed, even
-    when the older version was changed after the newer one was copied from it. Newest first,
+    when the older version was changed after the newer one was copied from it. Versions that the
+    user owns (`created_by`) are not listed, since they wait for someone else's review. Newest first,
     each with the name of the most specific project that contains it. Documents of archived
     projects are not listed. Users without the reviewer or admin role get an empty list.
     """
@@ -58,7 +59,7 @@ async def review_queue_documents(
             key=lambda f: f.updated_at,
             default=tei_file,
         )
-        if latest.stable_id != tei_file.stable_id:
+        if latest.stable_id != tei_file.stable_id or latest.created_by == user.get("username"):
             continue
         entry = resolver.entry(tei_file)
         project = next((p for p in projects if project_includes(p, entry["collections"])), None)

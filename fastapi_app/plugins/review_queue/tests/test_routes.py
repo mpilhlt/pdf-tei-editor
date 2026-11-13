@@ -88,6 +88,12 @@ class TestReviewQueueRoute(unittest.TestCase):
 
         self.assertEqual([d["stable_id"] for d in self._get()["documents"]], [copy.stable_id])
 
+    def test_skips_the_users_own_versions(self):
+        self.files.add("doc-a", collections=["c1"], status="in-review", created_by="alice")
+        self.files.add("doc-b", collections=["c1"], status="in-review", created_by="bob")
+
+        self.assertEqual([d["doc_id"] for d in self._get()["documents"]], ["doc-b"])
+
     def test_lists_each_variant_separately_and_supports_several_statuses(self):
         self.statuses = ["in-review", "checked"]
         self.files.add("doc-a", collections=["c1"], status="in-review", variant="v1")

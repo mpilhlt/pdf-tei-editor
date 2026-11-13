@@ -10,7 +10,7 @@ Contributes a "Waiting for review" box to the [dashboard](../dashboard/README.md
 
 The environment variable sets the initial value when the key is not yet in `config.json`.
 
-A document is listed per variant, and only if its most recently updated TEI file that is not frozen (no other version was copied from it) has one of the statuses, so documents that moved on in a newer version disappear from the list. Documents in collections that belong only to archived projects are not listed.
+A document is listed per variant, and only if its most recently updated TEI file that is not frozen (no other version was copied from it) has one of the statuses, so documents that moved on in a newer version disappear from the list. Versions that the user owns (created them) are not listed. Documents in collections that belong only to archived projects are not listed.
 
 ## Route
 
