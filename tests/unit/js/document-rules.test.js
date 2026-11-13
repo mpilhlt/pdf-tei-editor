@@ -2122,7 +2122,7 @@ describe('DocumentRulesPlugin sync status line', () => {
     ['in_sync', 'In sync with the guide', 'check-circle'],
     ['machine_outdated', 'Machine rules outdated: the guide changed since the last sync. Update from guide', 'exclamation-triangle'],
     ['machine_edited', 'Machine rules edited by hand since the last sync', 'exclamation-triangle'],
-    ['both_changed', 'Guide and machine rules both changed since the last sync. If the machine rules already match the guide, propose both upstream to record the sync. Propose change upstream', 'exclamation-triangle'],
+    ['both_changed', 'Guide and machine rules both changed since they were last marked as in sync. If the machine rules already reflect the guide, you can mark them as in sync. This only updates the sync marker in the repository, not the texts. Mark as in sync', 'exclamation-triangle'],
     ['no_marker', 'No sync marker', 'exclamation-triangle'],
   ];
   for (const [status, text, icon] of cases) {
@@ -2899,6 +2899,15 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       await plugin._openProposeDialog();
       const ui = plugin._proposeDialogUi;
       assert.strictEqual(ui.includeHuman.checked, false);
+      assert.strictEqual(ui.includeMachine.checked, true);
+    });
+
+    it('checks both layers when asked to, e.g. to record a sync from the sync status line', async () => {
+      const { plugin } = setup();
+      plugin._currentResource = human;
+      await plugin._openProposeDialog({ includeBoth: true });
+      const ui = plugin._proposeDialogUi;
+      assert.strictEqual(ui.includeHuman.checked, true);
       assert.strictEqual(ui.includeMachine.checked, true);
     });
   });
@@ -3923,7 +3932,7 @@ describe('DocumentRulesPlugin editing workflow (#702)', () => {
       assert.deepStrictEqual(calls, ['update']);
     });
 
-    it('"Propose change upstream" in the both-changed status opens the propose sub-dialog', async () => {
+    it('"Mark as in sync" in the both-changed status opens the propose sub-dialog', async () => {
       const { line, calls } = await syncLine('both_changed');
       line.querySelector('a[name="syncStatusProposeLink"]').dispatchEvent(new dom.window.MouseEvent('click', { cancelable: true }));
       assert.deepStrictEqual(calls, ['propose']);
