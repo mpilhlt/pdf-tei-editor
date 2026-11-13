@@ -12,13 +12,14 @@
  * ### `progressShow`
  * Shows or creates a progress widget. Data is JSON:
  * ```json
- * {"progress_id": "abc123", "label": "Processing...", "value": null, "cancellable": true, "cancelUrl": "/api/plugins/my-plugin/cancel/abc123"}
+ * {"progress_id": "abc123", "label": "Processing...", "value": null, "cancellable": true, "cancelUrl": "/api/plugins/my-plugin/cancel/abc123", "minimized": false}
  * ```
  * - `progress_id` (string, required): Unique identifier for this progress instance
  * - `label` (string, optional): Initial text label
  * - `value` (number|null, optional): Initial progress value (0-100), null for indeterminate
  * - `cancellable` (boolean, optional): Whether to show cancel button (default: true)
  * - `cancelUrl` (string, optional): URL to POST to when cancel button is clicked
+ * - `minimized` (boolean, optional): Start minimized (default: false), unless the user toggled this widget before
  *
  * ### `progressValue`
  * Sets the progress value. Data is JSON:
@@ -102,10 +103,11 @@ class ProgressPlugin extends Plugin {
 
   /**
    * @param {string} progressId
-   * @returns {boolean}
+   * @returns {boolean|null} null if the user has not toggled the widget yet
    */
   #getMinimizedState(progressId) {
-    return sessionStorage.getItem(`progress-widget-minimized-${progressId}`) === 'true'
+    const stored = sessionStorage.getItem(`progress-widget-minimized-${progressId}`)
+    return stored === null ? null : stored === 'true'
   }
 
   /**
@@ -278,13 +280,14 @@ class ProgressPlugin extends Plugin {
    * @param {boolean} [options.cancellable=true]
    * @param {string} [options.cancelUrl]
    * @param {() => void} [options.onCancel] Called when the user clicks cancel (for client-driven work)
+   * @param {boolean} [options.minimized=false] Start minimized, unless the user toggled this widget before
    */
   show(progressId, options = {}) {
-    const { label = '', value = null, cancellable = true, cancelUrl, onCancel } = options
+    const { label = '', value = null, cancellable = true, cancelUrl, onCancel, minimized = false } = options
     const widget = this.#getOrCreateWidget(progressId)
     if (cancelUrl) this.#cancelUrls.set(progressId, cancelUrl)
     if (onCancel) this.#cancelHandlers.set(progressId, onCancel)
-    this.#applyMinimizedState(widget, this.#getMinimizedState(progressId))
+    this.#applyMinimizedState(widget, this.#getMinimizedState(progressId) ?? minimized)
     this.#setWidgetValue(widget, value)
     this.#setWidgetLabel(widget, label)
     widget._cancelBtn.style.display = cancellable ? '' : 'none'
