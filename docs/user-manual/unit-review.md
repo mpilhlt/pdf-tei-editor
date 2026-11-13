@@ -85,10 +85,10 @@ When a category has both layers, a status line below the tabs shows whether the 
 | In sync with the guide | Neither the guide section nor the machine rules changed since the last sync. |
 | Machine rules outdated: the guide changed since the last sync | The guide section changed; the machine rules still reflect the old text. The line links to **Update from guide**. |
 | Machine rules edited by hand since the last sync | The machine rules changed, the guide section did not. |
-| Guide and machine rules both changed since the last sync | Both changed, for example after you accepted an update from the guide. If the machine rules already match the guide, propose both upstream to record the sync; the line links to **Propose change upstream**. |
+| Guide and machine rules both changed since they were last marked as in sync | Both changed, for example after you accepted an update from the guide, or after someone edited both files in the repository. If the machine rules already reflect the guide, click **Mark as in sync**: it opens **Propose upstream** with both layers selected. If neither text differs from the repository, the patch only updates the sync marker. |
 | No sync marker | The machine rules carry no marker, so nothing can be compared. |
 
-The guide repository does not check the markers itself: the machine rules are kept in sync from here, with **Update from guide** and **Propose change upstream** (see below). If someone changes either file directly in the repository, the status line shows it.
+The guide repository does not check the markers itself: the machine rules are kept in sync from here, with **Update from guide**, **Mark as in sync** and **Propose change upstream** (see below). If someone changes either file directly in the repository, the status line shows it.
 
 When the guide changed and the guide is on GitHub or GitLab, the line also names the commit of the guide that the machine rules were last synced with, e.g. "(last sync: a1b2c3d)". The line is refreshed when you switch tabs, select a version or save.
 
@@ -102,7 +102,7 @@ An override that was written against an older version of the original is marked 
 
 **Update from guide** (button on the **Machine rules** tab, for reviewers and admins) has a language model update the machine rules after the guide section changed. The dialog shows how the guide section changed since the machine rules were last synced (**Change in the guide**), lets you choose a model and click **Generate**, and shows the result as a diff against the current machine rules (**Proposed machine rules**), scrolled into view; both diffs show only the changed lines with a few lines of context, and a click on a collapsed stretch expands it. Nothing is saved until you click **Accept as new override**, which appears once there is a proposal: the proposal then becomes a new override of the machine rules, selected for you, with a note naming the model. Other users and the original are not affected, and you can edit the override afterwards.
 
-After you accept an update, the status line says that the guide and the machine rules both changed since the last sync until the change is proposed upstream, because the sync marker in the machine rules stays unchanged until then. If the selected machine rules already came from such an update, the dialog warns you that running the update again may apply the same change twice.
+After you accept an update, the status line says that the guide and the machine rules both changed since they were last marked as in sync until the change is proposed upstream, because the sync marker in the machine rules stays unchanged until then. If the selected machine rules already came from such an update, the dialog warns you that running the update again may apply the same change twice.
 
 The dialog works in one of two modes:
 

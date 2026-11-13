@@ -135,8 +135,16 @@ const SYNC_STATUS_TEXT = Object.freeze({
   in_sync: 'In sync with the guide',
   machine_outdated: 'Machine rules outdated: the guide changed since the last sync',
   machine_edited: 'Machine rules edited by hand since the last sync',
-  both_changed: 'Guide and machine rules both changed since the last sync. If the machine rules already match the guide, propose both upstream to record the sync',
+  both_changed: 'Guide and machine rules both changed since they were last marked as in sync',
   no_marker: 'No sync marker'
+})
+
+/**
+ * Hint shown after the status-line copy (and the last-sync commit), before the action link; omitted when there is no link (read-only document).
+ * @type {Readonly<Partial<Record<SyncStatusResponse['status'], string>>>}
+ */
+const SYNC_STATUS_HINT = Object.freeze({
+  both_changed: 'If the machine rules already reflect the guide, you can mark them as in sync. This only updates the sync marker in the repository, not the texts'
 })
 
 /**
@@ -1025,12 +1033,15 @@ class DocumentRulesPlugin extends Plugin {
     icon.style.marginRight = '0.25rem'
     let text = SYNC_STATUS_TEXT[response.status] ?? response.status
     if (response.synced_commit) text += ` (last sync: ${response.synced_commit.slice(0, 7)})`
-    line.replaceChildren(icon, document.createTextNode(text))
     const action = this._documentReadOnly ? null : SYNC_STATUS_ACTIONS[response.status]
+    // The hint explains the action link, so it goes with it
+    const hint = action ? SYNC_STATUS_HINT[response.status] : undefined
+    if (hint) text += `. ${hint}`
+    line.replaceChildren(icon, document.createTextNode(text))
     if (action === 'update') {
       line.append('. ', this._createActionLink('Update from guide', 'syncStatusUpdateLink', () => this._openUpdateDialog()))
     } else if (action === 'propose') {
-      line.append('. ', this._createActionLink('Propose change upstream', 'syncStatusProposeLink', () => this._onProposeUpstreamClick()))
+      line.append('. ', this._createActionLink('Mark as in sync', 'syncStatusProposeLink', () => this._onProposeUpstreamClick({ includeBoth: true })))
     }
     line.style.display = ''
     return response.status
@@ -1840,13 +1851,15 @@ class DocumentRulesPlugin extends Plugin {
    * human/machine pair is proposed as one patch in the propose sub-dialog,
    * any other resource through the forge's web editor. Unsaved changes of
    * the shown override are offered for saving first.
+   * @param {{includeBoth?: boolean}} [options] - includeBoth: include both
+   *   layers of a pair (see _openProposeDialog())
    * @returns {Promise<void>}
    */
-  async _onProposeUpstreamClick() {
+  async _onProposeUpstreamClick({ includeBoth = false } = {}) {
     // A proposal is built from the stored texts
     if (!(await this._resolveUnsavedEdits())) return
     if (this._isPairGroup()) {
-      await this._openProposeDialog()
+      await this._openProposeDialog({ includeBoth })
     } else {
       await this._onProposeUpstream()
     }
@@ -1905,15 +1918,19 @@ class DocumentRulesPlugin extends Plugin {
    * Open the "Propose upstream" sub-dialog for `_currentGroup`'s
    * human/machine pair, with each layer that has a selected override
    * included (the shown layer if neither has one), and load the proposal.
+   * With `includeBoth`, both layers are included: proposing the machine
+   * rules recomputes their sync marker, which records a sync even when
+   * neither text changed (the "both changed" sync status).
+   * @param {{includeBoth?: boolean}} [options]
    * @returns {Promise<void>}
    */
-  async _openProposeDialog() {
+  async _openProposeDialog({ includeBoth = false } = {}) {
     const { human, machine } = this._currentPair()
     if (!human || !machine) return
     const ui = this._proposeDialogUi
     this._resetProposeDialog()
-    let includeHuman = this._hasSelectedOverride(human)
-    let includeMachine = this._hasSelectedOverride(machine)
+    let includeHuman = includeBoth || this._hasSelectedOverride(human)
+    let includeMachine = includeBoth || this._hasSelectedOverride(machine)
     if (!includeHuman && !includeMachine) {
       includeHuman = this._currentResource === human
       includeMachine = this._currentResource === machine
