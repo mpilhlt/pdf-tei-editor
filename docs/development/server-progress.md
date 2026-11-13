@@ -209,7 +209,8 @@ progress.show('my-progress-id', {
     label: 'Processing...',
     value: null,  // null for indeterminate
     cancellable: true,
-    cancelUrl: '/api/my-endpoint/cancel/my-progress-id'
+    cancelUrl: '/api/my-endpoint/cancel/my-progress-id',
+    minimized: true  // start minimized; once the user toggles the widget, their choice is kept
 })
 
 // Update progress
@@ -238,9 +239,12 @@ All progress events are JSON-encoded with a `progress_id` field:
     "label": "Processing...",
     "value": null,
     "cancellable": true,
-    "cancelUrl": "/api/plugins/grobid/cancel/abc123"
+    "cancelUrl": "/api/plugins/grobid/cancel/abc123",
+    "minimized": false
 }
 ```
+
+`minimized` starts the widget minimized, unless the user has toggled the widget with this `progress_id` before in this browser session.
 
 ### progressValue
 
