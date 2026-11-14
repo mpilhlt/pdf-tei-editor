@@ -276,7 +276,7 @@ export function openReviewPopover(options) {
  * @param {string} label - e.g. "Not OK · line 78"
  * @param {string} initial - Current comment
  * @param {(comment: string|null) => void} onDone - Called with the comment, or null if skipped
- * @param {{placeholder?: string, hint?: string, testid?: string, mentions?: MentionCandidate[]}} [options] - Defaults are those of the review comment; `mentions` are offered when typing `@`
+ * @param {{placeholder?: string, hint?: string, testid?: string, mentions?: MentionCandidate[], maxLength?: number, selectAll?: boolean}} [options] - Defaults are those of the review comment; `mentions` are offered when typing `@`; `selectAll` selects the initial text, so that typing replaces it
  */
 export function openCommentPrompt(at, label, initial, onDone, options = {}) {
   const root = el('div', 'ur-pop ur-prompt');
@@ -287,6 +287,7 @@ export function openCommentPrompt(at, label, initial, onDone, options = {}) {
   input.type = 'text';
   input.value = initial;
   input.placeholder = options.placeholder ?? 'Optional short comment';
+  if (options.maxLength) input.maxLength = options.maxLength;
   attachMentionAutocomplete(input, options.mentions ?? []);
   body.appendChild(input);
   body.appendChild(el('div', 'ur-hint', options.hint ?? 'Enter: save and go to the next unit · Esc: no comment'));
@@ -304,5 +305,6 @@ export function openCommentPrompt(at, label, initial, onDone, options = {}) {
     }
   });
   input.focus();
-  input.setSelectionRange(input.value.length, input.value.length);
+  if (options.selectAll) input.select();
+  else input.setSelectionRange(input.value.length, input.value.length);
 }

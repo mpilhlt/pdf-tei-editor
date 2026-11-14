@@ -8,13 +8,15 @@ from .gc_registry import register_directory_gc_task
 
 
 def register_core_gc_tasks() -> None:
-    """Register the tasks of the file repository and storage, the message index, the access tokens, the caches and the tmp dir."""
+    """Register the tasks of the file repository and storage, the message index, the bookmarks, the access tokens, the caches and the tmp dir."""
+    from fastapi_app.lib.bookmarks.store import register_bookmark_gc_task
     from fastapi_app.lib.core.access_tokens import register_access_token_gc_task
     from fastapi_app.lib.messages.service import register_message_gc_task
     from fastapi_app.lib.storage.file_gc import register_file_gc_tasks
 
     register_file_gc_tasks()
     register_message_gc_task()
+    register_bookmark_gc_task()
     register_access_token_gc_task()
     register_directory_gc_task("schema-cache", "Schema cache", lambda: get_settings().schema_cache_dir, order=800)
     # Fully reproducible; entries for a SHA-pinned URL never expire on their own (see url_cache.py)
