@@ -127,9 +127,9 @@ The index is derived from the TEI files and can be rebuilt (`POST /api/v1/messag
 
 | File | Purpose |
 | --- | --- |
-| `store.py` | `BookmarkStore` over `data/db/bookmarks.db` (one row per bookmark, keyed by user), store singleton, `bookmarks` GC task |
+| `store.py` | `BookmarkStore` over `data/db/bookmarks.db` (one row per bookmark, keyed by user), store singleton, `file.deleted` hook, `bookmarks` GC task |
 
-Bookmarks are served by `routers/bookmarks.py` (`/api/v1/bookmarks`); every query is restricted to the current user. A bookmark stores the file (`stable_id`), the element's XPath below `/TEI/text` and its content fingerprint (`app/src/modules/node-anchor.js`); the frontend resolves the anchor when it opens the bookmark. Changes are sent to the user's other sessions as the SSE event `bookmarksChanged`. The `bookmarks` GC task removes the bookmarks of purged files (soft-deleted files keep theirs) and of removed users.
+Bookmarks are served by `routers/bookmarks.py` (`/api/v1/bookmarks`); every query is restricted to the current user. A bookmark stores the file (`stable_id`), the element's XPath below `/TEI/text` and its content fingerprint (`app/src/modules/node-anchor.js`); the frontend resolves the anchor when it opens the bookmark. Changes are sent to the user's other sessions as the SSE event `bookmarksChanged`. Bookmarks are deleted with their file: the `file.deleted` handler (`register_bookmark_hooks()`, called at startup) removes them and sends `bookmarksChanged` to their owners. The `bookmarks` GC task removes the bookmarks of files that are deleted or purged without that event (e.g. by synchronization) and of removed users.
 
 ### `sse/` — Server-Sent Events
 

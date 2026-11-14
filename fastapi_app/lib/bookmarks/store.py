@@ -6,16 +6,20 @@ A bookmark belongs to one user and is visible only to them. It points at an elem
 fingerprint of its content (see `app/src/modules/node-anchor.js`), so that the element is found
 again after edits.
 
-The garbage collection removes the bookmarks of purged files and of removed users.
+A bookmark is deleted together with its file: the `file.deleted` event removes the bookmarks of
+a deleted file. The garbage collection removes those of files that are deleted or purged by other
+means (e.g. synchronization) and of removed users.
 """
 
 import logging
 import sqlite3
+import asyncio
 import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.db_utils import get_connection, init_database, transaction
@@ -144,6 +148,13 @@ class BookmarkStore:
             cursor = conn.execute("DELETE FROM bookmark WHERE id = ? AND username = ?", (bookmark_id, username))
             return cursor.rowcount > 0
 
+    def delete_of_file(self, stable_id: str) -> set[str]:
+        """Deletes the bookmarks of a file; returns the users who had bookmarks on it."""
+        with transaction(self.db_path) as conn:
+            rows = conn.execute("SELECT DISTINCT username FROM bookmark WHERE stable_id = ?", (stable_id,)).fetchall()
+            conn.execute("DELETE FROM bookmark WHERE stable_id = ?", (stable_id,))
+        return {row["username"] for row in rows}
+
     def stable_ids(self) -> set[str]:
         """The files that have bookmarks."""
         rows = get_connection(self.db_path).execute("SELECT DISTINCT stable_id FROM bookmark").fetchall()
@@ -198,9 +209,9 @@ def reset_bookmark_stores() -> None:
 
 
 def collect_bookmark_garbage(ctx: GcContext) -> GcResult:
-    """GC task: removes the bookmarks of purged files and of removed users."""
+    """GC task: removes the bookmarks of deleted or purged files and of removed users."""
     store = get_bookmark_store(ctx.db_dir)
-    dead_files = {sid for sid in store.stable_ids() if ctx.file_repo.get_file_by_stable_id(sid, include_deleted=True) is None}
+    dead_files = {sid for sid in store.stable_ids() if ctx.file_repo.get_file_by_stable_id(sid) is None}
     existing_users = {u["username"] for u in list_users(ctx.db_dir) if u.get("username")}
     removed_users = store.usernames() - existing_users
     if ctx.dry_run:
@@ -211,10 +222,43 @@ def collect_bookmark_garbage(ctx: GcContext) -> GcResult:
         users_count = store.delete_of(usernames=removed_users)
     return GcResult(
         items_deleted=files_count + users_count,
-        details={"purged_file_bookmarks": files_count, "removed_user_bookmarks": users_count},
+        details={"deleted_file_bookmarks": files_count, "removed_user_bookmarks": users_count},
     )
 
 
 def register_bookmark_gc_task() -> None:
     """Registers the cleanup of the bookmarks; runs after the file purge."""
     register_gc_task("bookmarks", "Bookmarks", collect_bookmark_garbage, order=610)
+
+
+def delete_file_bookmarks(stable_id: str, db_dir: Path | None = None) -> set[str]:
+    """Deletes the bookmarks of a deleted file; returns the users who had bookmarks on it."""
+    usernames = get_bookmark_store(db_dir).delete_of_file(stable_id)
+    if usernames:
+        logger.info(f"Deleted the bookmarks of {len(usernames)} user(s) on deleted file {stable_id}")
+    return usernames
+
+
+async def on_file_deleted(stable_id: str, **kwargs: Any) -> None:
+    """`file.deleted` handler: deletes the bookmarks of the file and refreshes the owners' open lists."""
+    if not stable_id:
+        return
+    from fastapi_app.lib.core.dependencies import get_session_manager, get_sse_service
+    from fastapi_app.lib.sse.sse_utils import send_to_user_sessions
+
+    usernames = await asyncio.to_thread(delete_file_bookmarks, stable_id)
+    for username in usernames:
+        send_to_user_sessions(get_sse_service(), get_session_manager(), username, "bookmarksChanged", {})
+
+
+_hooks_registered = threading.Event()
+
+
+def register_bookmark_hooks() -> None:
+    """Subscribes the bookmark cleanup to the `file.deleted` event (once per process)."""
+    from fastapi_app.lib.sse.event_bus import get_event_bus
+
+    if _hooks_registered.is_set():
+        return
+    get_event_bus().on("file.deleted", on_file_deleted)
+    _hooks_registered.set()

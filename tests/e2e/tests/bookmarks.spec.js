@@ -4,7 +4,7 @@
  * As an annotator, bookmarks a <bibl> from the editor's context menu (the entry is disabled in
  * the teiHeader), opens the Bookmarks dialog from the user menu, renames the bookmark, opens it
  * (which selects the element, also after a unit was inserted before it), checks that another
- * user does not see it, and deletes it.
+ * user does not see it, deletes it, and checks that deleting the document deletes its bookmarks.
  *
  * @testCovers app/src/plugins/bookmarks.js
  * @testCovers app/src/templates/bookmarks-dialog.html
@@ -200,6 +200,22 @@ test.describe('Bookmarks', () => {
       await waitForTestMessage(consoleLogs, 'BOOKMARK_DELETED');
       await expect(listed).toHaveCount(0);
       bookmarkId = null;
+      await page.waitForTimeout(500);
+      await dialog.locator('sl-button[name="closeBtn"]').click();
+
+      // deleting the document deletes its bookmarks
+      const remaining = await page.evaluate(async (stableId) => {
+        const api = (/** @type {any} */ (window)).client.apiClient;
+        await api.bookmarksCreate({ stable_id: stableId, path: '/TEI/text/listBibl/bibl[1]', element: 'bibl', title: 'Gone with the file' });
+        await api.filesDelete({ files: [stableId] });
+        for (let i = 0; i < 40; i++) {
+          const { items } = await api.bookmarksList({ stable_id: stableId });
+          if (items.length === 0) return 0;
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+        return (await api.bookmarksList({ stable_id: stableId })).items.length;
+      }, stableId);
+      expect(remaining).toBe(0);
     } finally {
       if (bookmarkId) {
         await page.evaluate(async (id) => {

@@ -254,7 +254,7 @@ npm run manage-remote -- maintenance reload
 | `inbox-assignment` | Moves files without a collection to `_inbox` (not run with `--dry-run`) |
 | `orphaned-xml` | TEI files whose document has no PDF |
 | `message-index` | Stale rows of the [messages](messages.md) index |
-| `bookmarks` | [Bookmarks](bookmarks.md) of purged files and removed users |
+| `bookmarks` | [Bookmarks](bookmarks.md) of deleted files and removed users that are left over, e.g. after files were deleted by synchronization |
 | `schema-cache`, `annotation-rules-cache`, `tmp` | Caches and temporary files |
 | `plugin:<id>` | Reproducible data of a plugin (not run with `--dry-run`) |
 

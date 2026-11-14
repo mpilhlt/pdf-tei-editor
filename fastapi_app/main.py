@@ -148,6 +148,10 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error initializing databases: {e}")
         raise
 
+    # Bookmarks are deleted with their file
+    from .lib.bookmarks.store import register_bookmark_hooks
+    register_bookmark_hooks()
+
     # Message index: re-index files on save and delete; build it once when it does not exist yet
     from .lib.messages.service import get_message_store, message_index_exists, rebuild_index, register_message_hooks
     message_index_existed = message_index_exists(settings.db_dir)

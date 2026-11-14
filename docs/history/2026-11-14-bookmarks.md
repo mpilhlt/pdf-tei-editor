@@ -9,7 +9,8 @@ Requested by Christian (2026-11-14): private bookmarks on sub-elements of `/TEI/
 - **Scope**: the server only accepts XPaths below `/TEI/text` (`TEXT_ELEMENT_PATH` in `routers/bookmarks.py`) of TEI files the user can view. The context-menu entry is disabled elsewhere.
 - **API** (`/api/v1/bookmarks`): `GET` (optional `stable_id` filter), `POST`, `PATCH /{id}` (rename), `DELETE /{id}`. All queries are restricted to the current user; another user's bookmark id gives 404. Items carry `available: false` when the file was deleted or the user lost access.
 - **Live updates**: changes send `bookmarksChanged` to the user's other sessions; an open dialog reloads.
-- **Cleanup**: GC task `bookmarks` (order 610, after the file purge) removes bookmarks of purged files and of removed users. Bookmarks of soft-deleted files are kept, since the file can be restored.
+- **Deletion with the file** (Christian, 2026-11-14): the `file.deleted` event handler (`on_file_deleted` in `store.py`) deletes the bookmarks of a deleted file, for all users, and sends `bookmarksChanged` to their owners. A restored file therefore has no bookmarks.
+- **Cleanup**: GC task `bookmarks` (order 610, after the file purge) removes bookmarks of files that are deleted or purged without the event (e.g. by synchronization) and of removed users.
 
 ## Frontend
 
@@ -20,8 +21,8 @@ Requested by Christian (2026-11-14): private bookmarks on sub-elements of `/TEI/
 
 ## Tests
 
-- `tests/unit/fastapi/test_bookmarks.py`: store, privacy, path validation, unreadable and non-TEI files, rename/delete, unavailable files, GC (incl. dry run).
-- `tests/e2e/tests/bookmarks.spec.js`: context menu (disabled in the header), title prompt, dialog from the user menu, rename, opening after an insertion before the element, privacy against another user, delete.
+- `tests/unit/fastapi/test_bookmarks.py`: store, privacy, path validation, unreadable and non-TEI files, rename/delete, unavailable files, deletion on `file.deleted`, GC (incl. dry run).
+- `tests/e2e/tests/bookmarks.spec.js`: context menu (disabled in the header), title prompt, dialog from the user menu, rename, opening after an insertion before the element, privacy against another user, delete, deletion of the bookmarks with the document.
 
 ## Not done
 

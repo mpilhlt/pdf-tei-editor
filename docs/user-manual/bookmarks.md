@@ -38,4 +38,4 @@ Click a bookmark to open its document with the bookmarked element selected and s
 
 A bookmark finds its element by the element's position in the document and a fingerprint of its content, like [unit comments](unit-comments.md). When elements are inserted or removed before it, the bookmark still finds the element by its content. If the element was changed and moved, or removed, the document opens without a selection and a warning says that the element was not found.
 
-A bookmark belongs to one version of a document. If that version is deleted or you can no longer view it, the bookmark is shown greyed out with the note "document not available" and can only be renamed or deleted. When an administrator purges deleted files with the garbage collection, their bookmarks are removed too.
+A bookmark belongs to one version of a document. When that version is deleted, its bookmarks are deleted with it, also those of other users. If you can no longer view the version, for example because you lost access to its collection, the bookmark is shown greyed out with the note "document not available" and can only be renamed or deleted.

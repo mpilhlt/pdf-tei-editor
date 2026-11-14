@@ -1,5 +1,5 @@
 """
-Unit tests for bookmarks: the store, the REST endpoints (privacy, validation) and the garbage collection.
+Unit tests for bookmarks: the store, the REST endpoints (privacy, validation), the deletion with their file and the garbage collection.
 
 @testCovers fastapi_app/lib/bookmarks/store.py
 @testCovers fastapi_app/routers/bookmarks.py
@@ -7,6 +7,7 @@ Unit tests for bookmarks: the store, the REST endpoints (privacy, validation) an
 @testCovers fastapi_app/lib/repository/doc_labels.py
 """
 
+import asyncio
 import gc
 import json
 import os
@@ -23,7 +24,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.bookmarks.store import BookmarkStore, collect_bookmark_garbage
+from fastapi_app.lib.bookmarks import store as bookmark_store_module
+from fastapi_app.lib.bookmarks.store import BookmarkStore, collect_bookmark_garbage, on_file_deleted
 from fastapi_app.lib.core.db_utils import close_all_connections
 from fastapi_app.lib.core.dependencies import (
     get_file_repository,
@@ -99,7 +101,22 @@ class TestBookmarkStore(TempDbTestCase):
         self.assertTrue(self.store.delete("alice", first.id))
         self.assertEqual([b.id for b in self.store.list("alice")], [second.id])
 
-    def test_gc_removes_bookmarks_of_purged_files_and_removed_users(self):
+    def test_file_deleted_event_deletes_the_bookmarks_of_the_file(self):
+        self.store.add("alice", "s1", "doc1", PATH, None, "bibl", "Alice on s1", None)
+        self.store.add("bob", "s1", "doc1", PATH, None, "bibl", "Bob on s1", None)
+        self.store.add("alice", "s2", "doc1", PATH, None, "bibl", "Alice on s2", None)
+        notified: list[tuple[str, str]] = []
+        with patch.object(bookmark_store_module, "get_bookmark_store", lambda db_dir=None: self.store), \
+                patch("fastapi_app.lib.sse.sse_utils.send_to_user_sessions",
+                      lambda sse, sessions, username, event, data: notified.append((username, event)) or 0), \
+                patch("fastapi_app.lib.core.dependencies.get_sse_service", lambda: None), \
+                patch("fastapi_app.lib.core.dependencies.get_session_manager", lambda: None):
+            asyncio.run(on_file_deleted(stable_id="s1"))
+        self.assertEqual([b.title for b in self.store.list("alice")], ["Alice on s2"])
+        self.assertEqual(self.store.list("bob"), [])
+        self.assertEqual(sorted(notified), [("alice", "bookmarksChanged"), ("bob", "bookmarksChanged")])
+
+    def test_gc_removes_bookmarks_of_deleted_files_and_removed_users(self):
         self.store.add("alice", "kept", "doc1", PATH, None, "bibl", "Kept", None)
         self.store.add("alice", "soft-deleted", "doc1", PATH, None, "bibl", "Soft-deleted file", None)
         self.store.add("alice", "purged", "doc1", PATH, None, "bibl", "Purged file", None)
@@ -112,13 +129,13 @@ class TestBookmarkStore(TempDbTestCase):
                 db_dir=self.db_dir, dry_run=dry_run,
             )
 
-        with patch("fastapi_app.lib.bookmarks.store.get_bookmark_store", lambda db_dir=None: self.store):
+        with patch.object(bookmark_store_module, "get_bookmark_store", lambda db_dir=None: self.store):
             dry = collect_bookmark_garbage(context(True))
-            self.assertEqual(dry.items_deleted, 2)
+            self.assertEqual(dry.items_deleted, 3)
             self.assertEqual(len(self.store.list("alice")) + len(self.store.list("carol")), 4)
             result = collect_bookmark_garbage(context(False))
-        self.assertEqual(result.details, {"purged_file_bookmarks": 1, "removed_user_bookmarks": 1})
-        self.assertEqual({b.title for b in self.store.list("alice")}, {"Kept", "Soft-deleted file"})
+        self.assertEqual(result.details, {"deleted_file_bookmarks": 2, "removed_user_bookmarks": 1})
+        self.assertEqual({b.title for b in self.store.list("alice")}, {"Kept"})
         self.assertEqual(self.store.list("carol"), [])
 
 
