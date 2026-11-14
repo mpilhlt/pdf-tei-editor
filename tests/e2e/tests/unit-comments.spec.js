@@ -206,7 +206,7 @@ test.describe('Unit comments', () => {
       await waitForTestMessage(consoleLogs, 'NEW_VERSION_LOADED');
       await expect.poll(async () => editorText(page)).not.toContain('unit-comment');
       await expect(page.getByTestId('unit-comment-meter')).toBeHidden();
-      await expect(page.locator('.cm-unit-comment-gutter')).toHaveCount(0);
+      await expect(page.locator('.cm-line-marker-gutter')).toHaveCount(0);
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);

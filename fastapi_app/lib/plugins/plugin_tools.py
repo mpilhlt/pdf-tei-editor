@@ -182,7 +182,6 @@ _SESSION_HEADER_SCRIPT = r"""
   // Navigations, links, downloads and EventSource still use the cookie.
   (function() {
     const SESSION_HEADER = 'X-Session-ID';
-    const EMPTY_VALUES = ['', 'null', 'undefined'];
     const SESSION_TIMEOUT_MS = 3000;
 
     const sessionPromise = Promise.race([
@@ -200,11 +199,6 @@ _SESSION_HEADER_SCRIPT = r"""
       }
     }
 
-    /** @param {string | null | undefined} value */
-    function isEmpty(value) {
-      return value === null || value === undefined || EMPTY_VALUES.includes(String(value).trim());
-    }
-
     const originalFetch = window.fetch;
     window.fetch = async function(input, init) {
       const url = input instanceof Request ? input.url : input;
@@ -213,12 +207,10 @@ _SESSION_HEADER_SCRIPT = r"""
       }
       const headers = new Headers(input instanceof Request ? input.headers : undefined);
       new Headers(init && init.headers).forEach((value, name) => headers.set(name, value));
-      if (isEmpty(headers.get(SESSION_HEADER))) {
+      if (!headers.has(SESSION_HEADER)) {
         const sessionId = await sessionPromise;
         if (sessionId) {
           headers.set(SESSION_HEADER, sessionId);
-        } else {
-          headers.delete(SESSION_HEADER);
         }
       }
       return originalFetch.call(this, input, { ...init, headers });
@@ -236,8 +228,6 @@ _SESSION_HEADER_SCRIPT = r"""
 
     XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
       if (this._pteApiRequest && String(name).toLowerCase() === SESSION_HEADER.toLowerCase()) {
-        // An empty value would be joined with the one added in send()
-        if (isEmpty(value)) return;
         this._pteHasSession = true;
       }
       return xhrSetRequestHeader.call(this, name, value);

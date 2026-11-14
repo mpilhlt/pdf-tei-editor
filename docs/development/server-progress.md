@@ -299,27 +299,12 @@ This example shows a complete implementation for processing all documents in a c
 @router.get("/process-collection")
 async def process_collection(
     collection: str = Query(...),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager = Depends(get_session_manager),
-    auth_manager = Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    session_id: str = Depends(require_session_id),
     sse_service = Depends(get_sse_service),
 ):
-    # Authentication
-    session_id_value = x_session_id or session_id
-    if not session_id_value:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    settings = get_settings()
-    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Invalid session")
-
-    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
     # Set up progress with cancellation
-    progress = ProgressBar(sse_service, session_id_value)
+    progress = ProgressBar(sse_service, session_id)
     cancel_url = f"/api/my-plugin/cancel/{progress.progress_id}"
     token = CancellationToken(progress.progress_id)
 
@@ -338,7 +323,7 @@ async def process_collection(
         for i, file in enumerate(files):
             if token.is_cancelled:
                 send_notification(
-                    sse_service, session_id_value,
+                    sse_service, session_id,
                     "Processing cancelled", "warning"
                 )
                 raise HTTPException(status_code=499, detail="Cancelled")
@@ -350,7 +335,7 @@ async def process_collection(
             processed += 1
 
         send_notification(
-            sse_service, session_id_value,
+            sse_service, session_id,
             f"Processed {processed} files", "success"
         )
         progress.hide()

@@ -13,6 +13,7 @@ export { default as AnnotationGuidePlugin } from './plugins/annotation-guide.js'
 export { default as ApiKeysPlugin } from './plugins/api-keys.js';
 export { default as AuthenticationPlugin } from './plugins/authentication.js';
 export { default as BackendPluginsPlugin } from './plugins/backend-plugins.js';
+export { default as BookmarksPlugin } from './plugins/bookmarks.js';
 export { default as ClientPlugin } from './plugins/client.js';
 export { default as ConfigEditorPlugin } from './plugins/config-editor.js';
 export { default as ConfigPlugin } from './plugins/config.js';
@@ -61,6 +62,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   "api-keys": import('./plugins/api-keys.js').default,
  *   authentication: import('./plugins/authentication.js').default,
  *   "backend-plugins": import('./plugins/backend-plugins.js').default,
+ *   bookmarks: import('./plugins/bookmarks.js').default,
  *   client: import('./plugins/client.js').default,
  *   "config-editor": import('./plugins/config-editor.js').default,
  *   config: import('./plugins/config.js').default,

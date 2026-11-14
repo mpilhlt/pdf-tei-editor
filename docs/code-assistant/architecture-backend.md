@@ -123,6 +123,14 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 
 The index is derived from the TEI files and can be rebuilt (`POST /api/v1/messages/rebuild`, `manage-remote maintenance rebuild-messages`); it is built in the background at startup when `messages.db` is missing. The `message-index` GC task removes the rows of missing or soft-deleted files and removed users, settled review messages older than `messages.settled-retention-days` (0 = keep), and read states without a message. A rebuild is no substitute: it keeps orphaned read states and loses all settled messages.
 
+### `bookmarks/` — Private bookmarks
+
+| File | Purpose |
+| --- | --- |
+| `store.py` | `BookmarkStore` over `data/db/bookmarks.db` (one row per bookmark, keyed by user), store singleton, `file.deleted` hook, `bookmarks` GC task |
+
+Bookmarks are served by `routers/bookmarks.py` (`/api/v1/bookmarks`); every query is restricted to the current user. A bookmark stores the file (`stable_id`), the element's XPath below `/TEI/text` and its content fingerprint (`app/src/modules/node-anchor.js`); the frontend resolves the anchor when it opens the bookmark. Changes are sent to the user's other sessions as the SSE event `bookmarksChanged`. Bookmarks are deleted with their file: the `file.deleted` handler (`register_bookmark_hooks()`, called at startup) removes them and sends `bookmarksChanged` to their owners. The `bookmarks` GC task removes the bookmarks of files that are deleted or purged without that event (e.g. by synchronization) and of removed users.
+
 ### `sse/` — Server-Sent Events
 
 | File | Purpose |

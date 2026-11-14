@@ -13,18 +13,16 @@ import re
 import sqlite3
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.database import DatabaseManager
-from fastapi_app.lib.core.dependencies import get_auth_manager, get_db, get_session_manager
-from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.core.dependencies import get_db, require_authenticated_user, require_session_id
 from fastapi_app.lib.models.models import FileMetadata
 from fastapi_app.lib.permissions.user_utils import get_user_collections
 from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 from fastapi_app.lib.repository.file_repository import FileRepository
-from fastapi_app.lib.utils.auth import AuthManager
 
 logger = logging.getLogger(__name__)
 
@@ -373,34 +371,11 @@ def _search_like(
     return results
 
 
-def _authenticate(
-    session_id: str | None,
-    x_session_id: str | None,
-    session_manager: SessionManager,
-    auth_manager: AuthManager,
-) -> dict[str, Any]:
-    """Shared authentication helper. Returns the authenticated user."""
-    settings = get_settings()
-    sid = x_session_id or session_id
-    if not sid:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    if not session_manager.is_session_valid(sid, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-    user = auth_manager.get_user_by_session_id(sid, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
-
-
 @router.get("/view", response_class=HTMLResponse)
 async def view(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager: SessionManager = Depends(get_session_manager),
-    auth_manager: AuthManager = Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> HTMLResponse:
     """Serve the standalone search UI HTML page."""
-    _authenticate(session_id, x_session_id, session_manager, auth_manager)
     html = load_plugin_html(__file__, "view.html")
     return HTMLResponse(content=html)
 
@@ -408,17 +383,11 @@ async def view(
 @router.get("/results")
 async def results(
     q: str = Query(..., min_length=1),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager: SessionManager = Depends(get_session_manager),
-    auth_manager: AuthManager = Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    sid: str = Depends(require_session_id),
     db: DatabaseManager = Depends(get_db),
 ) -> JSONResponse:
     """Return JSON search results for the given query."""
-    user = _authenticate(session_id, x_session_id, session_manager, auth_manager)
-    sid = x_session_id or session_id
-    assert sid is not None
-
     filters, text_query = _parse_dsl(q)
 
     # Require either meaningful text terms or at least one DSL filter
@@ -442,16 +411,10 @@ async def results(
 
 @router.post("/cache/clear", status_code=204)
 async def clear_cache(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager: SessionManager = Depends(get_session_manager),
-    auth_manager: AuthManager = Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    sid: str = Depends(require_session_id),
 ) -> Response:
     """Invalidate the search index for this session (called on window close)."""
-    _authenticate(session_id, x_session_id, session_manager, auth_manager)
-    sid = x_session_id or session_id
-    assert sid is not None
-
     if sid in _search_cache:
         conn, _ = _search_cache.pop(sid)
         conn.close()

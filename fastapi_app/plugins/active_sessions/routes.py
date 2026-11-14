@@ -6,12 +6,12 @@ import html
 import json
 import logging
 from datetime import datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import (
     get_auth_manager,
     get_session_manager,
@@ -69,31 +69,12 @@ def _format_last_access(last_access: float) -> str:
 
 @router.get("/view", response_class=HTMLResponse)
 async def view_sessions(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager: SessionManager = Depends(get_session_manager),
-    auth_manager: AuthManager = Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_admin_user),
 ) -> HTMLResponse:
     """
     Serve the active sessions HTML page (sandbox client injected automatically).
     """
     from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
-
-    sid_value = x_session_id or session_id
-    if not sid_value:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    settings = get_settings()
-    if not session_manager.is_session_valid(sid_value, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-
-    user = auth_manager.get_user_by_session_id(sid_value, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    user_roles = user.get("roles", [])
-    if "admin" not in user_roles and "*" not in user_roles:
-        raise HTTPException(status_code=403, detail="Admin access required")
 
     html = load_plugin_html(__file__, "view.html")
     return HTMLResponse(content=html)

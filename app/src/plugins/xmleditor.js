@@ -64,6 +64,7 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  * @typedef {object} xmlEditorHeaderbarPart
  * @property {StatusText} titlePrefixWidget - The artifact type prefix widget (e.g. "Gold:" / "Version:")
  * @property {StatusText} titleWidget - The artifact label widget (editable by reviewers)
+ * @property {StatusText} documentStatusWidget - The lifecycle status of the artifact (e.g. "Status: draft")
  * @property {StatusText} lastUpdatedWidget - The last updated widget
  * @property {StatusText} [readOnlyStatusWidget] - Read-only indicator (present when editor is read-only)
  */
@@ -211,6 +212,13 @@ class XmlEditorPlugin extends Plugin {
   #titleWidget;
   /** @type {StatusText} */
   #lastUpdatedWidget;
+  /** @type {StatusText} */
+  #documentStatusWidget;
+  /**
+   * The lifecycle status shown in the headerbar and the file it belongs to
+   * @type {{fileId: string|null, status: string|null}}
+   */
+  #documentStatus = { fileId: null, status: null };
   /** @type {StatusText|null} */
   #readOnlyStatusWidget = null;
   /** @type {StatusText} */
@@ -442,6 +450,11 @@ class XmlEditorPlugin extends Plugin {
     this.#titlePrefixWidget = this.#headerbar.titlePrefixWidget;
     this.#titleWidget = this.#headerbar.titleWidget;
     this.#lastUpdatedWidget = this.#headerbar.lastUpdatedWidget;
+    this.#documentStatusWidget = this.#headerbar.documentStatusWidget;
+
+    // Keep the status widget in sync with the last revisionDesc/change of the loaded document
+    this.#xmlEditor.on('editorAfterLoad', () => this.#updateDocumentStatusFromXml());
+    this.#xmlEditor.on('editorUpdateDelayed', () => this.#updateDocumentStatusFromXml());
 
     // Make title widget clickable/dblclickable for copy and edit
     if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
@@ -1012,6 +1025,10 @@ class XmlEditorPlugin extends Plugin {
     } else {
       this.#titlePrefixWidget.text = '';
       this.#titleWidget.text = '';
+    }
+    // On a file change, show the status from the file list until the document is loaded
+    if (state.xml !== this.#documentStatus.fileId) {
+      this.#setDocumentStatus(state.xml, fileData?.item?.status ?? null);
     }
     if (fileData?.item && fileData.item.last_update && fileData.item.last_updated_by) {
       const updateDate = new Date(fileData.item.last_update).toLocaleDateString();
@@ -1631,6 +1648,34 @@ class XmlEditorPlugin extends Plugin {
     if (blocked) status = '⚠ ';
     else if (dirty) status = '● ';
     this.context.invokePluginEndpoint(ep.title.updateSlots, { status });
+  }
+
+  /**
+   * Reads the lifecycle status from the last teiHeader/revisionDesc/change of the document in
+   * the editor and shows it in the headerbar. Does nothing while the XML is not well-formed.
+   */
+  #updateDocumentStatusFromXml() {
+    const fileId = this.state?.xml ?? null;
+    if (!fileId) return;
+    const xmlDoc = this.#xmlEditor.getXmlTree();
+    if (!xmlDoc) return;
+    this.#setDocumentStatus(fileId, tei_utils.getRevisionStatus(xmlDoc));
+  }
+
+  /**
+   * Shows the lifecycle status of the given file in the headerbar, or hides the widget if there is
+   * no file or the file has no status.
+   * @param {string|null} fileId
+   * @param {string|null} status
+   */
+  #setDocumentStatus(fileId, status) {
+    const changed = fileId !== this.#documentStatus.fileId || status !== this.#documentStatus.status;
+    this.#documentStatus = { fileId, status };
+    if (changed && fileId) testLog('DOCUMENT_STATUS_SHOWN', { fileId, status });
+    if (!this.#documentStatusWidget) return;
+    const visible = Boolean(fileId && status);
+    this.#documentStatusWidget.text = visible ? `Status: ${status}` : '';
+    this.#documentStatusWidget.style.display = visible ? '' : 'none';
   }
 
   /**

@@ -21,6 +21,7 @@ import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system
 import { notify } from '../modules/sl-utils.js'
 import { renderWithMentions } from '../modules/mention-autocomplete.js'
 import { testLog } from '../modules/test-log.js'
+import { relativeTime } from '../modules/relative-time.js'
 
 await registerTemplate('messages-dialog', 'messages-dialog.html')
 await registerTemplate('messages-menu-item', 'messages-menu-item.html')
@@ -472,24 +473,6 @@ class MessagesPlugin extends Plugin {
     this.#setUnread(unread)
     await this.#reload()
   }
-}
-
-/**
- * Formats a timestamp relative to now ("5 minutes ago").
- * @param {string} iso
- * @returns {string}
- */
-function relativeTime(iso) {
-  const time = new Date(iso).getTime()
-  if (isNaN(time)) return ''
-  const seconds = Math.round((time - Date.now()) / 1000)
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-  /** @type {[Intl.RelativeTimeFormatUnit, number][]} */
-  const units = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]]
-  for (const [unit, size] of units) {
-    if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit)
-  }
-  return format.format(seconds, 'second')
 }
 
 export default MessagesPlugin
