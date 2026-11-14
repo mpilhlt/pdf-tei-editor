@@ -2,6 +2,25 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.86.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.85.0...v0.86.0) (2026-11-14)
+
+
+### Bug Fixes
+
+* **editor:** center comment and bookmark markers in the shared gutter column ([6070ceb](https://github.com/mpilhlt/pdf-tei-editor/commit/6070ceba182bb1f0d2f95c8c35b5ce96e33e1b3e))
+* **plugins:** authenticate plugin routes through the session header only ([28ac14f](https://github.com/mpilhlt/pdf-tei-editor/commit/28ac14f1b66e5039c27b250e948bd197639110b7)), closes [#734](https://github.com/mpilhlt/pdf-tei-editor/issues/734)
+* **review-queue:** do not list frozen versions as waiting for review ([a49a67e](https://github.com/mpilhlt/pdf-tei-editor/commit/a49a67e119043088afd3e28a37ffdab3c1389a35))
+* **review-queue:** do not list the user's own versions ([6bb1659](https://github.com/mpilhlt/pdf-tei-editor/commit/6bb16597b93b8e6ddc44273d320e56aeb410b6f4))
+
+
+### Features
+
+* **bookmarks:** bookmark markers in the editor gutter ([e64d408](https://github.com/mpilhlt/pdf-tei-editor/commit/e64d4083b6cc361727b1fbdfd7ee9f7854df746b))
+* **bookmarks:** delete bookmarks with their file ([8124516](https://github.com/mpilhlt/pdf-tei-editor/commit/81245163a502742b3cca968c77a38292e90b1760))
+* **bookmarks:** private bookmarks on elements of the text ([e9e575d](https://github.com/mpilhlt/pdf-tei-editor/commit/e9e575d8c669c3e168a73327c7b4745086381d79))
+* **editor:** shared gutter column for comment and bookmark markers ([d21571b](https://github.com/mpilhlt/pdf-tei-editor/commit/d21571ba4c98bc0308415f0c17083d075d0a6d7c))
+* **xmleditor:** show the document status in the headerbar ([a68151f](https://github.com/mpilhlt/pdf-tei-editor/commit/a68151fea16c4d6180505cda0dc341d70aa2a408))
+
 # [0.85.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.84.1...v0.85.0) (2026-11-13)
 
 
