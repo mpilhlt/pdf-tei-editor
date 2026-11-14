@@ -191,6 +191,18 @@ export function getRevisionLabel(xmlDoc) {
 }
 
 /**
+ * Returns the lifecycle status of the document: the status attribute of the last
+ * teiHeader/revisionDesc/change element, or null if there is none.
+ * @param {Document} xmlDoc
+ * @returns {string|null}
+ */
+export function getRevisionStatus(xmlDoc) {
+  const changes = xmlDoc.querySelectorAll('teiHeader > revisionDesc > change')
+  if (!changes.length) return null
+  return changes[changes.length - 1].getAttribute('status')?.trim() || null
+}
+
+/**
  * Represents an 'edition' statement within a 'editionStmt' element.
  * @typedef {object} Edition
  * @property {string} [title] - The title of the edition (optional).

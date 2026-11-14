@@ -5,6 +5,7 @@
  * @typedef {object} xmleditorHeaderbarPart
  * @property {HTMLElement} titlePrefixWidget
  * @property {HTMLElement} titleWidget
+ * @property {HTMLElement} documentStatusWidget
  */
 
 export {}

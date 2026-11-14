@@ -56,6 +56,7 @@ import {
   UnitReviewPlugin,
   UnitCommentsPlugin,
   MessagesPlugin,
+  BookmarksPlugin,
   XslViewerPlugin,
 } from './plugin-registry.js'
 
@@ -97,6 +98,7 @@ const plugins = [
   UnitReviewPlugin,       // review marks in the XML editor gutter — depends on XmlEditorPlugin
   UnitCommentsPlugin,     // comments on elements, stored stand-off — depends on XmlEditorPlugin
   MessagesPlugin,         // reviews and comments addressed to the user (user menu: Messages)
+  BookmarksPlugin,        // private bookmarks on elements of the text (user menu: Bookmarks, below Messages)
   XslViewerPlugin,
   TeiToolsPlugin,
   TeiHeaderEditorPlugin,  // Edit header metadata (fileDesc) from the XML editor toolbar

@@ -12,6 +12,7 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[Unit Review](user-manual/unit-review.md)** - Marking the units of a document as reviewed OK or not OK
 - **[Unit Comments](user-manual/unit-comments.md)** - Commenting on elements of a document, with replies
 - **[Messages](user-manual/messages.md)** - Not-OK reviews of your documents and comments addressed to you
+- **[Bookmarks](user-manual/bookmarks.md)** - Private bookmarks on elements of a document's text
 - **[People of a Document](user-manual/document-people.md)** - Who worked on a document, adding people, sending them messages
 - **[Collection Management](user-manual/collection-management.md)** - Organizing documents
 - **[Import & Export](user-manual/import-export.md)** - Bulk import/export of files

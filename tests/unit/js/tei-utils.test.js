@@ -20,6 +20,7 @@ import {
   isInTeiText,
   addRevisionChange,
   getRevisionLabel,
+  getRevisionStatus,
 } from '../../../app/src/modules/tei-utils.js';
 
 describe('getEditorialDeclGuides', () => {
@@ -541,6 +542,15 @@ describe('document history ignores stand-off revisionDesc', () => {
 
   it('getRevisionLabel reads the header only', () => {
     assert.strictEqual(getRevisionLabel(parse(xml)), 'v1');
+  });
+
+  it('getRevisionStatus reads the last header change only', () => {
+    assert.strictEqual(getRevisionStatus(parse(xml)), 'in-review');
+  });
+
+  it('getRevisionStatus returns null without a status', () => {
+    assert.strictEqual(getRevisionStatus(parse(xml.replace(' status="in-review"', ''))), null);
+    assert.strictEqual(getRevisionStatus(parse(xml.replace(/<revisionDesc>\s*<change when="2026-10-01[\s\S]*?<\/revisionDesc>/, ''))), null);
   });
 
   it('addRevisionChange creates the header revisionDesc instead of using a stand-off one', () => {
