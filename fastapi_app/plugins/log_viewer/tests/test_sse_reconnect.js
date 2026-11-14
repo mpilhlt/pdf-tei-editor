@@ -86,8 +86,8 @@ function createLogSSEConnection(baseUrl, sessionId) {
  */
 async function subscribeToLogs(baseUrl, sessionId) {
   const response = await fetch(
-    `${baseUrl}/api/plugins/log-viewer/subscribe?session_id=${encodeURIComponent(sessionId)}`,
-    { method: 'POST' }
+    `${baseUrl}/api/plugins/log-viewer/subscribe`,
+    { method: 'POST', headers: { 'X-Session-ID': sessionId } }
   );
   if (!response.ok) {
     throw new Error(`Subscribe failed: ${response.status}`);
@@ -101,8 +101,8 @@ async function subscribeToLogs(baseUrl, sessionId) {
  */
 async function triggerLogAction(baseUrl, sessionId) {
   await fetch(
-    `${baseUrl}/api/plugins/log-viewer/level?level=INFO&session_id=${encodeURIComponent(sessionId)}`,
-    { method: 'POST' }
+    `${baseUrl}/api/plugins/log-viewer/level?level=INFO`,
+    { method: 'POST', headers: { 'X-Session-ID': sessionId } }
   );
 }
 

@@ -134,7 +134,7 @@ async def execute_plugin(
     if not any(p["id"] == plugin_id for p in accessible_plugins):
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
-    # Extract session_id and add to params
+    # Endpoints get the caller's session as "_session_id", e.g. to address SSE events to it
     session_id = get_session_id_from_request(request)
     params_with_session = {**exec_request.params, "_session_id": session_id}
 

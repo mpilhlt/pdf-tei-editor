@@ -119,7 +119,7 @@ class TestMyRoute(unittest.IsolatedAsyncioTestCase):
         # Make request
         response = self.client.get(
             "/api/my-endpoint",
-            params={"session_id": "valid-session"}
+            headers={"X-Session-ID": "valid-session"}
         )
 
         self.assertEqual(response.status_code, 200)
@@ -174,7 +174,7 @@ This pattern:
 
 **Authentication Testing Pattern:**
 
-When testing routes that require authentication (via `session_id` query parameter or `X-Session-ID` header), set up default authentication in `setUp()`:
+When testing routes that require authentication (`Depends(require_authenticated_user)` and the other authentication dependencies, which read the `X-Session-ID` header), set up default authentication in `setUp()`:
 
 ```python
 def setUp(self):
@@ -213,21 +213,22 @@ def setUp(self):
     self.client = TestClient(self.app)
 ```
 
-Then include `session_id` in test requests:
+Then send the session header in test requests:
 
 ```python
 response = self.client.get(
     "/api/my-endpoint",
-    params={"session_id": "test-session", "other_param": "value"}
+    params={"other_param": "value"},
+    headers={"X-Session-ID": "test-session"},
 )
 ```
 
 **Why This Pattern:**
 
-- Routes using `Depends(get_session_manager)` and `Depends(get_auth_manager)` require dependency overrides
+- The authentication dependencies use `get_session_manager` and `get_auth_manager`, which the overrides replace
 - Setting up valid authentication in `setUp()` makes all tests pass authentication by default
 - Individual tests can override these defaults to test authentication failures
-- Must include `session_id` parameter in requests to satisfy route authentication requirements
+- Requests must send the `X-Session-ID` header, since a request without a session is rejected before the mocks are consulted
 
 **See Also:**
 

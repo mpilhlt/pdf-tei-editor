@@ -99,14 +99,15 @@ describe('Log Viewer SSE - Same Session Events', { concurrency: 1 }, () => {
     // Trigger an action from the SAME session that generates log entries.
     // Changing the log level generates a log message: "Log level changed to ..."
     const levelResponse = await fetch(
-      `${BASE_URL}/api/plugins/log-viewer/level?level=INFO&session_id=${encodeURIComponent(session.sessionId)}`,
-      { method: 'POST' }
+      `${BASE_URL}/api/plugins/log-viewer/level?level=INFO`,
+      { method: 'POST', headers: { 'X-Session-ID': session.sessionId } }
     );
     assert.strictEqual(levelResponse.status, 200, 'Set level should succeed');
 
     // Also fetch recent logs — this generates server-side logging
     const recentResponse = await fetch(
-      `${BASE_URL}/api/plugins/log-viewer/recent?session_id=${encodeURIComponent(session.sessionId)}`
+      `${BASE_URL}/api/plugins/log-viewer/recent`,
+      { headers: { 'X-Session-ID': session.sessionId } }
     );
     assert.strictEqual(recentResponse.status, 200, 'Recent logs should succeed');
 
@@ -125,8 +126,8 @@ describe('Log Viewer SSE - Same Session Events', { concurrency: 1 }, () => {
     } finally {
       // Clean up: unsubscribe and close
       await fetch(
-        `${BASE_URL}/api/plugins/log-viewer/unsubscribe?session_id=${encodeURIComponent(session.sessionId)}`,
-        { method: 'POST' }
+        `${BASE_URL}/api/plugins/log-viewer/unsubscribe`,
+        { method: 'POST', headers: { 'X-Session-ID': session.sessionId } }
       );
       connection.close();
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -159,8 +160,8 @@ describe('Log Viewer SSE - Same Session Events', { concurrency: 1 }, () => {
 
     // Trigger action from session B
     const levelResponse = await fetch(
-      `${BASE_URL}/api/plugins/log-viewer/level?level=DEBUG&session_id=${encodeURIComponent(sessionB.sessionId)}`,
-      { method: 'POST' }
+      `${BASE_URL}/api/plugins/log-viewer/level?level=DEBUG`,
+      { method: 'POST', headers: { 'X-Session-ID': sessionB.sessionId } }
     );
     assert.strictEqual(levelResponse.status, 200, 'Set level from session B should succeed');
 
@@ -175,14 +176,14 @@ describe('Log Viewer SSE - Same Session Events', { concurrency: 1 }, () => {
 
     } finally {
       await fetch(
-        `${BASE_URL}/api/plugins/log-viewer/unsubscribe?session_id=${encodeURIComponent(sessionA.sessionId)}`,
-        { method: 'POST' }
+        `${BASE_URL}/api/plugins/log-viewer/unsubscribe`,
+        { method: 'POST', headers: { 'X-Session-ID': sessionA.sessionId } }
       );
       connectionA.close();
       // Reset log level
       await fetch(
-        `${BASE_URL}/api/plugins/log-viewer/level?level=INFO&session_id=${encodeURIComponent(sessionB.sessionId)}`,
-        { method: 'POST' }
+        `${BASE_URL}/api/plugins/log-viewer/level?level=INFO`,
+        { method: 'POST', headers: { 'X-Session-ID': sessionB.sessionId } }
       );
       await new Promise(resolve => setTimeout(resolve, 200));
     }

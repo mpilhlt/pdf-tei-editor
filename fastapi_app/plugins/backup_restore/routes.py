@@ -16,16 +16,19 @@ import zipfile
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 
 from fastapi_app.lib.core.dependencies import (
-    get_auth_manager,
     get_session_manager,
     get_sse_service,
+    require_authenticated_user,
+    require_session_id,
 )
+from fastapi_app.lib.core.sessions import SessionManager
 from fastapi_app.lib.core.data_restore import STAGING_DIR, RestoreError, stage_restore
 from fastapi_app.lib.core.worker_recycle import can_recycle_workers, recycle_workers
 from fastapi_app.lib.plugins.plugin_manifest import get_pte_version
@@ -74,37 +77,18 @@ def _user_has_role(user: dict, role: str) -> bool:
     return "*" in user_roles or "admin" in user_roles or role in user_roles
 
 
-def _authenticate(operation, session_id, x_session_id, session_manager, auth_manager):
-    """Authenticate the request and verify the role required for the operation.
+def _authorize(operation: str, user: dict[str, Any]) -> None:
+    """Verify that the user has a role that allows the operation.
 
     Args:
         operation: One of "view", "backup", "restore"
-        session_id: Session ID from the query string
-        x_session_id: Session ID from the X-Session-ID header
-        session_manager: Session manager
-        auth_manager: Auth manager
+        user: Authenticated user
 
-    Returns:
-        Tuple of (session_id_value, user)
+    Raises:
+        HTTPException: 403 if no role of the user allows the operation
     """
-    from fastapi_app.config import get_settings
-
-    session_id_value = x_session_id or session_id
-    if not session_id_value:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    settings = get_settings()
-    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-
-    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
     if not any(_user_has_role(user, role) for role in _ROLE_ALLOWED[operation]):
         raise HTTPException(status_code=403, detail=f"The '{operation}' role is required")
-
-    return session_id_value, user
 
 
 def _is_supervised() -> bool:
@@ -150,13 +134,10 @@ def _is_supervised() -> bool:
 
 @router.get("/view", response_class=HTMLResponse)
 async def backup_restore_view(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Display the backup & restore UI, showing only the sections the user may use."""
-    _, user = _authenticate("view", session_id, x_session_id, session_manager, auth_manager)
+    _authorize("view", user)
 
     from fastapi_app.lib.plugins.plugin_tools import load_plugin_html
 
@@ -169,10 +150,7 @@ async def backup_restore_view(
 
 @router.get("/download")
 async def download_backup(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Download the `db/` and `files/` directories as a ZIP file.
 
@@ -181,7 +159,7 @@ async def download_backup(
     records the application version in `backup-manifest.json`. Only
     one backup is created at a time; a concurrent request gets 409.
     """
-    _, user = _authenticate(BACKUP_ROLE, session_id, x_session_id, session_manager, auth_manager)
+    _authorize(BACKUP_ROLE, user)
 
     from fastapi_app.config import get_settings
 
@@ -224,10 +202,9 @@ async def download_backup(
 @router.post("/restore")
 async def restore_backup(
     file: UploadFile = File(...),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    session_id: str = Depends(require_session_id),
+    session_manager: SessionManager = Depends(get_session_manager),
     sse_service=Depends(get_sse_service),
 ):
     """Upload a ZIP file to restore application data.
@@ -238,9 +215,7 @@ async def restore_backup(
     restart: on a server started by bin/start-prod the workers are replaced after a short
     delay, under another supervisor the process exits, otherwise the admin restarts manually.
     """
-    session_id_value, user = _authenticate(
-        RESTORE_ROLE, session_id, x_session_id, session_manager, auth_manager
-    )
+    _authorize(RESTORE_ROLE, user)
     logger.info(f"Restore requested by user '{user.get('username', 'unknown')}'")
 
     from fastapi_app.config import get_settings
@@ -272,7 +247,7 @@ async def restore_backup(
 
         if missing_required:
             detail = f"ZIP is missing required files: {', '.join(missing_required)}"
-            send_notification(sse_service, session_id_value, detail, "danger", "exclamation-octagon")
+            send_notification(sse_service, session_id, detail, "danger", "exclamation-octagon")
             raise HTTPException(status_code=400, detail=detail)
 
         # Warn about recommended files
@@ -283,7 +258,7 @@ async def restore_backup(
 
         if missing_recommended:
             warn_msg = f"ZIP is missing recommended files: {', '.join(missing_recommended)}"
-            send_notification(sse_service, session_id_value, warn_msg, "warning", "exclamation-triangle")
+            send_notification(sse_service, session_id, warn_msg, "warning", "exclamation-triangle")
             logger.warning(warn_msg)
 
         # Determine if ZIP contents are nested under a top-level directory
@@ -299,21 +274,21 @@ async def restore_backup(
             check_compatible(backup_version, get_pte_version())
         except IncompatibleBackupError as e:
             logger.warning(f"Restore refused: {e}")
-            send_notification(sse_service, session_id_value, str(e), "danger", "exclamation-octagon")
+            send_notification(sse_service, session_id, str(e), "danger", "exclamation-octagon")
             raise HTTPException(status_code=400, detail=str(e))
 
         logger.info(f"Staging restore ZIP ({zip_path.stat().st_size} bytes) in {data_root / STAGING_DIR}")
         try:
             count = await asyncio.to_thread(stage_restore, zip_path, data_root, "data" if has_data_prefix else None)
         except RestoreError as e:
-            send_notification(sse_service, session_id_value, str(e), "danger", "exclamation-octagon")
+            send_notification(sse_service, session_id, str(e), "danger", "exclamation-octagon")
             raise HTTPException(status_code=400, detail=str(e))
         logger.info(f"Staged {count} files for restore")
     finally:
         zip_path.unlink(missing_ok=True)
 
     send_notification(
-        sse_service, session_id_value,
+        sse_service, session_id,
         "Restore data extracted. Preparing server restart...",
         "success", "check-circle",
     )
@@ -365,7 +340,7 @@ async def restore_backup(
         logger.info("No supervisor detected — admin must restart manually")
 
         send_notification(
-            sse_service, session_id_value,
+            sse_service, session_id,
             "Restore data saved. Please restart the server manually to apply.",
             "warning", "exclamation-triangle",
         )

@@ -182,14 +182,13 @@ export class PluginSandbox {
    * Turn the URL of a backend plugin page into one that authenticates the page
    * without the session id: it adds a single-use launch token, which the
    * server exchanges for an HttpOnly cookie scoped to `/api/plugins/` before
-   * redirecting to the URL without the token. Any `session_id` parameter is
-   * removed. URLs outside `/api/plugins/` are returned without a token.
+   * redirecting to the URL without the token. URLs outside `/api/plugins/`
+   * are returned without a token.
    * @param {string} url - Relative or absolute URL of the plugin page
    * @returns {Promise<string>} Absolute URL to load in an iframe or window
    */
   async createLaunchUrl(url) {
     const targetUrl = new URL(url, window.location.origin);
-    targetUrl.searchParams.delete('session_id');
     targetUrl.searchParams.delete('launch');
     if (targetUrl.origin === window.location.origin && targetUrl.pathname.startsWith('/api/plugins/')) {
       const { token } = await this.context.getDependency('client').apiClient.pluginsLaunchToken();

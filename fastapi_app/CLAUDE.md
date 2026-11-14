@@ -36,42 +36,30 @@ When working on frontend extension files (`plugins/*/extensions/*.js`), also app
 
 **Authentication Pattern for Custom Routes:**
 
-When implementing authenticated routes (e.g., plugin routes), use dependency injection:
+When implementing authenticated routes (e.g., plugin routes), use the authentication dependencies. They read the session from the `X-Session-ID` header:
 
 ```python
-from fastapi import APIRouter, Depends, Header, Query
-from fastapi_app.lib.core.dependencies import (
-    get_auth_manager,
-    get_db,
-    get_session_manager,
-)
+from typing import Any
+
+from fastapi import APIRouter, Depends
+from fastapi_app.plugin_api import require_admin_user, require_authenticated_user
 
 @router.get("/endpoint")
 async def my_endpoint(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),  # 401 without a valid session
 ):
-    from fastapi_app.config import get_settings
+    ...
 
-    # Extract session ID (header takes precedence)
-    session_id_value = x_session_id or session_id
-    if not session_id_value:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    # Validate session
-    settings = get_settings()
-    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-
-    # Get user
-    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+@router.get("/admin-endpoint")
+async def my_admin_endpoint(
+    user: dict[str, Any] = Depends(require_admin_user),  # additionally 403 for non-admins
+):
+    ...
 ```
 
-Plugin pages are opened with a single-use launch token, and requests from them are authenticated by a cookie that the middleware turns into the `X-Session-ID` header. NEVER read `session_id` from `location.search` in plugin page JavaScript and NEVER build URLs that contain `session_id`. See [Backend Plugins - Authentication of Plugin Pages](../docs/code-assistant/backend-plugins.md#authentication-of-plugin-pages).
+`require_reviewer_or_admin` works the same way. A route that needs the session id itself (e.g. to send SSE progress events to the caller) adds `session_id: str = Depends(require_session_id)` from `fastapi_app.lib.core.dependencies`.
+
+Plugin pages are opened with a single-use launch token, and requests from them are authenticated by a cookie that the middleware turns into the `X-Session-ID` header. NEVER put the session id into URLs of plugin pages or routes. See [Backend Plugins - Authentication of Plugin Pages](../docs/code-assistant/backend-plugins.md#authentication-of-plugin-pages).
 
 **Access Control Pattern for Documents/Files:**
 

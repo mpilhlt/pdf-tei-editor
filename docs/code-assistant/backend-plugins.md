@@ -251,6 +251,7 @@ class MyPlugin(Plugin):
         """Main execution endpoint"""
         # Access user: context.user
         # Access app: context.app
+        # Caller's session id (e.g. as SSE client id): params["_session_id"]
         return {"result": "data"}
 
     async def get_info(self, context, params: dict) -> dict:
@@ -656,13 +657,9 @@ async def analyze(self, context, params: dict) -> dict:
    async def view_history(
        pdf: str = Query(...),
        variant: str = Query("all"),
-       session_id: str | None = Query(None),
-       x_session_id: str | None = Header(None, alias="X-Session-ID"),
-       session_manager=Depends(get_session_manager),
-       auth_manager=Depends(get_auth_manager),
+       user: dict[str, Any] = Depends(require_authenticated_user),
    ):
        """Generate HTML page with results."""
-       # Authenticate user
        # Process data
        # Generate HTML using generate_datatable_page() or custom template
        return HTMLResponse(content=html)
@@ -790,11 +787,11 @@ The `callPluginApi` method:
 
 Plugin pages (`outputUrl`, `executeUrl`, `sandbox.navigateIframe()`, `sandbox.openControlledWindow()`) never get the session id in their URL. The frontend requests a single-use launch token (`POST /api/v1/plugins/launch-token`, valid for 60 seconds) and loads `/api/plugins/<id>/<route>?launch=<token>`. `PluginWindowAuthMiddleware` ([plugin_window_auth.py](../../fastapi_app/lib/plugins/plugin_window_auth.py)) redeems the token, sets the HttpOnly cookie `pte_plugin_session` (`Path=/api/plugins/`, `SameSite=Strict`) and redirects to the same URL without the token. The address bar, the browser history and the access logs therefore never show the session id.
 
-For every request under `/api/plugins/` that brings no session id of its own, the middleware copies the cookie's session id into the `X-Session-ID` header. Routes therefore authenticate through `X-Session-ID`. The `session_id` query parameter is accepted too, but plugins must not use it (#734):
+For every request under `/api/plugins/` without an `X-Session-ID` header, the middleware copies the cookie's session id into that header. Routes therefore authenticate through `X-Session-ID` only, with `Depends(require_authenticated_user)` or one of the other authentication dependencies:
 
-- In page JavaScript, call plugin routes with plain same-origin `fetch()`, `EventSource`, links or `navigator.sendBeacon()`. Do not read `session_id` from `location.search` and do not build URLs with `session_id`, neither in JavaScript nor in Python.
+- In page JavaScript, call plugin routes with plain same-origin `fetch()`, `EventSource`, links or `navigator.sendBeacon()`, and do not put the session id into URLs, neither in JavaScript nor in Python.
 - Non-GET requests authenticated by the cookie are rejected if their `Origin` header names another host.
-- The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page decides which session it carries. So that two tabs logged in as different users can both use plugin pages, the sandbox client script (injected by `load_plugin_html()` / `wrap_html_with_sandbox_client()`) asks the application tab that opened the page for its session and adds it as `X-Session-ID` header to every same-origin `fetch()` and `XMLHttpRequest` to `/api/`, unless the request sets a non-empty one itself. Plain navigations (reload, links, `window.location` downloads), `navigator.sendBeacon()` and `EventSource` cannot carry the header and use the cookie, so with parallel sessions in one browser they act for the session of the most recently opened plugin page.
+- The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page decides which session it carries. So that two tabs logged in as different users can both use plugin pages, the sandbox client script (injected by `load_plugin_html()` / `wrap_html_with_sandbox_client()`) asks the application tab that opened the page for its session and adds it as `X-Session-ID` header to every same-origin `fetch()` and `XMLHttpRequest` to `/api/`, unless the request sets one itself. Plain navigations (reload, links, `window.location` downloads), `navigator.sendBeacon()` and `EventSource` cannot carry the header and use the cookie, so with parallel sessions in one browser they act for the session of the most recently opened plugin page.
 - Logout clears the cookie.
 
 ## Key Files
@@ -869,9 +866,12 @@ async def execute(self, context, params: dict) -> dict:
 1. **Create a custom route** in `routes.py` that generates the full HTML page:
 
 ```python
-from fastapi import APIRouter
+from typing import Any
+
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse
 from fastapi_app.lib.plugins.plugin_tools import generate_datatable_page, escape_html
+from fastapi_app.plugin_api import require_authenticated_user
 
 router = APIRouter(prefix="/api/plugins/my-plugin", tags=["my-plugin"])
 
@@ -879,15 +879,9 @@ router = APIRouter(prefix="/api/plugins/my-plugin", tags=["my-plugin"])
 async def view_results(
     collection: str = Query(...),
     variant: str | None = Query(None),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Generate standalone HTML page with results."""
-    # Authenticate user (see User Authentication section)
-    # ...
-
     # Prepare table data
     headers = ["Column 1", "Column 2", "Column 3"]
     rows = [
@@ -971,13 +965,9 @@ Create two routes in `routes.py`:
 @router.get("/preview", response_class=HTMLResponse)
 async def preview_operation(
     collection: str = Query(...),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Generate preview HTML (dry-run mode)."""
-    # Authenticate user
     # Perform dry-run operation
     # Generate detailed HTML with preview notice
     # Return HTML with message: "Click Execute to apply these changes"
@@ -986,13 +976,9 @@ async def preview_operation(
 @router.get("/execute", response_class=HTMLResponse)
 async def execute_operation(
     collection: str = Query(...),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Execute the operation and return summary HTML."""
-    # Authenticate user
     # Perform actual operation
     # Generate summary HTML (statistics only)
     return HTMLResponse(content=summary_html)
