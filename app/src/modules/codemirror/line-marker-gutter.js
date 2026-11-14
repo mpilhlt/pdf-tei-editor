@@ -2,8 +2,8 @@
 
 /**
  * A gutter shared by several sources of line markers, such as unit comments and bookmarks. The
- * markers of all sources on a line are shown next to each other, right-aligned towards the line
- * numbers, so that a line with a single marker has it at the same place whatever its source.
+ * markers of all sources on a line are shown next to each other, centered in the column, so that a
+ * line with a single marker has it at the same place whatever its source.
  *
  * A source contributes a state field with its markers through {@link lineMarkerSource}. The gutter
  * is part of the editor while at least one source is configured. A click on a marker goes to the
@@ -64,8 +64,8 @@ function markerSets(view) {
 
 const theme = View.baseTheme({
   '.cm-line-marker-gutter .cm-gutterElement': {
-    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px',
-    padding: '0 2px 0 3px'
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px',
+    padding: '0 3px'
   },
   '.cm-line-marker-spacer': { width: '12px' }
 });
