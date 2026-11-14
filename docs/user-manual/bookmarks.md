@@ -9,11 +9,19 @@ Bookmarks let you return to places in a document's text, for example entries you
 3. A small field asks for the title. It proposes the start of the element's text; type to replace it.
 4. Press `Enter` to save, or `Esc` to cancel.
 
+![](../images/bookmarks-context-menu.png)
+
+![](../images/bookmarks-prompt.png)
+
 The entry is disabled outside `<text>`, for example in the `teiHeader` or the `standOff`. The bookmark points at the innermost element you right-clicked: right-click on the text of a `<bibl>` to bookmark the whole entry, or on the text of its `<author>` to bookmark the author.
 
 ## The Bookmarks dialog
 
-Open it with **Bookmarks** in the user menu, below **Messages**. Each row shows the title, the bookmarked element and the document, the start of the element's text, and when the bookmark was added.
+Open it with **Bookmarks** in the user menu, below **Messages**.
+
+![](../images/bookmarks-user-menu.png)
+
+Each row shows the title, the bookmarked element and the document, the start of the element's text, and when the bookmark was added.
 
 | Control | Effect |
 | --- | --- |
@@ -21,6 +29,8 @@ Open it with **Bookmarks** in the user menu, below **Messages**. Each row shows 
 | Search | Filter the list by title, document or text |
 | Pencil button on a row | Rename the bookmark (`Enter` saves, `Esc` cancels) |
 | Trash button on a row | Delete the bookmark |
+
+![](../images/bookmarks-dialog.png)
 
 Click a bookmark to open its document with the bookmarked element selected and scrolled into view.
 
