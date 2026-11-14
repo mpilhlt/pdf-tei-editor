@@ -13,7 +13,6 @@
     const viaXhr = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('GET', '/api/plugins/test-plugin/whoami');
-      xhr.setRequestHeader('X-Session-ID', '');
       xhr.onload = () => resolve(JSON.parse(xhr.responseText));
       xhr.onerror = reject;
       xhr.send();

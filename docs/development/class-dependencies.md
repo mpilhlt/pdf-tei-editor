@@ -158,7 +158,7 @@ async def login(
 
 #### `get_session_id(request: Request) -> Optional[str]`
 
-Extracts session ID from request headers or query parameters (returns None if not present).
+Extracts session ID from the request (returns None if not present).
 
 ```python
 from fastapi import Request, Depends
@@ -178,9 +178,10 @@ async def optional_auth(
 ```
 
 **Session ID Sources (in order of precedence):**
-1. `X-Session-ID` header
-2. `X-Session-Id` header (case variation)
-3. `session_id` query parameter
+
+1. `X-Session-ID` header (case-insensitive)
+2. `sessionId` query parameter (for `EventSource` connections, which cannot set headers)
+3. `sessionId` cookie
 
 #### `require_session_id(request: Request) -> str`
 
@@ -514,44 +515,30 @@ async def get_file(
 
 ### Custom Authentication Route
 
-When implementing custom authentication logic (e.g., plugin routes), use the individual auth dependencies:
+Plugin routes authenticate with the same dependencies as the core routes. Plugins import them from `fastapi_app.plugin_api`:
 
 ```python
-from fastapi import APIRouter, Depends, Header, Query, HTTPException
-from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager
-from fastapi_app.lib.utils.auth import AuthManager
-from fastapi_app.lib.core.sessions import SessionManager
+from typing import Any
+
+from fastapi import APIRouter, Depends
+from fastapi_app.lib.core.dependencies import require_session_id
+from fastapi_app.plugin_api import require_admin_user, require_authenticated_user
 
 router = APIRouter(prefix="/api/plugins/my-plugin")
 
 @router.get("/custom")
 async def custom_route(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager: SessionManager = Depends(get_session_manager),
-    auth_manager: AuthManager = Depends(get_auth_manager)
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
-    from fastapi_app.config import get_settings
-
-    # Extract session ID (header takes precedence)
-    session_id_value = x_session_id or session_id
-    if not session_id_value:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
-    # Validate session
-    settings = get_settings()
-    if not session_manager.is_session_valid(session_id_value, settings.session_timeout):
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-
-    # Get user
-    user = auth_manager.get_user_by_session_id(session_id_value, session_manager)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
     # ... use user ...
-```
 
-**Note:** For standard routes, prefer `require_authenticated_user` instead of manual authentication.
+@router.post("/admin-task")
+async def admin_task(
+    user: dict[str, Any] = Depends(require_admin_user),
+    session_id: str = Depends(require_session_id),  # e.g. to send SSE progress events to the caller
+):
+    ...
+```
 
 ## Anti-Patterns
 

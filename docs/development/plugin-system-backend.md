@@ -566,9 +566,12 @@ async def execute(self, context, params: dict) -> dict:
 1. **Create a custom route** in `routes.py` that generates the full HTML page:
 
 ```python
-from fastapi import APIRouter
+from typing import Any
+
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse
 from fastapi_app.lib.plugins.plugin_tools import generate_datatable_page, escape_html
+from fastapi_app.plugin_api import require_authenticated_user
 
 router = APIRouter(prefix="/api/plugins/my-plugin", tags=["my-plugin"])
 
@@ -576,15 +579,9 @@ router = APIRouter(prefix="/api/plugins/my-plugin", tags=["my-plugin"])
 async def view_results(
     collection: str = Query(...),
     variant: str | None = Query(None),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Generate standalone HTML page with results."""
-    # Authenticate user (see User Authentication section)
-    # ...
-
     # Prepare table data
     headers = ["Column 1", "Column 2", "Column 3"]
     rows = [
@@ -668,13 +665,9 @@ Create two routes in `routes.py`:
 @router.get("/preview", response_class=HTMLResponse)
 async def preview_operation(
     collection: str = Query(...),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Generate preview HTML (dry-run mode)."""
-    # Authenticate user
     # Perform dry-run operation
     # Generate detailed HTML with preview notice
     # Return HTML with message: "Click Execute to apply these changes"
@@ -683,13 +676,9 @@ async def preview_operation(
 @router.get("/execute", response_class=HTMLResponse)
 async def execute_operation(
     collection: str = Query(...),
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     """Execute the operation and return summary HTML."""
-    # Authenticate user
     # Perform actual operation
     # Generate summary HTML (statistics only)
     return HTMLResponse(content=summary_html)
@@ -736,7 +725,7 @@ The `navigateIframe(url)` method on the `PluginSandbox` class ([backend-plugin-s
 
 1. Finds the iframe in the plugin result dialog
 2. Constructs a full URL from the relative path
-3. Replaces any `session_id` parameter with a single-use launch token (`createLaunchUrl()`, the same mechanism `displayResultInIframe` and `configureExecuteButton` use, see [Authentication of Plugin Pages](../code-assistant/backend-plugins.md#authentication-of-plugin-pages))
+3. Adds a single-use launch token (`createLaunchUrl()`, the same mechanism `displayResultInIframe` and `configureExecuteButton` use, see [Authentication of Plugin Pages](../code-assistant/backend-plugins.md#authentication-of-plugin-pages))
 4. Sets `iframe.src` to navigate
 
 Since `PluginSandbox` methods are auto-discovered by `_extract_sandbox_methods()` in [plugin_tools.py](../../fastapi_app/lib/plugins/plugin_tools.py), the method is automatically available as `sandbox.navigateIframe()` in any iframe that includes the sandbox client script.
@@ -757,12 +746,8 @@ from fastapi_app.lib.plugins.plugin_tools import generate_sandbox_client_script
 
 @router.get("/options", response_class=HTMLResponse)
 async def options_form(
-    session_id: str | None = Query(None),
-    x_session_id: str | None = Header(None, alias="X-Session-ID"),
-    session_manager=Depends(get_session_manager),
-    auth_manager=Depends(get_auth_manager),
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
-    # Authenticate user...
     sandbox_script = generate_sandbox_client_script()
 
     html = f"""<!DOCTYPE html>
@@ -798,7 +783,7 @@ async def options_form(
 async def execute_operation(
     mode: str = Query("a"),
     force: bool = Query(False),
-    # ... auth params
+    user: dict[str, Any] = Depends(require_authenticated_user),
 ):
     # Run operation with user-selected options
     # Return HTML results page
@@ -808,7 +793,7 @@ async def execute_operation(
 **Key points:**
 
 - The options form must include the sandbox client script (`generate_sandbox_client_script()`) so `sandbox.navigateIframe()` is available
-- `session_id` is automatically injected by `navigateIframe` — the form JavaScript only needs to build the path and query parameters
+- `navigateIframe` authenticates the page with a launch token, so the form JavaScript only needs to build the path and query parameters
 - The "Cancel" button can call `sandbox.closeDialog()` to dismiss the dialog
 - Each page in the chain is a full page load in the iframe, so the sandbox client reconnects on each navigation
 
@@ -833,7 +818,7 @@ await pluginSandbox.updateState({ xml: 'doc-id', variant: 'model-x' });
 // Close the result dialog
 pluginSandbox.closeDialog();
 
-// Navigate the iframe to a new URL (session_id injected automatically)
+// Navigate the iframe to a new URL (authenticated with a launch token)
 sandbox.navigateIframe('/api/plugins/my-plugin/execute?param=value');
 
 // Convenience: Open a document (updates xml state, clears diff, closes dialog) - async

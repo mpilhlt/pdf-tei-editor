@@ -106,7 +106,7 @@ describe('PluginSandbox.openControlledWindow()', () => {
     const win = { closed: false, location: { href: '' } };
     const { sandbox, windowOpen } = makeWindowSandbox({ windowOpenReturns: win });
 
-    await sandbox.openControlledWindow('/api/plugins/demo/view?x=1&session_id=old');
+    await sandbox.openControlledWindow('/api/plugins/demo/view?x=1');
 
     assert.strictEqual(windowOpen.mock.calls[0].arguments[0], 'about:blank');
     assert.strictEqual(win.location.href, 'http://localhost/api/plugins/demo/view?x=1&launch=tok');
@@ -131,9 +131,9 @@ describe('PluginSandbox.createLaunchUrl()', () => {
     return { sandbox: new PluginSandbox(context, /** @type {any} */ ({})), pluginsLaunchToken };
   }
 
-  it('replaces the session id with a launch token for plugin routes', async () => {
+  it('adds a launch token to URLs of plugin routes', async () => {
     const { sandbox } = makeLaunchSandbox();
-    const url = await sandbox.createLaunchUrl('/api/plugins/demo/view?q=1&session_id=secret');
+    const url = await sandbox.createLaunchUrl('/api/plugins/demo/view?q=1');
     assert.strictEqual(url, 'http://localhost/api/plugins/demo/view?q=1&launch=abc');
   });
 

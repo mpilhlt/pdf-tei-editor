@@ -33,11 +33,10 @@ def _build_app() -> FastAPI:
 
     @app.get("/api/plugins/demo/view")
     async def view(
-        session_id: str | None = Query(None),
         x_session_id: str | None = Header(None, alias="X-Session-ID"),
         q: str | None = Query(None),
     ) -> dict[str, str | None]:
-        return {"session": x_session_id or session_id, "q": q}
+        return {"session": x_session_id, "q": q}
 
     @app.post("/api/plugins/demo/action")
     async def action(x_session_id: str | None = Header(None, alias="X-Session-ID")) -> dict[str, str | None]:
@@ -119,7 +118,7 @@ class TestPluginWindowAuthMiddleware(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_exchange_redirects_to_clean_url_and_sets_cookie(self) -> None:
-        response = self.client.get(self._launch("q=a+b&session_id=old"))
+        response = self.client.get(self._launch("q=a+b"))
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers["location"], "/api/plugins/demo/view?q=a+b")
         cookie = response.headers["set-cookie"]
@@ -153,16 +152,14 @@ class TestPluginWindowAuthMiddleware(unittest.TestCase):
 
     def test_cookie_fills_in_missing_or_empty_session(self) -> None:
         self.client.cookies.set(PLUGIN_SESSION_COOKIE, self.session_id)
-        for headers, params in (({}, {}), ({"X-Session-ID": ""}, {}), ({}, {"session_id": "null"})):
-            response = self.client.get("/api/plugins/demo/view", headers=headers, params=params)
+        for headers in ({}, {"X-Session-ID": ""}):
+            response = self.client.get("/api/plugins/demo/view", headers=headers)
             self.assertEqual(response.json()["session"], self.session_id)
 
     def test_explicit_session_wins_over_cookie(self) -> None:
         self.client.cookies.set(PLUGIN_SESSION_COOKIE, self.session_id)
         response = self.client.get("/api/plugins/demo/view", headers={"X-Session-ID": "other"})
         self.assertEqual(response.json()["session"], "other")
-        response = self.client.get("/api/plugins/demo/view", params={"session_id": "legacy"})
-        self.assertEqual(response.json()["session"], "legacy")
 
     def test_cookie_is_not_applied_outside_plugin_routes(self) -> None:
         self.client.cookies.set(PLUGIN_SESSION_COOKIE, self.session_id)

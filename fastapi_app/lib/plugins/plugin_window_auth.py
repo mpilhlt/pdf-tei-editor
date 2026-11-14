@@ -9,10 +9,8 @@ without the token, so the address bar, the browser history and the access logs n
 session id.
 
 All later requests of the page under ``/api/plugins/`` (fetch, EventSource, links, downloads, reload)
-carry the cookie. For requests that bring no session id of their own (``X-Session-ID`` header or
-legacy ``session_id`` query parameter), the middleware copies the cookie's session id into the
-``X-Session-ID`` header, so plugin routes keep authenticating through the header and need no
-changes.
+carry the cookie. For requests without an ``X-Session-ID`` header, the middleware copies the
+cookie's session id into that header, so plugin routes authenticate through the header only.
 
 The cookie belongs to the browser profile, not to a tab: the most recently opened plugin page
 decides which session it carries. The sandbox client script therefore adds the session of the tab
@@ -39,13 +37,7 @@ PLUGIN_SESSION_COOKIE = "pte_plugin_session"
 LAUNCH_TOKEN_PARAM = "launch"
 """Query parameter that carries a launch token"""
 
-LEGACY_SESSION_PARAM = "session_id"
-"""Query parameter in which older frontends and plugins pass the session id"""
-
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
-
-# Values that plugin pages send when they read a session id from a URL that has none
-_EMPTY_SESSION_VALUES = {"", "null", "undefined"}
 
 _EXPIRED_LINK_HTML = (
     b"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Link expired</title></head>"
@@ -137,7 +129,7 @@ class PluginWindowAuthMiddleware:
             return
 
         cookie_session = _read_cookie(headers, PLUGIN_SESSION_COOKIE)
-        if cookie_session and not self._has_own_session(headers, query):
+        if cookie_session and not headers.get("x-session-id", "").strip():
             if scope["method"] not in _SAFE_METHODS and not _origin_matches_host(headers):
                 logger.warning(f"Rejected cross-origin {scope['method']} {scope['path']} authenticated by the plugin session cookie")
                 await _send_simple_response(send, 403, b"Cross-origin request rejected", [(b"content-type", b"text/plain")])
@@ -148,13 +140,6 @@ class PluginWindowAuthMiddleware:
             ] + [(b"x-session-id", cookie_session.encode("latin-1"))]
 
         await self.app(scope, receive, send)
-
-    @staticmethod
-    def _has_own_session(headers: dict[str, str], query: list[tuple[str, str]]) -> bool:
-        """True if the request names a session itself, in the header or the legacy query parameter."""
-        if headers.get("x-session-id", "").strip() not in _EMPTY_SESSION_VALUES:
-            return True
-        return any(key == LEGACY_SESSION_PARAM and value.strip() not in _EMPTY_SESSION_VALUES for key, value in query)
 
     async def _exchange_launch_token(
         self,
@@ -175,7 +160,7 @@ class PluginWindowAuthMiddleware:
             return
         session_manager.update_session_access_time(session_id)
 
-        remaining = [(key, value) for key, value in query if key not in (LAUNCH_TOKEN_PARAM, LEGACY_SESSION_PARAM)]
+        remaining = [(key, value) for key, value in query if key != LAUNCH_TOKEN_PARAM]
         raw_path = scope.get("raw_path")
         location = raw_path.decode("latin-1") if raw_path else quote(scope["path"])
         if remaining:

@@ -392,16 +392,12 @@ class TestEnsureRoles(unittest.TestCase):
 class TestAuthorization(unittest.TestCase):
     """Test the role matrix of the plugin routes."""
 
-    def _authenticate(self, operation, roles):
+    def _authorize(self, operation, roles):
         from fastapi import HTTPException
-        from fastapi_app.plugins.backup_restore.routes import _authenticate
+        from fastapi_app.plugins.backup_restore.routes import _authorize
 
-        session_manager = MagicMock()
-        session_manager.is_session_valid.return_value = True
-        auth_manager = MagicMock()
-        auth_manager.get_user_by_session_id.return_value = {"username": "u", "roles": roles}
         try:
-            _authenticate(operation, "sid", None, session_manager, auth_manager)
+            _authorize(operation, {"username": "u", "roles": roles})
             return True
         except HTTPException as e:
             self.assertEqual(e.status_code, 403)
@@ -419,16 +415,9 @@ class TestAuthorization(unittest.TestCase):
             (): (False, False, False),
         }
         for roles, allowed in expected.items():
-            got = tuple(self._authenticate(op, list(roles)) for op in ("view", "backup", "restore"))
+            got = tuple(self._authorize(op, list(roles)) for op in ("view", "backup", "restore"))
             self.assertEqual(got, allowed, f"roles={roles}")
 
-    def test_missing_session_is_401(self):
-        from fastapi import HTTPException
-        from fastapi_app.plugins.backup_restore.routes import _authenticate
-
-        with self.assertRaises(HTTPException) as ctx:
-            _authenticate("backup", None, None, MagicMock(), MagicMock())
-        self.assertEqual(ctx.exception.status_code, 401)
 
 
 class TestBackupArchive(unittest.TestCase):
@@ -530,6 +519,10 @@ class TestDownloadRoute(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.root)
+
+    def test_missing_session_is_401(self):
+        r = self.client.get("/api/plugins/backup-restore/download")
+        self.assertEqual(r.status_code, 401)
 
     def test_download_with_backup_role(self):
         r = self.client.get("/api/plugins/backup-restore/download", headers={"X-Session-ID": "s"})
