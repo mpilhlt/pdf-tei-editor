@@ -9,7 +9,9 @@ For the recommended division of labour between annotators and reviewers, from th
 The XML editor panel has three chrome areas around the editing surface:
 
 **Headerbar** (top strip)
-Shows the artifact type prefix (**Gold:** or **Version:**), the artifact label, and the last revision date and author. Clicking the label copies it to the clipboard; double-clicking opens an inline rename prompt. When the editor has unsaved changes that cannot be auto-saved (e.g. because the XML is malformed), a warning badge appears here. When the document is read-only, a lock icon appears.
+Shows the artifact type prefix (**Gold:** or **Version:**), the artifact label, the document status (e.g. **Status: draft**, taken from the last revision and updated when a revision with a new status is saved; hidden if the document has no status), and the last revision date and author. Clicking the label copies it to the clipboard; double-clicking opens an inline rename prompt. When the editor has unsaved changes that cannot be auto-saved (e.g. because the XML is malformed), a warning badge appears here. When the document is read-only, a lock icon appears.
+
+![XML editor headerbar with the document status](../images/xmleditor-headerbar-status.png)
 
 **Toolbar** (below the headerbar)
 Contains action buttons grouped by function. What buttons are visible depends on the document state and your role (see [Toolbar buttons](#toolbar-buttons)).

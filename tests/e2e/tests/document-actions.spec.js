@@ -764,6 +764,12 @@ test.describe('Document Actions', () => {
       expect(revisionLog.value).toHaveProperty('changeDescription', 'E2E test status save');
       expect(revisionLog.value).toHaveProperty('status', 'checked');
 
+      // The headerbar shows the new status
+      await expect.poll(
+        () => consoleLogs.some(log => log.message === 'DOCUMENT_STATUS_SHOWN' && log.value?.status === 'checked'),
+        { timeout: 5000 }
+      ).toBe(true);
+
       debugLog('Status save test completed successfully');
     } finally {
       await releaseAllLocks(page);
