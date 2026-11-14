@@ -15,6 +15,12 @@ Bookmarks let you return to places in a document's text, for example entries you
 
 The entry is disabled outside `<text>`, for example in the `teiHeader` or the `standOff`. The bookmark points at the innermost element you right-clicked: right-click on the text of a `<bibl>` to bookmark the whole entry, or on the text of its `<author>` to bookmark the author.
 
+## Bookmarks in the editor
+
+The bookmarked elements of the open document are marked with an orange bookmark icon in the gutter of the XML editor, next to the line numbers, like [unit comments](unit-comments.md) with their speech bubble. Hover over the icon to see the bookmark's title; a number on the icon shows several bookmarks on one line. Click the icon to select the bookmarked element. The markers follow the elements while you edit.
+
+![](../images/bookmarks-gutter.png)
+
 ## The Bookmarks dialog
 
 Open it with **Bookmarks** in the user menu, below **Messages**.

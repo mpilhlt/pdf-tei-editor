@@ -3,13 +3,14 @@
  *
  * As an annotator, bookmarks a <bibl> from the editor's context menu (the entry is disabled in
  * the teiHeader), opens the Bookmarks dialog from the user menu, renames the bookmark, opens it
- * (which selects the element, also after a unit was inserted before it), checks that another
+ * (which selects the element, also after a unit was inserted before it), checks the gutter marker, checks that another
  * user does not see it, deletes it, and checks that deleting the document deletes its bookmarks.
  *
  * @testCovers app/src/plugins/bookmarks.js
  * @testCovers app/src/templates/bookmarks-dialog.html
  * @testCovers app/src/templates/bookmarks-menu-item.html
  * @testCovers app/src/modules/node-anchor.js
+ * @testCovers app/src/modules/codemirror/bookmark-gutter.js
  * @testCovers app/src/modules/unit-review-popover.js
  * @testCovers fastapi_app/routers/bookmarks.py
  * @testCovers fastapi_app/lib/bookmarks/store.py
@@ -94,6 +95,18 @@ async function openBookmarksDialog(page) {
 
 /**
  * @param {Page} page
+ * @param {string} needle
+ * @returns {Promise<number>} The line of a text in the editor
+ */
+async function lineOf(page, needle) {
+  return page.evaluate((needle) => {
+    const doc = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc;
+    return doc.lineAt(doc.toString().indexOf(needle)).number;
+  }, needle);
+}
+
+/**
+ * @param {Page} page
  * @returns {Promise<string>} The selected text of the editor
  */
 async function selectedText(page) {
@@ -142,6 +155,13 @@ test.describe('Bookmarks', () => {
       expect(added.value.title).toBe('Second entry');
       bookmarkId = added.value.id;
 
+      // a marker in the gutter on the element's line
+      const marker = page.getByTestId('bookmark-gutter-marker');
+      await expect(marker).toHaveCount(1);
+      await expect(marker).toHaveAttribute('title', 'Bookmark: Second entry');
+      expect(await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('bookmarks').getDocumentBookmarks()))
+        .toEqual([{ id: added.value.id, title: 'Second entry', line: await lineOf(page, '<bibl>Beta') }]);
+
       // bookmarks are not stored in the document
       const text = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
       expect(text).not.toContain('Second entry');
@@ -161,6 +181,7 @@ test.describe('Bookmarks', () => {
       await renameInput.fill('Beta entry');
       await renameInput.press('Enter');
       await waitForTestMessage(consoleLogs, 'BOOKMARK_RENAMED');
+      await expect(page.getByTestId('bookmark-gutter-marker')).toHaveAttribute('title', 'Bookmark: Beta entry');
       const renamed = dialog.getByTestId('bookmark-row').filter({ hasText: 'Beta entry' });
       await expect(renamed).toHaveCount(1);
       await page.waitForTimeout(500);
@@ -177,7 +198,15 @@ test.describe('Bookmarks', () => {
       await dialog.getByTestId('bookmark-row').filter({ hasText: 'Beta entry' }).click();
       const opened = await waitForTestMessage(consoleLogs, 'BOOKMARK_OPENED');
       expect(opened.value.found).toBe(true);
-      expect(opened.value.match).toBe('moved');
+      expect(opened.value.match).toBe('session'); // tracked through the edit
+      expect(await selectedText(page)).toBe('<bibl>Beta 2002</bibl>');
+
+      // the gutter marker moved with the element; clicking it selects the element
+      await expect.poll(async () => (await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('bookmarks').getDocumentBookmarks()))[0]?.line)
+        .toBe(await lineOf(page, '<bibl>Beta'));
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().dispatch({ selection: { anchor: 0 } }));
+      await page.getByTestId('bookmark-gutter-marker').click();
+      await waitForTestMessage(consoleLogs, 'BOOKMARK_GUTTER_CLICKED');
       expect(await selectedText(page)).toBe('<bibl>Beta 2002</bibl>');
 
       // private: another user does not see it

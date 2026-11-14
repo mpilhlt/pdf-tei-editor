@@ -16,15 +16,15 @@ Requested by Christian (2026-11-14): private bookmarks on sub-elements of `/TEI/
 
 - Plugin `app/src/plugins/bookmarks.js`, templates `bookmarks-dialog.html` and `bookmarks-menu-item.html`.
 - Context menu: "Bookmark…" is prepended to the editor's context menu (above "Comment…"). The prompt is `openCommentPrompt()` of `unit-review-popover.js`, which gained the options `maxLength` and `selectAll`; the proposed title is the start of the element's text, selected so that typing replaces it.
+- Gutter (Christian, 2026-11-14): `app/src/modules/codemirror/bookmark-gutter.js` shows an orange bookmark icon on the first line of each bookmarked element of the open document, like the unit comment bubble (title as tooltip, count for several bookmarks on a line). The plugin loads the document's bookmarks on `editorAfterLoad` and on `bookmarksChanged`, tracks the element positions through edits, and adds the gutter only while the document has bookmarks. Clicking a marker selects the element.
 - Dialog: "All documents / This document" switch (opens on "This document" when the open document has bookmarks), client-side search, inline rename, delete.
 - `relativeTime()` moved from `messages.js` to `app/src/modules/relative-time.js`; `DocLabels` moved from `routers/messages.py` to `fastapi_app/lib/repository/doc_labels.py`, both shared by messages and bookmarks.
 
 ## Tests
 
 - `tests/unit/fastapi/test_bookmarks.py`: store, privacy, path validation, unreadable and non-TEI files, rename/delete, unavailable files, deletion on `file.deleted`, GC (incl. dry run).
-- `tests/e2e/tests/bookmarks.spec.js`: context menu (disabled in the header), title prompt, dialog from the user menu, rename, opening after an insertion before the element, privacy against another user, delete, deletion of the bookmarks with the document.
+- `tests/e2e/tests/bookmarks.spec.js`: context menu (disabled in the header), title prompt, gutter marker (title, line after an insertion, click), dialog from the user menu, rename, opening after an insertion before the element, privacy against another user, delete, deletion of the bookmarks with the document.
 
 ## Not done
 
-- No gutter marker for bookmarked elements in the editor.
 - No keyboard shortcut for adding a bookmark.

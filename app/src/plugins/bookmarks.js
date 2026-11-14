@@ -10,12 +10,18 @@
  * The list is refreshed by the SSE event `bookmarksChanged` when another session of the user
  * changes the bookmarks.
  *
+ * The bookmarks of the open document are shown as markers in an editor gutter (only while the
+ * document has bookmarks); clicking a marker selects the bookmarked element.
+ *
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { BookmarkItem } from '../modules/api-client-v1.js'
  * @import { SlDialog, SlMenuItem, SlRadioGroup, SlInput } from '../ui.js'
  * @import { bookmarksDialogPart } from '../templates/bookmarks-dialog.types.js'
- * @import { EditorView } from '@codemirror/view'
+ * @import { EditorView, BlockInfo, ViewUpdate } from '@codemirror/view'
+ * @import { ChangeSet } from '@codemirror/state'
+ * @import { AnchoredElement } from '../modules/node-anchor.js'
+ * @import { BookmarkLineMark } from '../modules/codemirror/bookmark-gutter.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -29,6 +35,7 @@ import { relativeTime } from '../modules/relative-time.js'
 import { elementAt, elementPath, resolveAnchor, FingerprintCache } from '../modules/node-anchor.js'
 import { elementName } from '../modules/unit-review.js'
 import { openCommentPrompt } from '../modules/unit-review-popover.js'
+import { bookmarkGutter, buildBookmarkMarkers, setBookmarkMarkersEffect } from '../modules/codemirror/bookmark-gutter.js'
 
 await registerTemplate('bookmarks-dialog', 'bookmarks-dialog.html')
 await registerTemplate('bookmarks-menu-item', 'bookmarks-menu-item.html')
@@ -44,6 +51,16 @@ const EXCERPT_LENGTH = 200
 
 /** Length of the title proposed from the element text */
 const PROPOSED_TITLE_LENGTH = 60
+
+/** Delay after the last edit before the gutter markers are resolved again */
+const REFRESH_DELAY_MS = 250
+
+/**
+ * A bookmark of the open document and the element it is anchored on
+ * @typedef {object} PlacedBookmark
+ * @property {BookmarkItem} item
+ * @property {AnchoredElement|null} element - Null if the element was not found
+ */
 
 const CSS = `
 .bookmarks-dialog .bookmarks-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
@@ -109,6 +126,30 @@ class BookmarksPlugin extends Plugin {
 
   #cache = new FingerprintCache()
 
+  /** @type {{ reconfigure: (ext: any) => void }|null} */
+  #slot = null
+
+  /** Whether the gutter is part of the editor extensions (only while the document has bookmarks) */
+  #gutterShown = false
+
+  /** @type {BookmarkItem[]} Bookmarks of the open document */
+  #docBookmarks = []
+
+  /** @type {PlacedBookmark[]} */
+  #placed = []
+
+  /** @type {Map<string, number>} Element start by bookmark id, tracked through the edits of this session */
+  #positions = new Map()
+
+  /** @type {ChangeSet|null} Document changes since the last refresh */
+  #pendingChanges = null
+
+  /** @type {ReturnType<typeof setTimeout>|undefined} */
+  #timer = undefined
+
+  /** Counts the loads of the document's bookmarks, so that a late response does not overwrite a newer one */
+  #loadSeq = 0
+
   /** @param {ApplicationState} initialState */
   async install(initialState) {
     await super.install(initialState)
@@ -126,6 +167,14 @@ class BookmarksPlugin extends Plugin {
     this.#dialogUi.searchInput.addEventListener('sl-input', () => this.#render())
     this.getDependency('sse').addEventListener('bookmarksChanged', () => {
       if (this.#dialogUi.open) this.#reload()
+      this.#loadDocumentBookmarks()
+    })
+    this.#slot = this.#xmlEditor.createExtensionSlot(this.#extensions())
+    this.#xmlEditor.addUpdateListener((/** @type {ViewUpdate} */ update) => this.#onEditorUpdate(update))
+    this.#xmlEditor.on('editorAfterLoad', () => {
+      this.#positions = new Map()
+      this.#pendingChanges = null
+      this.#loadDocumentBookmarks()
     })
   }
 
@@ -135,6 +184,7 @@ class BookmarksPlugin extends Plugin {
       this.#items = []
       this.#dialogUi?.hide()
     }
+    await this.#loadDocumentBookmarks()
   }
 
   // ── Public API ──────────────────────────────────────────────────────
@@ -202,6 +252,8 @@ class BookmarksPlugin extends Plugin {
           excerpt: target.excerpt || null
         })
         notify(`Bookmark "${bookmark.title}" added.`, 'success', 'bookmark-check')
+        this.#positions.set(bookmark.id, target.from)
+        await this.#loadDocumentBookmarks()
         testLog('BOOKMARK_ADDED', { id: bookmark.id, path: bookmark.path, title: bookmark.title })
       } catch (error) {
         notify(`The bookmark could not be saved: ${String(error)}`, 'danger', 'exclamation-octagon')
@@ -243,14 +295,10 @@ class BookmarksPlugin extends Plugin {
     }
     if (this.state?.xml !== item.stable_id) return false
     const view = this.#view()
-    const element = resolveAnchor(view.state, { path: item.path, fingerprint: item.fingerprint ?? null }, this.#cache)
+    const element = resolveAnchor(view.state, { path: item.path, fingerprint: item.fingerprint ?? null }, this.#cache, this.#positions.get(item.id) ?? null)
     const found = element !== null
     if (element) {
-      view.dispatch({
-        selection: EditorSelection.range(element.from, element.to),
-        effects: View.scrollIntoView(element.from, { y: 'center' })
-      })
-      view.focus()
+      this.#select(element)
     } else {
       notify('The bookmarked element was not found in the document. It may have been removed.', 'warning', 'exclamation-triangle')
     }
@@ -258,7 +306,127 @@ class BookmarksPlugin extends Plugin {
     return found
   }
 
+  /**
+   * Returns the bookmarks of the open document with the line of their element.
+   * @returns {Array<{id: string, title: string, line: number|null}>}
+   */
+  getDocumentBookmarks() {
+    const doc = this.#view()?.state.doc
+    return this.#placed.map(({ item, element }) => ({
+      id: item.id,
+      title: item.title,
+      line: element && doc && element.from <= doc.length ? doc.lineAt(element.from).number : null
+    }))
+  }
+
   // ── Editor ──────────────────────────────────────────────────────────
+
+  /**
+   * Selects an element and scrolls it to the vertical center.
+   * @param {AnchoredElement} element
+   */
+  #select(element) {
+    const view = this.#view()
+    view.dispatch({
+      selection: EditorSelection.range(element.from, element.to),
+      effects: View.scrollIntoView(element.from, { y: 'center' })
+    })
+    view.focus()
+  }
+
+  /**
+   * The CodeMirror extensions: the gutter while the document has bookmarks.
+   * @returns {any[]}
+   */
+  #extensions() {
+    return this.#gutterShown ? [bookmarkGutter((view, line) => this.#onGutterClick(view, line))] : []
+  }
+
+  /** @param {ViewUpdate} update */
+  #onEditorUpdate(update) {
+    if (!update.docChanged || !this.#docBookmarks.length) return
+    this.#pendingChanges = this.#pendingChanges ? this.#pendingChanges.compose(update.changes) : update.changes
+    clearTimeout(this.#timer)
+    this.#timer = setTimeout(() => this.#refreshGutter(), REFRESH_DELAY_MS)
+  }
+
+  /**
+   * Fetches the user's bookmarks of the open document and updates the gutter.
+   */
+  async #loadDocumentBookmarks() {
+    const seq = ++this.#loadSeq
+    const stableId = this.state?.xml
+    /** @type {BookmarkItem[]} */
+    let items = []
+    if (stableId && this.state?.user) {
+      try {
+        items = (await this.#client.apiClient.bookmarksList({ stable_id: stableId })).items
+      } catch (error) {
+        this.getDependency('logger').debug('Cannot load the bookmarks of the document: ' + String(error))
+      }
+    }
+    if (seq !== this.#loadSeq || stableId !== this.state?.xml) return
+    this.#docBookmarks = items
+    this.#refreshGutter()
+  }
+
+  /**
+   * Resolves the anchors of the document's bookmarks and updates the gutter markers.
+   */
+  #refreshGutter() {
+    clearTimeout(this.#timer)
+    const view = this.#xmlEditor.getView?.()
+    if (!view) return
+    const changes = this.#pendingChanges
+    this.#pendingChanges = null
+    if (changes) {
+      for (const [id, pos] of this.#positions) this.#positions.set(id, changes.mapPos(pos, 1))
+    }
+    this.#placed = this.#docBookmarks.map(item => {
+      const element = resolveAnchor(view.state, { path: item.path, fingerprint: item.fingerprint ?? null }, this.#cache, this.#positions.get(item.id) ?? null)
+      if (element) this.#positions.set(item.id, element.from)
+      else this.#positions.delete(item.id)
+      return { item, element }
+    })
+    const needGutter = this.#placed.some(p => p.element)
+    if (needGutter !== this.#gutterShown) {
+      this.#gutterShown = needGutter
+      this.#slot?.reconfigure(this.#extensions())
+    }
+    if (!this.#gutterShown) return
+    const doc = view.state.doc
+    /** @type {Map<number, BookmarkLineMark>} */
+    const lines = new Map()
+    for (const { item, element } of this.#placed) {
+      if (!element || element.from > doc.length) continue
+      const line = doc.lineAt(element.from).number
+      const mark = lines.get(line)
+      if (mark) {
+        mark.count++
+        mark.title += '\n' + item.title
+      } else {
+        lines.set(line, { line, count: 1, title: item.title })
+      }
+    }
+    for (const mark of lines.values()) mark.title = `Bookmark${mark.count > 1 ? 's' : ''}: ${mark.title}`
+    view.dispatch({ effects: setBookmarkMarkersEffect.of(buildBookmarkMarkers(doc, [...lines.values()])) })
+  }
+
+  /**
+   * Selects the element of the first bookmark on a gutter line.
+   * @param {EditorView} view
+   * @param {BlockInfo} line
+   * @returns {boolean}
+   */
+  #onGutterClick(view, line) {
+    const doc = view.state.doc
+    const n = doc.lineAt(line.from).number
+    const target = this.#placed.find(p => p.element && p.element.from <= doc.length && doc.lineAt(p.element.from).number === n)
+    if (!target?.element) return false
+    this.#select(target.element)
+    testLog('BOOKMARK_GUTTER_CLICKED', { id: target.item.id, from: target.element.from, to: target.element.to })
+    return true
+  }
 
   /** @returns {EditorView} */
   #view() {
@@ -388,6 +556,7 @@ class BookmarksPlugin extends Plugin {
       }
       testLog('BOOKMARK_DELETED', { id: item.id })
       await this.#reload()
+      await this.#loadDocumentBookmarks()
     })
     actions.append(rename, remove)
     side.appendChild(actions)
@@ -434,6 +603,7 @@ class BookmarksPlugin extends Plugin {
       }
       testLog('BOOKMARK_RENAMED', { id: item.id, title })
       await this.#reload()
+      await this.#loadDocumentBookmarks()
     }
     save.addEventListener('click', submit)
     input.addEventListener('keydown', event => {
