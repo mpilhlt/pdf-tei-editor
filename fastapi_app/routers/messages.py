@@ -32,7 +32,6 @@ from ..lib.messages.service import (
     visible_messages,
 )
 from ..lib.messages.store import DIRECT_KEY_PREFIX, MessageRow, MessageStore
-from ..lib.models.models import FileMetadata
 from ..lib.models.models_messages import (
     DirectMessageRequest,
     DirectMessageResponse,
@@ -44,6 +43,7 @@ from ..lib.models.models_messages import (
 )
 from ..lib.permissions.access_control import check_file_access
 from ..lib.permissions.user_utils import list_users
+from ..lib.repository.doc_labels import DocLabels
 from ..lib.repository.file_repository import FileRepository
 from ..lib.sse.sse_service import SSEService
 from ..lib.sse.sse_utils import send_to_user_sessions
@@ -58,25 +58,7 @@ def get_store() -> MessageStore:
     return get_message_store()
 
 
-class _DocLabels:
-    """Labels of documents, cached for one request."""
-
-    def __init__(self, file_repo: FileRepository):
-        self.file_repo = file_repo
-        self._titles: dict[str, str] = {}
-
-    def label(self, file: FileMetadata | None, doc_id: str) -> str:
-        if doc_id not in self._titles:
-            pdf = self.file_repo.get_pdf_for_document(doc_id)
-            title = (pdf.doc_metadata or {}).get("title") if pdf else None
-            self._titles[doc_id] = str(title or (pdf.label if pdf else None) or doc_id)
-        title = self._titles[doc_id]
-        if file is not None and file.label and file.label != title:
-            return f"{title}, {file.label}"
-        return title
-
-
-def _to_item(row: MessageRow, cache: AccessCache, labels: _DocLabels) -> MessageItem:
+def _to_item(row: MessageRow, cache: AccessCache, labels: DocLabels) -> MessageItem:
     return MessageItem(
         key=row.key, kind=row.kind, reason=row.reason, doc_id=row.doc_id, stable_id=row.stable_id,
         doc_label=labels.label(cache.file(row.stable_id), row.doc_id), author=row.author,
@@ -119,7 +101,7 @@ def list_messages(
     cache = AccessCache(file_repo, user)
     rows = visible_messages(store, cache, unread_only=status == "unread", kind=kind)
     unread = len(visible_messages(store, cache, unread_only=True))
-    labels = _DocLabels(file_repo)
+    labels = DocLabels(file_repo)
     items = [_to_item(row, cache, labels) for row in rows[offset:offset + limit]]
     return MessageListResponse(items=items, total=len(rows), unread=unread)
 

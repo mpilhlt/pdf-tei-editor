@@ -847,6 +847,42 @@
  */
 
 /**
+ * @typedef {Object} BookmarkItem
+ * @property {string} id
+ * @property {string} stable_id - The file the bookmark opens
+ * @property {string} doc_id
+ * @property {string} doc_label
+ * @property {string} path - XPath of the element, e.g. `/TEI/text/body/listBibl/bibl[3]`
+ * @property {string|null=} fingerprint - Fingerprint of the element's content when it was bookmarked
+ * @property {string} element - Local name of the element
+ * @property {string} title
+ * @property {string|null=} excerpt - Start of the element's text when it was bookmarked
+ * @property {boolean} available - False if the file was deleted or the user can no longer view it
+ * @property {string} created_at
+ * @property {string} updated_at
+ */
+
+/**
+ * @typedef {Object} BookmarkListResponse
+ * @property {Array<BookmarkItem>} items - Newest first
+ */
+
+/**
+ * @typedef {Object} CreateBookmarkRequest
+ * @property {string} stable_id
+ * @property {string} path - XPath of an element below `/TEI/text`
+ * @property {string|null=} fingerprint
+ * @property {string} element
+ * @property {string} title
+ * @property {string|null=} excerpt
+ */
+
+/**
+ * @typedef {Object} DeleteBookmarkResponse
+ * @property {boolean} deleted
+ */
+
+/**
  * @typedef {Object} MessageCountResponse
  * @property {number} unread
  */
@@ -2395,6 +2431,51 @@ export class ApiClientV1 {
   async messagesRebuild() {
     const endpoint = `/messages/rebuild`
     return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * The bookmarks of the current user, newest first.
+   *
+   * @param {{stable_id?: string}} [params] - `stable_id`: only the bookmarks of this file
+   * @returns {Promise<BookmarkListResponse>}
+   */
+  async bookmarksList(params = {}) {
+    const endpoint = `/bookmarks`
+    return this.callApi(endpoint, 'GET', params);
+  }
+
+  /**
+   * Adds a bookmark of the current user on an element below `/TEI/text`.
+   *
+   * @param {CreateBookmarkRequest} requestBody
+   * @returns {Promise<BookmarkItem>}
+   */
+  async bookmarksCreate(requestBody) {
+    const endpoint = `/bookmarks`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Renames a bookmark of the current user.
+   *
+   * @param {string} bookmarkId
+   * @param {{title: string}} requestBody
+   * @returns {Promise<BookmarkItem>}
+   */
+  async bookmarksUpdate(bookmarkId, requestBody) {
+    const endpoint = `/bookmarks/${encodeURIComponent(bookmarkId)}`
+    return this.callApi(endpoint, 'PATCH', requestBody);
+  }
+
+  /**
+   * Deletes a bookmark of the current user.
+   *
+   * @param {string} bookmarkId
+   * @returns {Promise<DeleteBookmarkResponse>}
+   */
+  async bookmarksDelete(bookmarkId) {
+    const endpoint = `/bookmarks/${encodeURIComponent(bookmarkId)}`
+    return this.callApi(endpoint, 'DELETE');
   }
 
   /**

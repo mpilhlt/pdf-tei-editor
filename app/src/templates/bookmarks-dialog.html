@@ -1,0 +1,16 @@
+<sl-dialog name="bookmarksDialog" label="Bookmarks" class="bookmarks-dialog" style="--width: 760px;">
+  <div class="bookmarks-toolbar">
+    <sl-radio-group name="scopeFilter" size="small" value="all">
+      <sl-radio-button value="all">All documents</sl-radio-button>
+      <sl-radio-button name="documentScope" value="document">This document</sl-radio-button>
+    </sl-radio-group>
+    <sl-input name="searchInput" size="small" placeholder="Search" clearable style="width: 220px;">
+      <sl-icon slot="prefix" name="search"></sl-icon>
+    </sl-input>
+  </div>
+  <div name="bookmarkList" class="bookmarks-list" data-testid="bookmarks-list"></div>
+  <div name="emptyNote" class="bookmarks-empty">No bookmarks.</div>
+  <!-- icons the plugin sets from JS, listed here so that the build compiles them -->
+  <span hidden><sl-icon name="bookmark-fill"></sl-icon><sl-icon name="bookmark-plus"></sl-icon><sl-icon name="bookmark-check"></sl-icon><sl-icon name="pencil"></sl-icon><sl-icon name="trash"></sl-icon></span>
+  <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
+</sl-dialog>
