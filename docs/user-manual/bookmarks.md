@@ -17,7 +17,7 @@ The entry is disabled outside `<text>`, for example in the `teiHeader` or the `s
 
 ## Bookmarks in the editor
 
-The bookmarked elements of the open document are marked with an orange bookmark icon in the gutter of the XML editor, next to the line numbers, like [unit comments](unit-comments.md) with their speech bubble. Hover over the icon to see the bookmark's title; a number on the icon shows several bookmarks on one line. Click the icon to select the bookmarked element. The markers follow the elements while you edit.
+The bookmarked elements of the open document are marked with an orange bookmark icon in the gutter of the XML editor, next to the line numbers. Bookmarks share this column with the speech bubbles of [unit comments](unit-comments.md): a line with both shows the bubble and the bookmark side by side. Hover over the icon to see the bookmark's title; a number on the icon shows several bookmarks on one line. Click the icon to select the bookmarked element. The markers follow the elements while you edit.
 
 ![](../images/bookmarks-gutter.png)
 
