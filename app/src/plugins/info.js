@@ -244,9 +244,9 @@ class InfoPlugin extends Plugin {
     }
 
     // relative image paths are relative to the markdown file, not to the app page
-    const pageUrl = new URL(`${isOnline ? this.#remoteDocsBasePath : this.#localDocsBasePath}/${mdPath}`, document.baseURI)
+    const pagePath = `${isOnline ? this.#remoteDocsBasePath : this.#localDocsBasePath}/${mdPath}`
     const rendered = /** @type {MarkdownIt} */(this.#md).render(markdown)
-    const html = resolveRelativeSources(rendered, pageUrl)
+    const html = resolveRelativeSources(rendered, pagePath)
       .replaceAll(
         /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g,
         `$1href="#" onclick="appInfo.load('$3'); return false"$4`
