@@ -105,11 +105,17 @@ Changes take effect immediately when you toggle a switch.
 
 ### Read-Only Indicators
 
-When a document is read-only, you'll see an indicator in the status bar explaining why:
+When a document is read-only, an indicator in the header bar of the XML editor explains why:
 
+![The header bar of the XML editor showing "Gold: Extraction" on the left and a lock icon with "Read-only (gold file - reviewer role required)" on the right](../images/access-control-read-only.png)
+
+*The read-only indicator when an annotator opens a gold file.*
+
+- "Read-only (superseded by a newer version) — save a new version to edit" - A newer version was copied from this one
 - "Read-only (gold file - reviewer role required)" - You need reviewer role to edit gold files
 - "Read-only (version file - annotator role required)" - You need annotator role to edit versions
-- "Read-only (owned by [username])" - The document's editability is set to owner-only
+- "Read-only (owned by [username]) — save to a personal copy to edit" - In owner-based mode, the document belongs to someone else
+- "Read-only (owned by [username])" - In granular mode, the document's editability is set to owner-only
 
 Read-only does not prevent reviews and comments: annotators comment and reviewers review documents they cannot edit, unless the version is superseded (see [Reviewing and Commenting Documents You Cannot Edit](editing-workflow.md#reviewing-and-commenting-documents-you-cannot-edit)).
 
@@ -143,7 +149,7 @@ Legacy documents without an owner can only be deleted by reviewers and admins.
 
 1. **Use versions**: Create versions to work on documents without affecting the original
 2. **Communicate ownership**: When working in owner-based mode, coordinate with team members about who owns what
-3. **Check permissions first**: If you can't edit, check the status bar for the reason
+3. **Check permissions first**: If you can't edit, check the header bar of the XML editor for the reason
 4. **Ask reviewers**: If you need to edit a protected document, ask a reviewer to adjust permissions
 
 ## For Administrators

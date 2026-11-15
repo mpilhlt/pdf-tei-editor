@@ -2,6 +2,10 @@
 
 The plugin manager lets administrators see which plugins are installed and switch them on or off without restarting the server. Which plugins are installed is decided when the editor is installed or its Docker image is built (see [Plugins in the image](docker-deployment.md#plugins-in-the-image)); if the operator allows it, administrators can also install plugins from GitHub releases in the plugin manager (see [Installing plugins](#installing-plugins)). It is only available to users with the admin role and is opened via the left "Tools" dropdown menu, under "Administration" > "Manage Plugins".
 
+![The Plugins dialog with a search field, status filter chips and a list of plugins, each with an on/off switch, name, version, status badge, description and README button](../images/plugin-manager.png)
+
+*The plugin manager with the list of installed plugins.*
+
 ## The plugin list
 
 Each row shows:

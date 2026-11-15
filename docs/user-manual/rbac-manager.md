@@ -4,7 +4,9 @@ The RBAC Manager is the administration UI for users, projects, collections, grou
 
 See [User Management](./user-management.md) for background on the authentication and role system.
 
-![RBAC Manager dialog](../images/rbac-manager.png)
+![The "Manage Access & Projects" dialog with the tabs Users, Projects, Groups, Roles and Collections, the list of users on the left and an empty detail panel on the right](../images/rbac-manager.png)
+
+*The RBAC Manager with the Users tab open.*
 
 ## Layout
 
