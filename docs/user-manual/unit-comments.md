@@ -14,6 +14,10 @@ You do not need write access: in a document you cannot edit (for example someone
 
 Type `@` to mention someone: the people listed in the document's `respStmt` and its owner are offered for completion. A mentioned user receives the comment as a [message](messages.md).
 
+![The comment prompt below a bibl element with the text "Is "August" part of the date? @anna" and the completion "Anna Berger @anna"](../images/unit-comments-prompt.png)
+
+*Writing a comment that mentions a user.*
+
 Web addresses starting with `http://` or `https://` become clickable links in the comment popover, the diagnostics drawer and the Messages dialog. They open in a new tab.
 
 ## Seeing comments
@@ -22,9 +26,17 @@ Web addresses starting with `http://` or `https://` become clickable links in th
 - The **status bar** shows the number of open comments next to a speech bubble (💬). Click it to show the open comments in the diagnostics drawer.
 - Open comments are listed in the **diagnostics drawer**, with the buttons **Reply** and **Resolve**. `F8` jumps to the next entry there.
 
+![A blue speech bubble in the gutter of the XML editor next to a commented bibl element](../images/unit-comments-gutter.png)
+
+*The speech bubble of an open comment.*
+
 ## Replying, resolving, editing
 
 Click the bubble to open the comment. The popover shows the comment and its replies, with the author and time of each.
+
+![The comment popover with the status Open, the comment of Rita Klein, the reply of Anna Berger with the links Edit and Delete, a reply field and the buttons Close, Resolve and Reply](../images/unit-comments-popover.png)
+
+*A comment thread with a reply.*
 
 | Action | How |
 | --- | --- |

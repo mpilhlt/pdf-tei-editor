@@ -14,6 +14,10 @@ Your own marks and comments never create messages for you.
 
 The number of unread messages is shown as a red badge on the user menu button in the toolbar, and again on the **Messages** item of the user menu. It updates live when new messages arrive.
 
+![The open user menu with a red badge showing 2 on the menu button and on the item Messages](../images/messages-user-menu.png)
+
+*The unread count on the user menu.*
+
 ## The Messages dialog
 
 Open it with **Messages** in the user menu.
@@ -26,6 +30,10 @@ Open it with **Messages** in the user menu.
 | Envelope button on a row | Mark this message as read or unread |
 | Reply | Reply without leaving the dialog |
 | Load more | Shows the next 50 messages |
+
+![The Messages dialog with two unread messages from Rita Klein: a mention in a comment and a unit marked not OK, each with the document, the unit and the comment](../images/messages-dialog.png)
+
+*The Messages dialog.*
 
 Click a message to open its document at the source: a comment opens with its thread popover, a review opens with review mode on and the unit's review popover, a review request opens the document with review mode on, a direct message opens the document. Opening a message marks it as read.
 

@@ -16,6 +16,10 @@ The dialog lists the persons of the document's `/TEI/teiHeader/fileDesc/titleStm
 
 The editor adds a `respStmt` itself when someone saves a revision, sets [review marks](unit-review.md) or writes a comment.
 
+![The People dialog listing Christian Boulanger and Anna Berger as Annotator and Rita Klein as Reviewer, with their edits and comments, a message button for each, and the section "Add a person"](../images/document-people-dialog.png)
+
+*The People dialog as a reviewer sees it.*
+
 ## Adding people
 
 Users with the *reviewer* or *admin* role see an **Add a person** section below the list, enabled while the document can be edited:
@@ -29,5 +33,9 @@ Adding a person does not change who can access the document, which is governed b
 ## Sending a message
 
 Click the message button of a person to open a one-line field below the entry. Type the message (at most 500 characters) and press `Enter` or **Send**. The message appears in the recipient's [Messages](messages.md), where it opens the document, and can be answered from there. It is **not stored in the document**.
+
+![The People dialog with the message field opened below Anna Berger, containing a short message, and the button Send](../images/document-people-message.png)
+
+*Sending a message to a person of the document.*
 
 The button is disabled for yourself and for persons who are not users of the editor. A message can only be sent to a user who can view the document.
