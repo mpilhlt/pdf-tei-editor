@@ -288,13 +288,22 @@ export function processMarkdownHtml(html, options) {
  * @param {string} html - Rendered HTML from markdown
  * @param {string} basePath - Path of the markdown file: an absolute URL, or a path relative to the
  *   page that shows the HTML (e.g. `../../docs/user-manual/bookmarks.md`)
- * @returns {string} HTML with the `src` paths resolved
+ * @returns {string} HTML with the `src` paths resolved; the parts taken from `basePath` are escaped
  */
 export function resolveRelativeSources(html, basePath) {
   return html.replaceAll(/(\ssrc=)(["'])(.*?)\2/g, (match, attr, quote, src) => {
     if (!src || /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src)) return match
-    return `${attr}${quote}${joinRelativePath(basePath, src)}${quote}`
+    return `${attr}${quote}${joinRelativePath(escapeAttribute(basePath), src)}${quote}`
   })
+}
+
+/**
+ * Escapes text for use in an HTML attribute value.
+ * @param {string} text
+ * @returns {string} The escaped text
+ */
+function escapeAttribute(text) {
+  return text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)
 }
 
 /**
