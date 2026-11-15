@@ -7,7 +7,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createMarkdownRenderer, extractHeadings, findHeadingLineForAnchor, headingAnchor, resolveRelativeSources, spliceMarkdownSection } from '../../../app/src/modules/markdown-utils.js';
+import { createMarkdownRenderer, extractHeadings, findHeadingLineForAnchor, headingAnchor, removeCommentMarkers, resolveRelativeSources, spliceMarkdownSection } from '../../../app/src/modules/markdown-utils.js';
 
 const DOC = `# Guidelines
 
@@ -135,8 +135,38 @@ describe('resolveRelativeSources', () => {
     );
   });
 
+  it('resolves image paths relative to a relative path of the markdown file', () => {
+    assert.strictEqual(
+      resolveRelativeSources('<img src="../images/a.png">', '../../docs/user-manual/bookmarks.md'),
+      '<img src="../../docs/images/a.png">'
+    );
+    assert.strictEqual(
+      resolveRelativeSources('<img src="./b.png">', '../../docs/index.md'),
+      '<img src="../../docs/b.png">'
+    );
+    assert.strictEqual(
+      resolveRelativeSources('<img src="../../../x.png">', 'docs/user-manual/a.md'),
+      '<img src="../x.png">'
+    );
+  });
+
+  it('escapes the path of the markdown file', () => {
+    assert.strictEqual(
+      resolveRelativeSources('<img src="a.png">', 'docs/x"onerror="y/a.md'),
+      '<img src="docs/x&#34;onerror=&#34;y/a.png">'
+    );
+  });
+
   it('keeps absolute, root-relative and data URLs', () => {
     const html = '<img src="https://x.org/a.png"><img src="//x.org/b.png"><img src="/c.png"><img src="data:image/png;base64,AA==">';
     assert.strictEqual(resolveRelativeSources(html, base), html);
+  });
+});
+
+describe('removeCommentMarkers', () => {
+  it('removes comment markers, also those formed by removing others', () => {
+    assert.strictEqual(removeCommentMarkers('<p><!-- a --></p>'), '<p> a </p>');
+    assert.strictEqual(removeCommentMarkers('<!<!---->--x'), 'x');
+    assert.strictEqual(removeCommentMarkers('<!-- a --!>'), ' a ');
   });
 });

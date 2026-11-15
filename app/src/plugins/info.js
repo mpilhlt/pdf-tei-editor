@@ -20,7 +20,7 @@
 
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
-import { createMarkdownRenderer, extractHeadings, resolveRelativeSources } from '../modules/markdown-utils.js'
+import { createMarkdownRenderer, extractHeadings, removeCommentMarkers, resolveRelativeSources } from '../modules/markdown-utils.js'
 import { addHeadingLinkButtons, fitTocMenu, populateTocMenu, scrollToHeading } from '../modules/markdown-toc.js'
 import { manualUrl, parseManualUrl } from '../modules/manual-links.js'
 import { notify } from '../modules/sl-utils.js'
@@ -244,17 +244,17 @@ class InfoPlugin extends Plugin {
     }
 
     // relative image paths are relative to the markdown file, not to the app page
-    const pageUrl = new URL(`${isOnline ? this.#remoteDocsBasePath : this.#localDocsBasePath}/${mdPath}`, document.baseURI)
+    const pagePath = `${isOnline ? this.#remoteDocsBasePath : this.#localDocsBasePath}/${mdPath}`
     const rendered = /** @type {MarkdownIt} */(this.#md).render(markdown)
-    const html = resolveRelativeSources(rendered, pageUrl)
+    const html = resolveRelativeSources(rendered, pagePath)
       .replaceAll(
         /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g,
         `$1href="#" onclick="appInfo.load('$3'); return false"$4`
       )
       .replaceAll(/(href="http)/g, `target="_blank" $1`)
-      .replaceAll(/<!--|-->/gs, '')
+    const htmlWithoutCommentMarkers = removeCommentMarkers(html)
 
-    this.#ui.content.innerHTML = html
+    this.#ui.content.innerHTML = htmlWithoutCommentMarkers
     this.#updateToc(extractHeadings(/** @type {MarkdownIt} */(this.#md), markdown))
     addHeadingLinkButtons(this.#ui.content, anchor => this.#copyLink(anchor))
     if (anchor) {
