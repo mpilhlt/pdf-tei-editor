@@ -150,6 +150,13 @@ describe('resolveRelativeSources', () => {
     );
   });
 
+  it('escapes the path of the markdown file', () => {
+    assert.strictEqual(
+      resolveRelativeSources('<img src="a.png">', 'docs/x"onerror="y/a.md'),
+      '<img src="docs/x&#34;onerror=&#34;y/a.png">'
+    );
+  });
+
   it('keeps absolute, root-relative and data URLs', () => {
     const html = '<img src="https://x.org/a.png"><img src="//x.org/b.png"><img src="/c.png"><img src="data:image/png;base64,AA==">';
     assert.strictEqual(resolveRelativeSources(html, base), html);
