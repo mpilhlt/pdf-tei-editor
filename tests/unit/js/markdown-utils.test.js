@@ -167,5 +167,6 @@ describe('removeCommentMarkers', () => {
   it('removes comment markers, also those formed by removing others', () => {
     assert.strictEqual(removeCommentMarkers('<p><!-- a --></p>'), '<p> a </p>');
     assert.strictEqual(removeCommentMarkers('<!<!---->--x'), 'x');
+    assert.strictEqual(removeCommentMarkers('<!-- a --!>'), ' a ');
   });
 });
