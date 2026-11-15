@@ -4,7 +4,9 @@
 
 The user manual pages reference their images relative to the markdown file (`../images/x.png`), which works on GitHub. The in-app manual (`app/src/plugins/info.js`) inserts the rendered HTML into the app page and only rewrote `src="images/…"` and `src="./images/…"`, which no page uses. The browser therefore resolved `../images/x.png` against the app's URL (`/images/x.png`), which the server does not serve, and every image of the manual failed to load, not only those of the bookmarks page.
 
-Fix: `resolveRelativeSources()` in `app/src/modules/markdown-utils.js` resolves each relative `src` against the URL the markdown file was loaded from: `/docs/<page>` locally, or the raw GitHub URL when the docs come from GitHub. Absolute, root-relative and `data:` URLs are kept. Unit tests in `tests/unit/js/markdown-utils.test.js`.
+Fix: `resolveRelativeSources()` in `app/src/modules/markdown-utils.js` resolves each relative `src` against the path the markdown file was loaded from: `../../docs/<page>` locally (relative to the app page, like the fetch), or the raw GitHub URL when the docs come from GitHub. The page path is escaped, since it can come from the app URL. Absolute, root-relative and `data:` URLs are kept. Unit tests in `tests/unit/js/markdown-utils.test.js`.
+
+CodeQL reported the removal of the comment markers (`<!--`, `-->`) as bad HTML filtering once the expression was touched; `removeCommentMarkers()` now also removes `--!>` and repeats until none is left.
 
 ## Screenshots for all pages
 
