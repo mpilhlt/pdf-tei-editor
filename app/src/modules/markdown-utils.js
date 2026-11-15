@@ -282,6 +282,54 @@ export function processMarkdownHtml(html, options) {
 }
 
 /**
+ * Resolves the relative `src` attributes of rendered HTML against the path of the markdown
+ * file, so that images referenced relative to the file (e.g. `../images/x.png`) load
+ * wherever the HTML is shown. Absolute, protocol-relative, root-relative and `data:` URLs are kept.
+ * @param {string} html - Rendered HTML from markdown
+ * @param {string} basePath - Path of the markdown file: an absolute URL, or a path relative to the
+ *   page that shows the HTML (e.g. `../../docs/user-manual/bookmarks.md`)
+ * @returns {string} HTML with the `src` paths resolved; the parts taken from `basePath` are escaped
+ */
+export function resolveRelativeSources(html, basePath) {
+  return html.replaceAll(/(\ssrc=)(["'])(.*?)\2/g, (match, attr, quote, src) => {
+    if (!src || /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src)) return match
+    return `${attr}${quote}${joinRelativePath(escapeAttribute(basePath), src)}${quote}`
+  })
+}
+
+/**
+ * Escapes text for use in an HTML attribute value.
+ * @param {string} text
+ * @returns {string} The escaped text
+ */
+function escapeAttribute(text) {
+  return text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)
+}
+
+/**
+ * Resolves a relative path against the path of a file, without a base URL: `.` and `..`
+ * segments are resolved, and `..` segments that go above the start of `filePath` are kept.
+ * @param {string} filePath - Path or URL of the file the path is relative to
+ * @param {string} relativePath - Relative path
+ * @returns {string} The resolved path
+ */
+function joinRelativePath(filePath, relativePath) {
+  const segments = filePath.split('/').slice(0, -1)
+  // keep the empty segments of "scheme://host" and of a leading "/"
+  const minLength = /^[a-z][a-z0-9+.-]*:\/\//i.test(filePath) ? 3 : 0
+  for (const segment of relativePath.split('/')) {
+    if (segment === '.') continue
+    if (segment === '..' && segments.length > minLength && segments.at(-1) !== '..') {
+      if (segments.length === 1 && segments[0] === '') continue
+      segments.pop()
+    } else {
+      segments.push(segment)
+    }
+  }
+  return segments.join('/')
+}
+
+/**
  * Generates a table of contents from markdown headings
  * @param {string} markdown - Markdown content to analyze
  * @returns {string} HTML list of linked headings

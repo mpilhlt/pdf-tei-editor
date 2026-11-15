@@ -1027,3 +1027,19 @@ sl-drawer.diagnostics-drawer::part(footer) {
 .markdown-body .heading-link:focus-within {
   opacity: 1;
 }
+
+/* Screenshots in the user manual: a paragraph with only an image, followed by an italic caption paragraph */
+.markdown-body p > img:only-child {
+  display: block;
+  border: 1px solid var(--sl-color-neutral-200);
+  border-radius: var(--sl-border-radius-medium);
+}
+
+.markdown-body p:has(> img:only-child) {
+  margin-bottom: 0.25rem;
+}
+
+.markdown-body p:has(> img:only-child) + p:has(> em:only-child) {
+  color: var(--sl-color-neutral-600);
+  font-size: var(--sl-font-size-small);
+}
