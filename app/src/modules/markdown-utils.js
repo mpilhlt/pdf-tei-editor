@@ -282,6 +282,22 @@ export function processMarkdownHtml(html, options) {
 }
 
 /**
+ * Removes the HTML comment markers (`<!--`, `-->`) from rendered HTML, so that content the
+ * markdown hides in comments is shown. Repeats until no marker is left, since removing one
+ * can join the parts of another (e.g. `<!-<!---->-`).
+ * @param {string} html - Rendered HTML
+ * @returns {string} HTML without comment markers
+ */
+export function removeCommentMarkers(html) {
+  let previous
+  do {
+    previous = html
+    html = html.replaceAll(/<!--|-->/g, '')
+  } while (html !== previous)
+  return html
+}
+
+/**
  * Resolves the relative `src` attributes of rendered HTML against the path of the markdown
  * file, so that images referenced relative to the file (e.g. `../images/x.png`) load
  * wherever the HTML is shown. Absolute, protocol-relative, root-relative and `data:` URLs are kept.
