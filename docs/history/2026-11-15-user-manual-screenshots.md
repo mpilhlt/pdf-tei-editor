@@ -6,7 +6,7 @@ The user manual pages reference their images relative to the markdown file (`../
 
 Fix: `resolveRelativeSources()` in `app/src/modules/markdown-utils.js` resolves each relative `src` against the path the markdown file was loaded from: `../../docs/<page>` locally (relative to the app page, like the fetch), or the raw GitHub URL when the docs come from GitHub. The page path is escaped, since it can come from the app URL. Absolute, root-relative and `data:` URLs are kept. Unit tests in `tests/unit/js/markdown-utils.test.js`.
 
-CodeQL reported the removal of the comment markers (`<!--`, `-->`) as bad HTML filtering once the expression was touched; `removeCommentMarkers()` now also removes `--!>` and repeats until none is left.
+CodeQL reported the removal of the comment markers (`<!--`, `-->`) from the rendered HTML as incomplete sanitization once the expression was touched. The removal turned HTML comments in the markdown into visible text; the manual has no such comments (all `<!--` in the docs are in code, which markdown-it escapes), so it was removed. HTML comments in the markdown stay hidden.
 
 ## Screenshots for all pages
 
