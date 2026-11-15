@@ -244,7 +244,7 @@ class UnitCommentsPlugin extends Plugin {
     const isAdmin = userHasRole(this.state?.user ?? null, ['admin'])
     const canWrite = this.#canWrite(true)
     const canReply = !canWrite && this.#canReplyRemotely()
-    const text = element ? view.state.doc.sliceString(element.tagTo, Math.min(element.to, element.tagTo + 200)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''
+    const text = element ? tei_utils.unescapeXml(view.state.doc.sliceString(element.tagTo, Math.min(element.to, element.tagTo + 200)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()) : ''
     openThreadPopover({
       at,
       title: element ? `Comment · line ${view.state.doc.lineAt(element.from).number}` : 'Comment',
