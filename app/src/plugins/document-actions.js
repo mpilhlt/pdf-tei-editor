@@ -467,7 +467,8 @@ class DocumentActionsPlugin extends Plugin {
         dlg.options.saveAsGoldSection.style.display = isReviewer ? '' : 'none'
 
         const isCurrentlyGold = state.xml ? isGoldFile(state.xml) : false
-        dlg.options.saveAsGoldSection.saveAsGold.checked = isCurrentlyGold
+        // the option is hidden for annotators, who cannot set the gold version
+        dlg.options.saveAsGoldSection.saveAsGold.checked = isReviewer && isCurrentlyGold
       }
 
       const dialogShown = new Promise(resolve => dlg.addEventListener('sl-after-show', resolve, { once: true }))
