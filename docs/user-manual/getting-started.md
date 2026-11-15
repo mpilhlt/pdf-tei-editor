@@ -14,12 +14,20 @@ The PDF-TEI Editor requires user authentication to access documents and manage p
 
 When you first access the application, you'll be automatically prompted to log in. Each browser tab maintains its own session, so you can have multiple sessions open with different users (or the same user) if needed.
 
+![The login dialog with the fields Username and Password and the buttons Login and About](../images/getting-started-login.png)
+
+*The login dialog.*
+
 ## Main Interface
 
 After logging in, you'll see the main two-panel interface:
 
 - **Left Panel**: PDF document viewer
 - **Right Panel**: XML editor with syntax highlighting and validation
+
+![The main window: the toolbar at the top, the PDF viewer on the left with a highlighted footnote, and the XML editor on the right with the matching bibl element](../images/interface-overview.png)
+
+*The main window with a document open.*
 
 
 See [Interface Overview](interface-overview.md) for detailed information about the interface.

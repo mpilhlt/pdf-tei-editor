@@ -4,7 +4,7 @@ For the creation of datasets that are to be used to train models or evaluate the
 
 1. Extract data from PDF into first "gold" draft
 2. Create a version and edit this version, saving one or more revisions
-3. Merge revisions into the "gold" version
+3. Compare the version with the "gold" version, review it and make it the new "gold" version
 4. Retraining of models, revision of prompts
 
 This workflow provides isolation of edits and an explicit audit trail that links edits with annotators. This trail is stored in the `<teiHeader>` element in the document.
@@ -13,13 +13,17 @@ This workflow provides isolation of edits and an explicit audit trail that links
 
 (Reviewer role)
 
-![](../images/25be8247-c81c-4f9e-99ff-19484dd4ece1.png)
+![The Extraction button group of the toolbar with the buttons Extract New and Extract Current](../images/extraction-workflow-extraction-buttons.png)
 
-By clicking on the first button in the "Extraction" button group, choose a PDF, which is uploaded. 
+*The Extraction button group.*
+
+By clicking on the first button in the "Extraction" button group, choose a PDF, which is uploaded. The second button extracts again from the PDF that is open.
 
 You are then asked to edit the extractor configuration
 
-![](../images/7aa1883e-5437-4ae6-85f5-205b467806d5.png)
+![The Extraction options dialog with the fields DOI, Collection, Extractor (GROBID Extraction), Variant identifier and GROBID processing flavor](../images/extraction-workflow-options.png)
+
+*The Extraction options dialog with the GROBID extractor.*
 
 If the PDF has a DOI, enter it here to retrieve document metadata which will automatically be added to the TEI header element. 
 
@@ -39,32 +43,48 @@ Unless the selected model has been trained with suffient high-quality data, the 
 
 Edits are always be done in copies, which merged by the reviewers into the "gold" version when they are ready.
 
-![](../images/351c69f0-ab9d-46ec-bf3d-6b045d08e8eb.png)
+![The Document button group of the toolbar with the buttons Save revision and Delete](../images/extraction-workflow-document-buttons.png)
 
-- To create a copy of "gold", click on the first button in the "Document" button group (![](../images/29e5e3f5-bab6-4bd2-a981-7e230371e052.png)). In the dialog that appears, enter a "Version name" which clearly identifies the version (i.e. "Corrections by John") This creates a new version of the TEI document. You can provide additional comments in the "description" field if necessary, but that is optional.
+*The Document button group.*
+
+- To create a copy of "gold", click on the "Save revision" button in the "Document" button group (![Save revision button](../images/extraction-workflow-save-button.png)) and check "Save to a new personal version". The "Label" field proposes a name which identifies the version (e.g. "v1 (anna)"); you can change it. Describe the purpose of the copy in the "Change description" field. This creates a new version of the TEI document.
+
+![The Save Revision dialog with the change description "Personal copy for corrections", the status Draft, and the checked option "Save to a new personal version" with the label "v1 (anna)"](../images/extraction-workflow-save-copy.png)
+
+*Creating a personal copy with the Save Revision dialog.*
+
 - Work on this document as instructed by the annotation rules until you are ready to submit it to a reviewer. 
 
-![](../images/6abdcf0a-a077-4f6c-9bb3-a4d92f541bb7.png)
+- By toggling "Autosearch" (![The Autosearch switch, turned on](../images/extraction-workflow-autosearch.png)) in the footer of the PDF Viewer, you can search the contents of the current entry (e.g. a `<bibl>` or `<biblStruct>`) in the PDF automatically, for any extraction. It works well in most documents; results can be off if the PDF's underlying text extraction is poor (e.g. scanned pages, unusual column layouts, or heavy OCR artifacts), so treat the highlighted region as a starting point and verify it against the page.
 
-- By toggling "Autosearch" (![](../images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) in the footer of the PDF Viewer, you can search the contents of a `<biblStruct>` in the PDF automatically, for any extraction. It works well in most documents; results can be off if the PDF's underlying text extraction is poor (e.g. scanned pages, unusual column layouts, or heavy OCR artifacts), so treat the highlighted region as a starting point and verify it against the page.
+![The PDF viewer with footnote 5 highlighted in yellow, next to the XML editor with the cursor in the matching bibl element](../images/extraction-workflow-autosearch-result.png)
+
+*Autosearch highlights the text of the current entry in the PDF.*
+
 
 - You can leave comments anywhere by enclosing them in the xml comment markup: `<!-- this is a comment -->`
-- When you are done, click on the "Save document revision" button (![](../images/e0f8ad27-fb47-47fa-bde3-023f2353e0b8.png)). In the dialog's "Description" field, you can specify more exactly what you have been correcting, and add addtional comments if needed.
+- When you are done, click on the "Save revision" button (![Save revision button](../images/extraction-workflow-save-button.png)). In the dialog's "Description" field, you can specify more exactly what you have been correcting, and add addtional comments if needed.
 
-### 3. Merge revisions into the "gold" version
+### 3. Review the version and make it the "gold" version
 
 (Reviewer role)
 
 Once annotators have finished their work:
 
-![](../images/a3406244-c930-480e-a353-9bddb75bc016.png)
+- By selecting the annotator's version in the "Target XML" selectbox and the gold version in the "Compare with version" selectbox, reviewers can compare the annotator's changes with the "gold" version. Since the annotator's copy supersedes the gold version, the gold version is read-only (see [Superseded versions](editing-workflow.md#superseded-versions)).
 
-- By selecting the gold version in the "Target XML" selectbox and the annotator's version in the "Compare with version" selectbox, reviewers can  compare the "gold" version with the changes in the annotator's version.
+![The selectboxes Target XML with the annotator's version "v1 (anna)" and Compare with version with the gold version "Extraction"](../images/extraction-workflow-compare.png)
 
-![](../images/4a18b5b1-814f-43fe-8d92-271696910960.png)
+*Comparing the annotator's version with the gold version.*
 
-- The editor shows the differences visually and the reviewer can selectively accept ("Change") or reject ("Keep") changes. You can also use the "Tag/Div Navigation" panel which is shown when the switch in the PDF Viewer's status bar (![](../images/f406965d-50ae-4b71-8ff2-7def8a998185.png)) is toggled, to navigate between locations with changes ("Prev. Diff", "Next Diff") or "Accept all changes" /"Reject all changes".
-- Once a version has been merged into "gold", it can be deleted. However, it is recommended to keep the versions for later reference.
+- The editor shows the differences visually. For each changed chunk, "Current" keeps the text of the open version and "Incoming" takes the text of the compared version. The buttons at the left of the XML editor toolbar navigate between the changes and accept or reject all of them.
+
+![The merge view in the XML editor: a changed bibl element with the old text in blue, the new text in orange, and the buttons Current and Incoming](../images/extraction-workflow-merge-view.png)
+
+*The merge view: the annotator removed the `<title>` markup around "Couperin.org".*
+
+- When the version is correct, save a revision with "Save as gold version" checked. See [Review Workflow](review-workflow.md) for the review of the individual entries and the approval.
+- It is recommended to keep the versions for later reference.
 
 ### 4. Retraining of model with gold dataset
 
