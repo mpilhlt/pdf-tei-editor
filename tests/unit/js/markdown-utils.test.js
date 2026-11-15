@@ -135,6 +135,21 @@ describe('resolveRelativeSources', () => {
     );
   });
 
+  it('resolves image paths relative to a relative path of the markdown file', () => {
+    assert.strictEqual(
+      resolveRelativeSources('<img src="../images/a.png">', '../../docs/user-manual/bookmarks.md'),
+      '<img src="../../docs/images/a.png">'
+    );
+    assert.strictEqual(
+      resolveRelativeSources('<img src="./b.png">', '../../docs/index.md'),
+      '<img src="../../docs/b.png">'
+    );
+    assert.strictEqual(
+      resolveRelativeSources('<img src="../../../x.png">', 'docs/user-manual/a.md'),
+      '<img src="../x.png">'
+    );
+  });
+
   it('keeps absolute, root-relative and data URLs', () => {
     const html = '<img src="https://x.org/a.png"><img src="//x.org/b.png"><img src="/c.png"><img src="data:image/png;base64,AA==">';
     assert.strictEqual(resolveRelativeSources(html, base), html);
