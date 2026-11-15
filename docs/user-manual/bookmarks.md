@@ -9,9 +9,13 @@ Bookmarks let you return to places in a document's text, for example entries you
 3. A small field asks for the title. It proposes the start of the element's text; type to replace it.
 4. Press `Enter` to save, or `Esc` to cancel.
 
-![](../images/bookmarks-context-menu.png)
+![The context menu of the XML editor on a bibl element, with the entries "Bookmark…" and "Comment…" at the top](../images/bookmarks-context-menu.png)
 
-![](../images/bookmarks-prompt.png)
+*The entry **Bookmark…** in the context menu of the XML editor.*
+
+![A small popup titled "Bookmark bibl · line 91" with an input field prefilled with the start of the element's text, and the hint "Enter: save · Esc: cancel"](../images/bookmarks-prompt.png)
+
+*The title prompt, prefilled with the start of the element's text.*
 
 The entry is disabled outside `<text>`, for example in the `teiHeader` or the `standOff`. The bookmark points at the innermost element you right-clicked: right-click on the text of a `<bibl>` to bookmark the whole entry, or on the text of its `<author>` to bookmark the author.
 
@@ -19,13 +23,17 @@ The entry is disabled outside `<text>`, for example in the `teiHeader` or the `s
 
 The bookmarked elements of the open document are marked with an orange bookmark icon in the gutter of the XML editor, next to the line numbers. Bookmarks share this column with the speech bubbles of [unit comments](unit-comments.md): a line with both shows the bubble and the bookmark side by side. Hover over the icon to see the bookmark's title; a number on the icon shows several bookmarks on one line. Click the icon to select the bookmarked element. The markers follow the elements while you edit.
 
-![](../images/bookmarks-gutter.png)
+![The XML editor with an orange bookmark icon in the gutter next to the line numbers](../images/bookmarks-gutter.png)
+
+*A bookmark icon in the gutter of the XML editor.*
 
 ## The Bookmarks dialog
 
 Open it with **Bookmarks** in the user menu, below **Messages**.
 
-![](../images/bookmarks-user-menu.png)
+![The open user menu with the entries Messages and Bookmarks](../images/bookmarks-user-menu.png)
+
+*The entry **Bookmarks** in the user menu.*
 
 Each row shows the title, the bookmarked element and the document, the start of the element's text, and when the bookmark was added.
 
@@ -36,7 +44,9 @@ Each row shows the title, the bookmarked element and the document, the start of 
 | Pencil button on a row | Rename the bookmark (`Enter` saves, `Esc` cancels) |
 | Trash button on a row | Delete the bookmark |
 
-![](../images/bookmarks-dialog.png)
+![The Bookmarks dialog with the switch "All documents / This document", a search field and a list of bookmarks with title, element, document, text and date](../images/bookmarks-dialog.png)
+
+*The Bookmarks dialog.*
 
 Click a bookmark to open its document with the bookmarked element selected and scrolled into view.
 

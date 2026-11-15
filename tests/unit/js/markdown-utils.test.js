@@ -7,7 +7,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { createMarkdownRenderer, extractHeadings, findHeadingLineForAnchor, headingAnchor, spliceMarkdownSection } from '../../../app/src/modules/markdown-utils.js';
+import { createMarkdownRenderer, extractHeadings, findHeadingLineForAnchor, headingAnchor, resolveRelativeSources, spliceMarkdownSection } from '../../../app/src/modules/markdown-utils.js';
 
 const DOC = `# Guidelines
 
@@ -118,5 +118,25 @@ describe('spliceMarkdownSection', () => {
     assert.strictEqual(findHeadingLineForAnchor(doc, 'a'), 1);
     assert.strictEqual(findHeadingLineForAnchor(doc, 'fake'), null);
     assert.strictEqual(spliceMarkdownSection(doc, 'a', '## A\n\nnew'), '## A\n\nnew\n\n## B\n');
+  });
+});
+
+describe('resolveRelativeSources', () => {
+  const base = 'http://localhost:8000/docs/user-manual/bookmarks.md';
+
+  it('resolves image paths relative to the markdown file', () => {
+    assert.strictEqual(
+      resolveRelativeSources('<img src="../images/a.png" alt="A">', base),
+      '<img src="http://localhost:8000/docs/images/a.png" alt="A">'
+    );
+    assert.strictEqual(
+      resolveRelativeSources('<img src="./b.png">', 'https://raw.githubusercontent.com/o/r/refs/heads/main/docs/index.md'),
+      '<img src="https://raw.githubusercontent.com/o/r/refs/heads/main/docs/b.png">'
+    );
+  });
+
+  it('keeps absolute, root-relative and data URLs', () => {
+    const html = '<img src="https://x.org/a.png"><img src="//x.org/b.png"><img src="/c.png"><img src="data:image/png;base64,AA==">';
+    assert.strictEqual(resolveRelativeSources(html, base), html);
   });
 });

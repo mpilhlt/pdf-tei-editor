@@ -282,6 +282,21 @@ export function processMarkdownHtml(html, options) {
 }
 
 /**
+ * Resolves the relative `src` attributes of rendered HTML against the URL of the markdown
+ * file, so that images referenced relative to the file (e.g. `../images/x.png`) load
+ * wherever the HTML is shown. Absolute, protocol-relative, root-relative and `data:` URLs are kept.
+ * @param {string} html - Rendered HTML from markdown
+ * @param {string | URL} baseUrl - Absolute URL of the markdown file
+ * @returns {string} HTML with absolute `src` URLs
+ */
+export function resolveRelativeSources(html, baseUrl) {
+  return html.replaceAll(/(\ssrc=)(["'])(.*?)\2/g, (match, attr, quote, src) => {
+    if (!src || /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src)) return match
+    return `${attr}${quote}${new URL(src, baseUrl).href}${quote}`
+  })
+}
+
+/**
  * Generates a table of contents from markdown headings
  * @param {string} markdown - Markdown content to analyze
  * @returns {string} HTML list of linked headings
