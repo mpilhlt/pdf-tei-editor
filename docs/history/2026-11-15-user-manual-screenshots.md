@@ -38,3 +38,5 @@ Playwright scripts take the screenshots at 1400×900 and device scale factor 1.
 - Annotators saving a personal copy of the gold version got "Only reviewers and admins can set gold standard": the hidden *Save as gold version* option was checked when the open version is gold. Fixed in `document-actions.js`.
 - Typo in the help text of *Save to a new personal version*. Fixed.
 - The extraction workflow page described merging the annotator's changes into the gold version, which is read-only once a copy supersedes it. The page now describes comparing the annotator's version with the gold version and saving it as gold.
+- The header of the comment popover shows `&amp;` for an ampersand in the element text (e.g. "Hessel, J. , &amp; Schofield"): the text is escaped twice. Not fixed.
+- The review workflow screenshots (2026-10-25) were made with richer data than the demo provides; they are kept and got captions.
