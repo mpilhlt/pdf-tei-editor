@@ -282,7 +282,7 @@ export function processMarkdownHtml(html, options) {
 }
 
 /**
- * Removes the HTML comment markers (`<!--`, `-->`) from rendered HTML, so that content the
+ * Removes the HTML comment markers (`<!--`, `-->`, `--!>`) from rendered HTML, so that content the
  * markdown hides in comments is shown. Repeats until no marker is left, since removing one
  * can join the parts of another (e.g. `<!-<!---->-`).
  * @param {string} html - Rendered HTML
@@ -292,7 +292,7 @@ export function removeCommentMarkers(html) {
   let previous
   do {
     previous = html
-    html = html.replaceAll(/<!--|-->/g, '')
+    html = html.replaceAll(/<!--|--!?>/g, '')
   } while (html !== previous)
   return html
 }
