@@ -6,7 +6,7 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { SlSelect } from '../ui.js'
- * @import { DocumentItem, Artifact } from '../modules/file-data-utils.js'
+ * @import { DocumentItem, Artifact, VersionLineage } from '../modules/file-data-utils.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { PanelContribution } from '../modules/panels/base-panel.js'
  */
@@ -196,15 +196,26 @@ class FileSelectionPlugin extends Plugin {
   /**
    * Returns the current options for the given select element.
    * @param {'xml'|'pdf'|'diff'} type
-   * @returns {{value: string, label: string}[]}
+   * @returns {{value: string, label: string, isGold: boolean}[]}
    */
   getOptionValues(type) {
     const select = { xml: this.#xml, pdf: this.#pdf, diff: this.#diff }[type]
     if (!select) return []
     return Array.from(select.querySelectorAll('sl-option')).map(opt => ({
       value: /** @type {any} */ (opt).value,
-      label: opt.textContent?.trim() || ''
+      label: /** @type {SlOption} */ (opt).getTextLabel(),
+      isGold: /** @type {HTMLElement} */ (opt).dataset.gold === 'true'
     }))
+  }
+
+  /**
+   * Returns the version to load when no version is selected: the gold version if the "Target XML"
+   * menu lists one, otherwise its first version.
+   * @returns {string|undefined}
+   */
+  getDefaultVersion() {
+    const options = this.getOptionValues('xml')
+    return (options.find(o => o.isGold) || options[0])?.value
   }
 
   //
@@ -215,13 +226,14 @@ class FileSelectionPlugin extends Plugin {
    * @param {string} label
    * @param {boolean} [isLocked]
    * @param {string} [variantId]
+   * @param {boolean} [isGold] - Prefix the label with a medal marking the gold version
    * @returns {string}
    */
-  #createDocumentLabel(label, isLocked, variantId) {
-    const displayLabel = variantId ? `${label} [${variantId}]` : label;
-    return isLocked === true
-      ? `${displayLabel}<sl-icon name="file-lock2" slot="suffix"></sl-icon>`
-      : displayLabel;
+  #createDocumentLabel(label, isLocked, variantId, isGold) {
+    let html = variantId ? `${label} [${variantId}]` : label;
+    if (isGold === true) html = `<sl-icon name="award" slot="prefix" label="Gold version"></sl-icon>${html}`;
+    if (isLocked === true) html += `<sl-icon name="file-lock2" slot="suffix"></sl-icon>`;
+    return html;
   }
 
   /** @param {ApplicationState} state */
@@ -501,75 +513,46 @@ class FileSelectionPlugin extends Plugin {
                 artifactsToShow = file.artifacts.filter(a => a.variant === variant);
               }
 
-              const goldToShow = artifactsToShow.filter(a => a.is_gold_standard);
-              const versionsToShow = artifactsToShow.filter(a => !a.is_gold_standard);
-              if (goldToShow.length > 0) {
-                await createHtmlElements(`<small>Gold</small>`, this.#xml);
-                await createHtmlElements(`<small>Gold</small>`, this.#diff);
+              /**
+               * @param {Artifact} version
+               * @param {string[]} [classes] - CSS classes of the option
+               */
+              const createOption = (version, classes = []) => {
+                const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
+                const opt = new SlOption();
+                // @ts-ignore
+                opt.size = "small";
+                opt.value = version.id;
+                opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix, version.is_gold_standard);
+                opt.classList.add(...classes);
+                if (version.is_gold_standard) opt.dataset.gold = "true";
+                return opt;
+              };
 
-                goldToShow.forEach(gold => {
-                  const variantSuffix = (!variant || variant === "") ? gold.variant : undefined;
-                  let opt = new SlOption();
-                  // @ts-ignore
-                  opt.size = "small";
-                  opt.value = gold.id;
-                  opt.innerHTML = this.#createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
-                  this.#xml.appendChild(opt);
-                  opt = new SlOption();
-                  // @ts-ignore
-                  opt.size = "small";
-                  opt.value = gold.id;
-                  opt.innerHTML = this.#createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
-                  this.#diff.appendChild(opt);
-                });
-
-                if (versionsToShow.length > 0) {
-                  this.#xml.appendChild(new SlDivider());
-                  this.#diff.appendChild(new SlDivider());
-                }
-              }
-
-              if (versionsToShow.length > 0) {
-                await createHtmlElements(`<small>Versions</small>`, this.#xml);
-                await createHtmlElements(`<small>Versions</small>`, this.#diff);
-
-                versionsToShow.sort((a, b) => (a.version || 0) - (b.version || 0));
-
-                /**
-                 * @param {Artifact} version
-                 * @param {string[]} [classes] - CSS classes of the option
-                 */
-                const createOption = (version, classes = []) => {
-                  const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
-                  const opt = new SlOption();
-                  // @ts-ignore
-                  opt.size = "small";
-                  opt.value = version.id;
-                  opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix);
-                  opt.classList.add(...classes);
-                  return opt;
-                };
-
-                // one group per lineage, current versions first, then their superseded (frozen)
-                // ancestors, connected to them by lines drawn in CSS (app.css). Ancestors open
-                // read-only; they can be compared or copied into a new version.
-                for (const select of [this.#xml, this.#diff]) {
-                  groupVersionsByLineage(versionsToShow).forEach((group, index) => {
-                    if (index > 0) select.appendChild(new SlDivider());
-                    group.leaves.forEach(version => select.appendChild(createOption(version)));
-                    if (group.leaves.length > 0 && group.ancestors.length > 0) {
-                      const arrow = document.createElement("div");
-                      arrow.className = "lineage-arrow";
-                      arrow.setAttribute("aria-hidden", "true");
-                      select.appendChild(arrow);
-                    }
-                    group.ancestors.forEach((version, i) => {
-                      const classes = ["lineage-ancestor"];
-                      if (i === group.ancestors.length - 1) classes.push("lineage-ancestor-last");
-                      select.appendChild(createOption(version, classes));
-                    });
+              // one group per lineage, current versions first, then their superseded (frozen)
+              // ancestors, connected to them by lines drawn in CSS (app.css). Ancestors open
+              // read-only; they can be compared or copied into a new version. The gold version
+              // is marked with a medal inside its lineage, whose group comes first.
+              const lineages = groupVersionsByLineage(artifactsToShow);
+              const hasGold = (/** @type {VersionLineage} */ g) =>
+                g.leaves.concat(g.ancestors).some(v => v.is_gold_standard) ? 0 : 1;
+              lineages.sort((a, b) => hasGold(a) - hasGold(b));
+              for (const select of [this.#xml, this.#diff]) {
+                lineages.forEach((group, index) => {
+                  if (index > 0) select.appendChild(new SlDivider());
+                  group.leaves.forEach(version => select.appendChild(createOption(version)));
+                  if (group.leaves.length > 0 && group.ancestors.length > 0) {
+                    const arrow = document.createElement("div");
+                    arrow.className = "lineage-arrow";
+                    arrow.setAttribute("aria-hidden", "true");
+                    select.appendChild(arrow);
+                  }
+                  group.ancestors.forEach((version, i) => {
+                    const classes = ["lineage-ancestor"];
+                    if (i === group.ancestors.length - 1) classes.push("lineage-ancestor-last");
+                    select.appendChild(createOption(version, classes));
                   });
-                }
+                });
               }
             }
           }

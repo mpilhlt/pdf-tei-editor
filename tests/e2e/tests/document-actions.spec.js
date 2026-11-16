@@ -224,6 +224,29 @@ test.describe('Document Actions', () => {
 
       expect(finalGoldStatus).toBe(true);
 
+      // The "Target XML" menu marks the gold version with a medal inside the version tree,
+      // without separate "Gold" and "Versions" groups
+      await page.waitForFunction((expectedId) => {
+        /** @type {any} */
+        const fileSelection = /** @type {any} */(window).app.getDependency('file-selection');
+        return fileSelection.getOptionValues('xml').some(o => o.value === expectedId && o.isGold);
+      }, newFileId, { timeout: 5000 });
+      const xmlMenu = await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        /** @type {any} */
+        const fileSelection = /** @type {any} */(window).app.getDependency('file-selection');
+        return {
+          headings: Array.from(ui.toolbar.xml.querySelectorAll('small')).map(el => el.textContent),
+          goldOptions: fileSelection.getOptionValues('xml').filter(o => o.isGold),
+          defaultVersion: fileSelection.getDefaultVersion()
+        };
+      });
+      expect(xmlMenu.headings).toEqual([]);
+      const newGold = xmlMenu.goldOptions.find(o => o.value === newFileId);
+      expect(newGold?.label).toBe('Test Gold Copy E2E');
+      expect(xmlMenu.goldOptions.map(o => o.value)).toContain(xmlMenu.defaultVersion);
+
       debugLog('New copy marked as gold test completed successfully');
     } finally {
       await releaseAllLocks(page);
