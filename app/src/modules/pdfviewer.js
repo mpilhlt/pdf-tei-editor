@@ -88,6 +88,11 @@ export class PDFJSViewer {
     this.pdfjsLib = null;
     /** @type {any} */ // pdfjsViewer namespace
     this.pdfjsViewer = null;
+    /**
+     * Base URL of the pdfjs-dist files, with trailing slash
+     * @type {string}
+     */
+    this.pdfjsBase = '';
     /** @type {any} */ // PDFViewer component instance
     this.pdfViewer = null;
     /** @type {any} */ // EventBus
@@ -177,15 +182,10 @@ export class PDFJSViewer {
 
           // Determine PDF.js path based on environment
           const isDev = document.querySelector('script[type="importmap"]') !== null;
-          const pdfjsPath = isDev
-            ? '/node_modules/pdfjs-dist/build/pdf.mjs'
-            : '/pdfjs/build/pdf.mjs';
-          const workerPath = isDev
-            ? '/node_modules/pdfjs-dist/build/pdf.worker.mjs'
-            : '/pdfjs/build/pdf.worker.mjs';
-          const viewerPath = isDev
-            ? '/node_modules/pdfjs-dist/web/pdf_viewer.mjs'
-            : '/pdfjs/web/pdf_viewer.mjs';
+          this.pdfjsBase = isDev ? '/node_modules/pdfjs-dist/' : '/pdfjs/';
+          const pdfjsPath = `${this.pdfjsBase}build/pdf.mjs`;
+          const workerPath = `${this.pdfjsBase}build/pdf.worker.mjs`;
+          const viewerPath = `${this.pdfjsBase}web/pdf_viewer.mjs`;
 
           // Import PDF.js library first and expose it globally
           // (PDFViewer component expects globalThis.pdfjsLib to exist)
@@ -308,7 +308,16 @@ export class PDFJSViewer {
     this.loadPromise = new Promise(async (resolve, reject) => {
       try {
         // Load the PDF document
-        const loadingTask = this.pdfjsLib.getDocument({ url: pdfPath });
+        // The asset URLs are required: PDF.js decodes CCITT and JBIG2 images (scanned
+        // pages) with jbig2.wasm and converts ICC colours with qcms_bg.wasm, and without
+        // `wasmUrl` such images are silently skipped, leaving the page blank
+        const loadingTask = this.pdfjsLib.getDocument({
+          url: pdfPath,
+          wasmUrl: `${this.pdfjsBase}wasm/`,
+          iccUrl: `${this.pdfjsBase}iccs/`,
+          cMapUrl: `${this.pdfjsBase}cmaps/`,
+          standardFontDataUrl: `${this.pdfjsBase}standard_fonts/`
+        });
         this.pdfDoc = await loadingTask.promise;
 
         console.log(`PDF loaded successfully. Pages: ${this.pdfDoc.numPages}`);

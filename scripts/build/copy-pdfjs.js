@@ -33,7 +33,12 @@ const filesToCopy = [
 
 // Directories to copy recursively
 const dirsToCopy = [
-  { src: 'web/images', dest: 'web/images' }
+  { src: 'web/images', dest: 'web/images' },
+  // Loaded by the worker via the getDocument() asset URLs (see app/src/modules/pdfviewer.js)
+  { src: 'wasm', dest: 'wasm' },
+  { src: 'iccs', dest: 'iccs' },
+  { src: 'cmaps', dest: 'cmaps' },
+  { src: 'standard_fonts', dest: 'standard_fonts' }
 ];
 
 /**
