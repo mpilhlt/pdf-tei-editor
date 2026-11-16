@@ -166,7 +166,7 @@ class DocumentActionsPlugin extends Plugin {
       try {
         await this.dispatchStateChange({ xml: null })
         await this.getDependency('file-selection').reload()
-        const xml = this.getDependency('file-selection').getOptionValues('xml')[0]?.value
+        const xml = this.getDependency('file-selection').getDefaultVersion()
         await this.#services.load({ xml })
         testLog('VERSION_DELETED', { deletedId: xmlValue, loadedId: xml ?? null })
         notify(`Version "${versionName}" has been deleted.`)
@@ -225,7 +225,7 @@ class DocumentActionsPlugin extends Plugin {
     try {
       await this.dispatchStateChange({ xml: null })
       await this.getDependency('file-selection').reload()
-      const next = this.getDependency('file-selection').getOptionValues('xml')[0]?.value
+      const next = this.getDependency('file-selection').getDefaultVersion()
       await this.#services.load({ xml: next })
       notify(`${result.files.length} version(s) have been deleted.`)
       this.context.invokePluginEndpoint(ep.sync.syncFiles, state)

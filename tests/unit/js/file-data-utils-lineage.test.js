@@ -28,9 +28,19 @@ describe('groupVersionsByLineage', () => {
     ]);
   });
 
-  it('ends the chain at ancestors that are not listed, such as gold', () => {
-    const versions = [v('v1', 1, 'gold'), v('v2', 2, 'gold')];
+  it('ends the chain at ancestors that are not listed', () => {
+    const versions = [v('v1', 1, 'other'), v('v2', 2, 'other')];
     assert.deepStrictEqual(ids(groupVersionsByLineage(versions)), [[['v1', 'v2'], []]]);
+  });
+
+  it('places gold in the lineage of the versions copied from it', () => {
+    const versions = [v('gold', 0, null, true), v('v1', 1, 'gold'), v('v2', 2, 'gold'), v('x', 3, null)];
+    assert.deepStrictEqual(ids(groupVersionsByLineage(versions)), [[['v1', 'v2'], ['gold']], [['x'], []]]);
+  });
+
+  it('lists an unsuperseded gold as a current version', () => {
+    const versions = [v('gold', 0, null), v('v1', 1, null)];
+    assert.deepStrictEqual(ids(groupVersionsByLineage(versions)), [[['gold', 'v1'], []]]);
   });
 
   it('puts versions without a known parent into one group', () => {

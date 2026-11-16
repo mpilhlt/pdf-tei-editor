@@ -399,10 +399,10 @@ export function findCorrespondingPdf(fileData, xmlHash) {
  */
 
 /**
- * Groups versions by lineage. Ancestors that are not in `versions` (such as gold, which is listed
- * separately) end the chain. Frozen versions that are no ancestor of a listed leaf form a last
+ * Groups versions by lineage. Ancestors that are not in `versions` (e.g. of another variant) end
+ * the chain. Frozen versions that are no ancestor of a listed leaf form a last
  * group without leaves, so that no version is lost.
- * @param {Artifact[]} versions - Versions of one document (without gold)
+ * @param {Artifact[]} versions - Versions of one document, including gold
  * @returns {VersionLineage[]}
  */
 export function groupVersionsByLineage(versions) {
