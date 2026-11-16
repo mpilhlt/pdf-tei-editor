@@ -1070,7 +1070,7 @@ class UnitReviewPlugin extends Plugin {
         when: reviewer.when, final: false, was: true
       }))
     ]
-    const text = view.state.doc.sliceString(unit.from, Math.min(unit.to, unit.from + 200)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    const text = tei_utils.unescapeXml(view.state.doc.sliceString(unit.from, Math.min(unit.to, unit.from + 200)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())
     const readOnly = !this.#isReviewer() || !this.#canWrite(true)
     openReviewPopover({
       at: { left: coords.left, bottom: coords.bottom },

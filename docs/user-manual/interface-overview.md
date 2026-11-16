@@ -2,7 +2,9 @@
 
 The PDF-TEI Editor features a two-panel layout designed for efficient comparison and editing of PDF documents and their corresponding TEI markup.
 
-![Main Interface](../images/interface-overview.png)
+![The main window: the toolbar at the top, the PDF viewer on the left with a highlighted footnote, and the XML editor on the right with the matching bibl element](../images/interface-overview.png)
+
+*The PDF viewer (left) and the XML editor (right). Autosearch highlights the entry of the current `<bibl>` in the PDF.*
 
 ## Main Layout
 
@@ -40,6 +42,10 @@ It consists of the following components:
 ## Top Toolbar
 
 The toolbar is organized into logical sections. The application itself provides the following; plugins can add further buttons and menu entries.
+
+![The top toolbar with the file selection drop-downs Collection, Model Variant, Source File, Target XML and Compare with version, followed by the button groups Document, Extraction and Tools and the user menu](../images/interface-overview-toolbar.png)
+
+*The top toolbar.*
 
 ### File Selection
 

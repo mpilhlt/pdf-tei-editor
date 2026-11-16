@@ -221,6 +221,9 @@ class XmlEditorPlugin extends Plugin {
   #documentStatus = { fileId: null, status: null };
   /** @type {StatusText|null} */
   #readOnlyStatusWidget = null;
+
+  /** Text of the read-only indicator, set by the access control plugin */
+  #readOnlyContext = 'Read-only';
   /** @type {StatusText} */
   #cursorPositionWidget;
   /** @type {StatusText} */
@@ -1091,7 +1094,7 @@ class XmlEditorPlugin extends Plugin {
         this.#xmlEditorEl.classList.add('editor-readonly');
       }
       if (this.#readOnlyStatusWidget) {
-        this.#readOnlyStatusWidget.text = state.connectionLost ? 'Connection lost' : 'Read-only';
+        this.#readOnlyStatusWidget.text = state.connectionLost ? 'Connection lost' : this.#readOnlyContext;
         this.#readOnlyStatusWidget.icon = state.connectionLost ? 'wifi-off' : 'lock-fill';
         if (!this.#readOnlyStatusWidget.isConnected) {
           this.#headerbar.add(this.#readOnlyStatusWidget, 'right', 5);
@@ -1197,11 +1200,13 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Set the context text on the read-only status widget.
+   * Set the text of the read-only indicator, e.g. the reason why the document is read-only. It is shown
+   * whenever the editor is read-only, until it is set again.
    * @param {string} text
    */
   setReadOnlyContext(text) {
-    if (this.#readOnlyStatusWidget) {
+    this.#readOnlyContext = text
+    if (this.#readOnlyStatusWidget && !this.state?.connectionLost) {
       this.#readOnlyStatusWidget.text = text
     }
   }

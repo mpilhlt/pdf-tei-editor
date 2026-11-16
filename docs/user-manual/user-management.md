@@ -10,6 +10,14 @@ The login dialog sends the password to the server, so serve the editor over HTTP
 
 Earlier versions stored a bare SHA-256 hash, which worked as a password in its own right. The server converts these hashes to scrypt at startup, so users keep their passwords. Clients that send `passwd_hash` to `/api/v1/auth/login` instead of `password` are refused with HTTP 400 and have to be updated.
 
+## User Profile
+
+Every user can change their full name, email address and password in **user menu > User Profile**. Leave the password fields empty to keep the current password.
+
+![The User Profile dialog with the fields Full Name, Email, New Password and Repeat New Password and the buttons Cancel and Save](../images/user-management-profile.png)
+
+*The User Profile dialog.*
+
 ## User Roles
 
 The application currently supports four user roles:

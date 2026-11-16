@@ -11,13 +11,23 @@ The XML editor panel has three chrome areas around the editing surface:
 **Headerbar** (top strip)
 Shows the artifact type prefix (**Gold:** or **Version:**), the artifact label, the document status (e.g. **Status: draft**, taken from the last revision and updated when a revision with a new status is saved; hidden if the document has no status), and the last revision date and author. Clicking the label copies it to the clipboard; double-clicking opens an inline rename prompt. When the editor has unsaved changes that cannot be auto-saved (e.g. because the XML is malformed), a warning badge appears here. When the document is read-only, a lock icon appears.
 
-![XML editor headerbar with the document status](../images/xmleditor-headerbar-status.png)
+![The XML editor headerbar with the label "Gold (grobid.training.segmentation)" and "Status: checked", above the toolbar and the first lines of the document](../images/xmleditor-headerbar-status.png)
+
+*The headerbar shows the version label and the document status.*
 
 **Toolbar** (below the headerbar)
 Contains action buttons grouped by function. What buttons are visible depends on the document state and your role (see [Toolbar buttons](#toolbar-buttons)).
 
+![The headerbar and the toolbar of the XML editor for the version "v1 (anna)"](../images/editing-workflow-headerbar-toolbar.png)
+
+*Headerbar and toolbar of the XML editor.*
+
 **Statusbar** (bottom strip)
 Left side: the XML / Visual annotation mode toggle (only visible for variants that define annotation tags). Center: the XPath navigation controls and the **Focus** toggle. Right side: the review progress bar and the open comments counter (when the document has review marks or comments), indentation style, cursor position and, at the far right, the editor theme picker (palette icon). When the editor is narrow, items are hidden in this order: cursor position, theme picker, indentation style, then the left-side items, the review progress bar and the navigation controls. The open comments counter is hidden last.
+
+![The statusbar of the XML editor with the XML/Visual switch, the XPath navigation set to bibl at 5/11 with the focus and close buttons, the indentation, the cursor position and the theme picker](../images/editing-workflow-statusbar.png)
+
+*The statusbar with the XPath navigation in the center.*
 
 ---
 
@@ -156,6 +166,10 @@ Auto-save keeps the document up to date silently. To record a named checkpoint i
 - **Keep comments** — shown with *Save to a new personal version* when the document has [unit comments](unit-comments.md); uncheck it to start the new version without them.
 - **Save as gold version** — marks this document as the authoritative Gold Standard (reviewers only).
 
+![The Save Revision dialog with a change description, the status Draft, and the options "Save to a new personal version" and "Save as gold version"](../images/editing-workflow-save-revision.png)
+
+*The Save Revision dialog, as a reviewer sees it.*
+
 ### Documents opened by someone else
 
 Only one window can edit a document at a time. When the document is already open for editing elsewhere, it opens read-only, and a notice says why:
@@ -205,6 +219,10 @@ The LLM Reviewer records its marks only in documents you can edit.
 
 Click the clock icon in the toolbar to open the revision history panel. It lists all `<change>` entries from the TEI `<revisionDesc>` in reverse chronological order, showing date, description, status, and the responsible person. The button is hidden when the document has no `<revisionDesc>`.
 
+![The Revision History drawer with a table of three changes, with the columns Date, Description, Status and Who](../images/editing-workflow-revision-history.png)
+
+*The Revision History drawer.*
+
 ---
 
 ## Merge View (Comparing Versions)
@@ -215,6 +233,10 @@ When a diff document is selected in the toolbar, a side-by-side merge view activ
 - Click **Current** (orange) in the context menu or toolbar to keep the editor text for a chunk.
 - Click **Incoming** (blue) to apply the diff version for a chunk.
 - Use **Reject all** / **Accept all** to resolve all chunks at once.
+
+![The merge view in the XML editor: a changed bibl element with the old text in blue, the new text in orange, and the buttons Current and Incoming](../images/extraction-workflow-merge-view.png)
+
+*The merge view with one changed chunk.*
 
 ---
 
@@ -243,6 +265,10 @@ Click the **XML / Visual** toggle switch in the bottom-left of the XML editor st
 
 Click the toggle again (back to **XML**) to return to the standard XML view.
 
+![The XML editor in Visual mode: the reference entries with colored badges such as AUTHOR, TITLE[A], DATE and PTR[WEB] in front of the annotated text](../images/editing-workflow-visual-mode.png)
+
+*The visual annotation mode of a `grobid.training.references` document.*
+
 ### Wrapping a text span
 
 1. Select the text you want to annotate by clicking and dragging.
@@ -251,6 +277,10 @@ Click the toggle again (back to **XML**) to return to the standard XML view.
 4. Click the chip to wrap the selection. The tag is inserted with any mandatory default attributes (e.g. `<note place="footnote">`) automatically.
 
 The editor rebuilds its decoration layer immediately after each wrapping operation.
+
+![The popup "Annotate as…" with one colored chip per tag, such as AUTHOR, DATE, PTR, TITLE, below the selected text "Couperin.org"](../images/editing-workflow-chip-palette.png)
+
+*The chip palette after selecting "Couperin.org".*
 
 ### Editing annotation attributes
 
