@@ -62,8 +62,8 @@ Edits are always be done in copies, which merged by the reviewers into the "gold
 *Autosearch highlights the text of the current entry in the PDF.*
 
 
-- You can leave comments anywhere by enclosing them in the xml comment markup: `<!-- this is a comment -->`
-- When you are done, click on the "Save revision" button (![Save revision button](../images/extraction-workflow-save-button.png)). In the dialog's "Description" field, you can specify more exactly what you have been correcting, and add addtional comments if needed.
+- Use XML comments (`<!-- this is a comment -->`) only for remarks that must stay in the document permanently and become part of the published dataset, for example a note explaining an anomaly in the source that is preserved on purpose. For all other remarks, such as questions to the reviewer or notes on open issues, use [unit comments](unit-comments.md).
+- When you are done, click on the "Save revision" button (![Save revision button](../images/extraction-workflow-save-button.png)). In the dialog's "Description" field, you can specify more exactly what you have been correcting, and add additional comments if needed.
 
 ### 3. Review the version and make it the "gold" version
 
