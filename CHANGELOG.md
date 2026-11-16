@@ -2,6 +2,19 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.87.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.86.1...v0.87.0) (2026-11-16)
+
+
+### Bug Fixes
+
+* **pdfviewer:** pass PDF.js asset URLs so scanned pages render ([ad19cfe](https://github.com/mpilhlt/pdf-tei-editor/commit/ad19cfea98a94567a6fe4c30e3e1f587c4318f1f))
+
+
+### Features
+
+* mark the gold version with the award icon instead of an emoji ([bb5c704](https://github.com/mpilhlt/pdf-tei-editor/commit/bb5c704da88d83fa99174e8e486a7fe97603869d))
+* show the gold version with a medal in the version trees of the Target XML menu ([77d7c61](https://github.com/mpilhlt/pdf-tei-editor/commit/77d7c61842e065b3ee1eb208c75b2949c5a6bc3e))
+
 ## [0.86.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.86.0...v0.86.1) (2026-11-16)
 
 
