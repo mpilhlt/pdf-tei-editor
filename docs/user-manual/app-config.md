@@ -2,7 +2,9 @@
 
 The configuration editor is only accessible to administrator roles and can be opened via the left "Tools" dropdown menu, under the menu item "Configuration Editor".
 
-![](../images/config-editor.png)
+![The configuration editor dialog with a search field and a table of configuration keys, their descriptions, values and edit buttons](../images/config-editor.png)
+
+*The configuration editor.*
 
 ## Overview
 

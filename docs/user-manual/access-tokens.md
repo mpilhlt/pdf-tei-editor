@@ -10,6 +10,10 @@ Reviewers and administrators open **user menu > Access Tokens**. The dialog list
 - **User**: the user the token authenticates as. It is only shown if you may create tokens for more than one user.
 - **Expires**: 7, 30, 90 (default) days or 1 year. Administrators can also choose "No expiry" if `auth.access-tokens.allow-no-expiry` is enabled.
 
+![The Access tokens dialog with an explanation, the message "There are no access tokens" and the New token form with the fields Label, User and Expires and the button Create token](../images/access-tokens-dialog.png)
+
+*The Access tokens dialog of an administrator, before any token was created.*
+
 After **Create token**, the token (`pte_...`) is shown once, together with a line for a `.env` file. Copy it right away: it is stored only as a hash and cannot be shown again.
 
 A token has no roles of its own. It acts with the current roles and groups of its user, so removing a role from the user also takes it away from the token.
