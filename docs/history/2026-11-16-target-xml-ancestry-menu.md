@@ -2,7 +2,7 @@
 
 ## Change
 
-The "Target XML" and "Compare with version" menus no longer have separate "Gold" and "Versions" groups. All versions of the selected document, including gold, are grouped by lineage (`groupVersionsByLineage` in `app/src/modules/file-data-utils.js`), and the gold version carries a medal (🥇, as in the annotation progress plugin) in the option's `prefix` slot. Lineages that contain gold are listed first.
+The "Target XML" and "Compare with version" menus no longer have separate "Gold" and "Versions" groups. All versions of the selected document, including gold, are grouped by lineage (`groupVersionsByLineage` in `app/src/modules/file-data-utils.js`), and the gold version carries the `award` icon (as in the Gold section of the file drawer) in the option's `prefix` slot. Lineages that contain gold are listed first.
 
 ## Details
 

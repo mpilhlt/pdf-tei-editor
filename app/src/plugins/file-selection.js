@@ -231,7 +231,7 @@ class FileSelectionPlugin extends Plugin {
    */
   #createDocumentLabel(label, isLocked, variantId, isGold) {
     let html = variantId ? `${label} [${variantId}]` : label;
-    if (isGold === true) html = `<span slot="prefix" title="Gold version">🥇</span>${html}`;
+    if (isGold === true) html = `<sl-icon name="award" slot="prefix" label="Gold version"></sl-icon>${html}`;
     if (isLocked === true) html += `<sl-icon name="file-lock2" slot="suffix"></sl-icon>`;
     return html;
   }
