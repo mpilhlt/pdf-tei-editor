@@ -27,6 +27,10 @@ The drawer shows all collections and their documents in a tree. Each document an
 - Check a collection's checkbox to select all documents in that collection at once. The collection checkbox reflects partial selections with an indeterminate state.
 - Use **Select all/none** at the top of the tree to select or deselect every document in one click.
 
+![The Collection & Files drawer with the projects Default Project and Derived Text Formats, their collections, and one checked document](../images/collection-management-drawer.png)
+
+*The Collection & Files drawer, grouped by project, with one document selected.*
+
 ### Running the move or copy
 
 Once at least one document is checked, the **Move or copy** button (<sl-icon name="folder-symlink"></sl-icon>) in the drawer footer becomes active.
@@ -34,6 +38,10 @@ Once at least one document is checked, the **Move or copy** button (<sl-icon nam
 1. Click the <sl-icon name="folder-symlink"></sl-icon> button to open the batch Move/Copy dialog.
 2. Choose **Move** or **Copy** and select one or more destination collections. Only collections you have write access to are shown.
 3. Confirm — the operation runs immediately for all selected documents.
+
+![The Move/Copy to Collection dialog with the collections grouped by project, the collection Batch 2 checked, and the buttons New, Cancel, Move and Copy](../images/collection-management-move.png)
+
+*Choosing the target collection in the Move/Copy dialog.*
 
 A **move** removes each document from its current collection. A **copy** leaves the original in place and adds it to the target collection as well.
 

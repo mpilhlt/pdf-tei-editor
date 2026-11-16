@@ -12,6 +12,10 @@ Click the **Review** button (clipboard icon) in the XML editor toolbar. Review m
 
 Hover over the **Review** button to see the list of shortcuts.
 
+![The XML editor in review mode: a green strip left of the line numbers for the units marked OK, a red strip for the unit marked not OK, and the review progress bar in the status bar](../images/unit-review-strip.png)
+
+*Review mode: the status strip left of the line numbers and the progress bar in the status bar.*
+
 The setting is remembered in the browser. A document that has units marked not OK, disputed units, or units changed after a not-OK review turns review mode on when it is loaded, so that the feedback is visible; it is turned off again when you load a document without such units, unless you switched it on yourself.
 
 Only users with the *reviewer* or *admin* role can set marks; everyone else sees the strip and the marks read-only. For them, the review popover shows only the reviews and the combined result.
@@ -39,7 +43,23 @@ The keyboard shortcuts act on the unit at the cursor (also when other units shar
 | Next unit you have not reviewed / next not-OK unit (also disputed units and units changed after a not-OK review) | `F7` / `Shift+F7`, or the arrow / exclamation mark button |
 | Final review (only in *final* mode) | `Ctrl+Alt+Enter` (OK) / `Ctrl+Alt+Shift+Enter` (not OK), the green and red badge buttons, or the **Final review** box in the popover |
 
+![The Review row at the top of the context menu with the buttons OK, Not OK, Remove my review, Mark all above as OK, Next unreviewed unit and Next not-OK unit](../images/unit-review-context-menu.png)
+
+*The Review row of the context menu.*
+
+![The Not OK prompt below a bibl element, with a comment field and the hint "Enter: save and go to the next unit · Esc: no comment"](../images/unit-review-not-ok-prompt.png)
+
+*Marking a unit not OK with a comment.*
+
+![The review popover of a unit with the buttons Unreviewed, OK and Not OK, the comment, and the combined result "Not OK (1 : 0)"](../images/unit-review-popover.png)
+
+*The review popover, opened by clicking the strip.*
+
 Units marked not OK by the combined result are also listed in the diagnostics drawer, with buttons to open the review and, for reviewers, to mark them OK or not OK. So are units that were edited after a not-OK review ("Changed after a not-OK review … please check again"): these are usually the corrections of the annotator, which the reviewer should confirm or mark not OK again.
+
+![The diagnostics drawer as the annotator sees it: the entry "Marked not OK" with the reviewer's comment and the button Open review, and an open comment with the buttons Reply and Resolve](../images/unit-review-diagnostics.png)
+
+*A not-OK mark and an open comment in the diagnostics drawer.*
 
 A not-OK mark is sent as a [message](messages.md) to the owner of the document (if you review in your own copy of it, to the owner of the version you copied). Type `@` in the comment of the mark to mention someone else, too.
 

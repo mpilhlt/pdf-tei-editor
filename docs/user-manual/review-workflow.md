@@ -56,6 +56,8 @@ Upload the PDFs and extract them into the collection, either one by one in the e
 
 ![The extraction of a document, as the annotators will see it: read-only, because it belongs to the reviewer](../images/review-workflow-01-extraction.png)
 
+*The extraction, read-only for annotators.*
+
 Before you hand the documents over, you can clean up the extraction, for example with the **TEI Wizard** (wand icon in the editor toolbar): *Pretty Print XML* puts each unit on its own line, which makes the review easier, and *Fix Common Extraction Issues* corrects errors that extractors typically make. Do this now and not later: every change that you make after the annotators have made their copies has to be made in each copy.
 
 Keep the clean-up mechanical. Anything that requires a decision about the content is the annotators' work.
@@ -72,6 +74,8 @@ Tell the annotators that they can start. There are two ways:
 
 ![The Annotation Progress view of a collection, filtered to one document. "Share link" copies a link to this view](../images/review-workflow-02-annotation-progress.png)
 
+*The Annotation Progress view.*
+
 With b), agree on how annotators claim a document. The simplest rule is: whoever makes the first copy (step 3) owns the document. The new version shows up in the Annotation Progress view with the annotator's name, so the others can see that it is taken.
 
 ## 3. Annotating and submitting for review
@@ -84,6 +88,8 @@ Before your first document, read the annotation guide of the variant you work on
 
 ![The annotation guide with its table of contents](../images/review-workflow-02b-annotation-guide.png)
 
+*The annotation guide.*
+
 Nobody remembers all the rules after one reading, and you do not have to. The goal of this first reading is an overview: which rules exist, which cases they cover and where to find them again. When you are unsure later, look the rule up instead of guessing. The reviewers will refer to the same guide in their comments.
 
 ### Make your own copy
@@ -94,6 +100,8 @@ Click **Save revision** (floppy disk icon). *Save to a new personal version* is 
 
 ![Save Revision dialog: making a personal copy of the extraction](../images/review-workflow-03-personal-copy.png)
 
+*Making a personal copy.*
+
 You are now editing your own copy. The extraction is superseded by your copy and becomes read-only for everyone.
 
 ### Annotate
@@ -102,7 +110,9 @@ Work in your copy as described in [Document Editing](editing-workflow.md). Your 
 
 **Work unit by unit in focus mode.** Choose the unit element (for example `<bibl>`) in the XPath dropdown in the status bar of the editor, and step through the units with **‹** and **›**. Focus mode (magnifier button next to the counter) is on by default: the current unit is centred and everything else is dimmed, so you can concentrate on one unit at a time. `Esc` turns focus mode off. See [Node Navigation](editing-workflow.md#xpath-navigation) and [Focus Mode](editing-workflow.md#focus-mode).
 
-![Focus mode: the current <bibl> is highlighted, the rest of the document is dimmed. The "LLM Review" button is in the bottom right corner of the unit](../images/review-workflow-03b-focus-mode.png)
+![Focus mode: the current &lt;bibl&gt; is highlighted, the rest of the document is dimmed. The "LLM Review" button is in the bottom right corner of the unit](../images/review-workflow-03b-focus-mode.png)
+
+*Focus mode.*
 
 **Let the LLM Reviewer suggest corrections (if configured).** If your installation has the [LLM Reviewer](https://github.com/mpilhlt/pte-plugins/blob/main/plugins/annotation-review/README.md) and the document links to machine-readable annotation rules, click **LLM Review** in the bottom right corner of the focused unit (or **Tools → Review document annotations** for the whole document). The model checks the unit against the rules, and its suggestions appear in the **Diagnostics** drawer and as highlights in the editor. **Propose fix** on a suggestion shows the change in the merge view: accept it with **Incoming**, or keep your text with **Current**. **Apply fix** applies the suggestion directly, without the merge view. To apply several suggestions at once, check them in the drawer and click **Apply**. Treat the suggestions as a draft: check each one against the PDF and the annotation guide before you accept it, and dismiss the ones that are wrong. See [LLM reviewer](unit-review.md#llm-reviewer) and [Diagnostics drawer](editing-workflow.md#diagnostics-drawer).
 
@@ -113,6 +123,8 @@ Work in your copy as described in [Document Editing](editing-workflow.md). Your 
 When you are done with the whole document, click **Save revision** once more, describe the state of the document (for example "Annotation complete, ready for review"), set **Status** to *In-review* and click **Save Revision**.
 
 ![Save Revision dialog: submitting the copy for review with status In-review](../images/review-workflow-04-submit-for-review.png)
+
+*Submitting the copy for review.*
 
 This is the hand-over to the reviewers: each reviewer receives a message, and the document appears in the review queue of their dashboard. Set *in-review* only when you have really finished; the reviewers will start reviewing right away.
 
@@ -126,9 +138,13 @@ The dashboard opens after login (reopen it with the info button in the toolbar).
 
 ![The dashboard with the review queue ("Waiting for review") and the annotation progress of the collection](../images/review-workflow-05-dashboard.png)
 
+*The dashboard of a reviewer.*
+
 You also receive a message for each submitted document. The red badge on the user menu shows the number of unread messages; open them with **Messages** in the user menu. Clicking the message opens the document with review mode on.
 
 ![The reviewer's inbox with a review request from the annotator](../images/review-workflow-06-reviewer-inbox.png)
+
+*The review request in the reviewer's inbox.*
 
 ### Review unit by unit
 
@@ -140,6 +156,8 @@ Review mode is switched on with the **Review** button (clipboard icon). Then go 
 - `Ctrl+Shift+Enter` marks it as not OK and asks for a comment. Write a comment that the annotator can act on: what is wrong and what it should be, if possible with a reference to the annotation guidelines.
 
 ![A unit marked as not OK, with the reviewer's comment, in the review popover and in the diagnostics drawer](../images/review-workflow-07-not-ok.png)
+
+*A unit marked not OK.*
 
 The strip left of the line numbers shows the result: green for OK, red for not OK. The progress bar in the status bar shows the share of units that are OK, not OK and still open; hover over it to see the counts.
 
@@ -158,9 +176,13 @@ You learn about the reviewer's feedback in two ways:
 
 ![The annotator's inbox with a not-OK review](../images/review-workflow-08-annotator-inbox.png)
 
+*The not-OK review in the annotator's inbox.*
+
 The not-OK units and open comments are listed in the **Diagnostics** drawer on the left. Click an entry to jump to its unit.
 
 ![The annotator's own copy with the reviewer's feedback: one unit marked not OK, one comment](../images/review-workflow-09-annotator-feedback.png)
+
+*The reviewer's feedback in the annotator's copy.*
 
 Correct the unit in your version, as you annotated it in step 3. You do not need to save a revision or change the status: the document stays *in-review* until the reviewer approves it. Your edit is saved automatically, and the unit is shown with grey dashes until the reviewer has looked at it again. In the diagnostics drawer, it is now listed as *Changed after a not-OK review … please check again*.
 
@@ -172,6 +194,8 @@ A not-OK mark is a one-way notice: you cannot reply to the mark itself. To answe
 If you disagree with a not-OK mark, do not just leave the unit as it is: say why in a comment.
 
 ![The corrected unit ("Changed after a not-OK review") and a reply to the reviewer's comment](../images/review-workflow-10-correction-reply.png)
+
+*The correction and the reply to the comment.*
 
 Do not make a new version to answer the feedback, and do not mark units as OK yourself: the review takes place in the version that was submitted.
 
@@ -190,9 +214,13 @@ Resolve the comment threads that have been dealt with (**Resolve**). `Shift+F7` 
 
 ![The reviewer's view after the correction: the changed unit with the buttons OK and Not OK, and the reply in the comment thread](../images/review-workflow-11-reviewer-recheck.png)
 
+*Checking the correction.*
+
 A resolved thread is no longer listed in the diagnostics drawer, but it stays with the unit: click the comment icon left of the line number to read the discussion again.
 
 ![A resolved comment thread, opened from the comment icon next to the unit](../images/review-workflow-14-comment-view.png)
+
+*A resolved comment thread.*
 
 ### Disputed units
 
@@ -201,6 +229,8 @@ If several reviewers have marked a unit, their marks are combined (see [Combinin
 A disputed unit needs another review to break the tie. Click **✓ OK** or **✕ Not OK** in the drawer, or **Open review** to see the other reviews in the review popover first: under *Other reviews* it lists each mark with its comment and shows the combined result. `Shift+F7` also stops at disputed units.
 
 ![A disputed unit: in the diagnostics drawer, the entry "Review disputed" with the LLM reviewer's comment; in the review popover, the other reviews and the combined result "Disputed (1 OK · 1 not OK), needs another review"](../images/review-workflow-15-dispute.png)
+
+*A disputed unit.*
 
 If the dispute comes from a wrong LLM review, consider whether the machine rules need to be improved, and note it in a comment on the unit.
 
@@ -212,6 +242,8 @@ When all units are OK (the tooltip of the progress bar shows *0 not OK · 0 open
 
 ![Save Revision dialog: approving the document](../images/review-workflow-12-approve.png)
 
+*Approving the document.*
+
 Because you do not own the annotator's version, *Save to a new personal version* is checked and cannot be unchecked: the approved state is recorded in a new version in your name, which supersedes the annotator's version. The annotator's version, with all review marks and comments, stays in the version history and is read-only from now on. Keep *Keep comments* checked so that the discussion stays with the document; whether you check *Clear reviews* depends on what your project does after approval.
 
 If units are still not OK, disputed or not reviewed, the editor asks you to confirm before it saves the status *approved*. Do not override this unless you know why.
@@ -219,6 +251,8 @@ If units are still not OK, disputed or not reviewed, the editor asks you to conf
 The approved version replaces the annotator's version in the review queue (which then no longer lists the document) and counts as done in the Annotation Progress view and in the progress rings of the dashboard. Its history shows the path of the document: extraction, annotator's version, approved version.
 
 ![The Annotation Progress view after the approval: the approved version with its history](../images/review-workflow-13-progress-approved.png)
+
+*The approved document in the Annotation Progress view.*
 
 ## Rules of thumb
 

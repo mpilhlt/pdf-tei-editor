@@ -202,7 +202,7 @@ class AccessControlPlugin extends Plugin {
       )
     }
 
-    this.#updateReadOnlyContext(state.editorReadOnly, shouldBeReadOnly)
+    this.#updateReadOnlyContext(shouldBeReadOnly)
   }
 
   /**
@@ -216,7 +216,7 @@ class AccessControlPlugin extends Plugin {
     setTimeout(() => {
       if (this.state?.xml !== fileId || this.state.editorReadOnly) return
       this.dispatchStateChange({ editorReadOnly: true })
-        .then(() => this.#updateReadOnlyContext(true, true))
+        .then(() => this.#updateReadOnlyContext(true))
         .catch(err => this.getDependency('logger').error(`Failed to make the superseded document read-only: ${err}`))
     }, 0)
   }
@@ -545,11 +545,15 @@ class AccessControlPlugin extends Plugin {
   }
 
   /**
-   * @param {boolean} editorReadOnly
-   * @param {boolean} accessControlReadOnly
+   * Sets the reason shown by the read-only indicator of the XML editor. It is set before the
+   * editor becomes read-only, since the editor reads it when it shows the indicator.
+   * @param {boolean} accessControlReadOnly - Whether access control makes the document read-only
    */
-  #updateReadOnlyContext(editorReadOnly, accessControlReadOnly) {
-    if (!editorReadOnly || !accessControlReadOnly) return
+  #updateReadOnlyContext(accessControlReadOnly) {
+    if (!accessControlReadOnly) {
+      this.getDependency('xmleditor').setReadOnlyContext('Read-only')
+      return
+    }
     const mode = this.#accessControlConfig?.mode || 'role-based'
     const { owner } = this.#currentPermissions
     const currentUser = this.getDependency('authentication').getUser()
