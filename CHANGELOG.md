@@ -2,6 +2,21 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.86.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.86.0...v0.86.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **document-actions:** annotators saving a copy of the gold version do not try to set gold ([eb83ea0](https://github.com/mpilhlt/pdf-tei-editor/commit/eb83ea090d543dbec3d7b0660f5aae7cec6cf43f))
+* **document-actions:** typo in the help text of the Save Revision dialog ([b8deb70](https://github.com/mpilhlt/pdf-tei-editor/commit/b8deb70423cf1ed6dfc56c2ac41728b5a026cf48))
+* **info:** also remove the "--!>" comment end marker ([c54f15c](https://github.com/mpilhlt/pdf-tei-editor/commit/c54f15cadf12555ca34e1fd044e693193e4f860f))
+* **info:** escape the manual page path in resolved image paths ([8b33d77](https://github.com/mpilhlt/pdf-tei-editor/commit/8b33d7792eece66b2b237feb28b882074f483e63))
+* **info:** keep HTML comments of the manual hidden ([d7c0f2b](https://github.com/mpilhlt/pdf-tei-editor/commit/d7c0f2ba1a48bc8d63048960a97ee47298855338))
+* **info:** remove comment markers from the manual HTML until none is left ([2d2fab4](https://github.com/mpilhlt/pdf-tei-editor/commit/2d2fab4f73d13b3b2e88317df16dc196467df2b1))
+* **info:** resolve manual image paths without the document's base URL ([ece0f51](https://github.com/mpilhlt/pdf-tei-editor/commit/ece0f51a4af4fbe336e91c8414da63c32e7d7e3e))
+* **info:** show the images of the user manual in the app ([fe06f11](https://github.com/mpilhlt/pdf-tei-editor/commit/fe06f11a3cd76a3520ac3d2346617a29be0f63de))
+* **unit-review:** show the element text in popover headers unescaped ([9d0554e](https://github.com/mpilhlt/pdf-tei-editor/commit/9d0554e4985b07fdbe480a57f06cad05d7e4c850))
+
 # [0.86.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.85.0...v0.86.0) (2026-11-14)
 
 
