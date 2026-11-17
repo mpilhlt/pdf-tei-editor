@@ -764,3 +764,8 @@ class XpathNavigationPlugin extends Plugin {
     return true
   }
 }
+
+export default XpathNavigationPlugin
+
+/** @deprecated Use XpathNavigationPlugin class directly */
+export const plugin = XpathNavigationPlugin
