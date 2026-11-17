@@ -22,7 +22,6 @@
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import ep from '../extension-points.js'
 import { updateUi } from '../ui.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { parseXPath } from '../modules/utils.js'
@@ -64,17 +63,6 @@ class XpathNavigationPlugin extends Plugin {
       deps: ['logger', 'client', 'xmleditor']
     })
   }
-
-  static extensionPoints = [ep.xmlEditor.contextMenuItems];
-
-  /**
-   * Extension point handler for `ep.xmlEditor.contextMenuItems`.
-   * Called by the XML editor plugin during start() to collect the context menu items; contributes the
-   * "Insert </tag><tag>" item for the tag of the selected navigation XPath.
-   * Delegates to {@link XpathNavigationPlugin#getContextMenuItems}.
-   * @returns {Array<{element: HTMLElement, onBeforeShow: (ctx: {readOnly: boolean}) => void}>}
-   */
-  [ep.xmlEditor.contextMenuItems]() { return this.getContextMenuItems() }
 
   get #logger() { return this.getDependency('logger') }
   get #client() { return this.getDependency('client') }
@@ -274,29 +262,6 @@ class XpathNavigationPlugin extends Plugin {
         this.#logger.error(e)
       }
     }
-  }
-
-  /**
-   * The context menu item that inserts a tag boundary for the tag of the selected navigation XPath.
-   * @returns {Array<{element: HTMLElement, onBeforeShow: (ctx: {readOnly: boolean}) => void}>}
-   */
-  getContextMenuItems() {
-    const item = document.createElement('sl-menu-item')
-    item.addEventListener('click', () => {
-      const tagName = tagNameFromXpath(this.#xpathDropdown.selected)
-      if (!tagName) return
-      const view = this.#xmlEditor.getView()
-      const { head } = view.state.selection.main
-      view.dispatch({ changes: { from: head, to: head, insert: `</${tagName}><${tagName}>` }, userEvent: 'input' })
-    })
-    return [{
-      element: item,
-      onBeforeShow: ({ readOnly }) => {
-        const tagName = tagNameFromXpath(this.#xpathDropdown.selected)
-        item.disabled = readOnly || !tagName
-        item.textContent = tagName ? `Insert </${tagName}><${tagName}>` : 'Insert tag boundary'
-      }
-    }]
   }
 
   /**
@@ -798,19 +763,6 @@ class XpathNavigationPlugin extends Plugin {
     }
     return true
   }
-}
-
-/**
- * Extracts the local element name from an XPath expression (last step, no predicates).
- * E.g. `//body/listBibl/bibl[@type="cited"]` → `bibl`
- * @param {string} xpath
- * @returns {string|null}
- */
-export function tagNameFromXpath(xpath) {
-  if (!xpath) return null
-  const steps = xpath.split('/').filter(Boolean)
-  const lastStep = steps[steps.length - 1]
-  return lastStep?.replace(/\[.*$/, '').replace(/^[^:]+:/, '') || null
 }
 
 export default XpathNavigationPlugin
