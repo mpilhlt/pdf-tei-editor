@@ -154,6 +154,38 @@ const extensionPoints = {
      */
     fallback: "pdfSearch.fallback"
   },
+  rbac: {
+    /**
+     * Invoked by RbacManagerPlugin after an admin renamed the username of a user.
+     * Function signature: (oldId: string, newId: string) => Promise<void>|void
+     */
+    userRenamed: "rbac.userRenamed",
+    /**
+     * Invoked by RbacManagerPlugin after the full name of a user changed.
+     * Function signature: (username: string, fullname: string) => Promise<void>|void
+     */
+    userRelabeled: "rbac.userRelabeled",
+    /**
+     * Invoked by RbacManagerPlugin after an admin renamed the id of a project.
+     * Function signature: (oldId: string, newId: string) => Promise<void>|void
+     */
+    projectRenamed: "rbac.projectRenamed",
+    /**
+     * Invoked by RbacManagerPlugin after the name of a project changed.
+     * Function signature: (projectId: string, name: string) => Promise<void>|void
+     */
+    projectRelabeled: "rbac.projectRelabeled",
+    /**
+     * Invoked by RbacManagerPlugin after an admin renamed the id of a collection.
+     * Function signature: (oldId: string, newId: string) => Promise<void>|void
+     */
+    collectionRenamed: "rbac.collectionRenamed",
+    /**
+     * Invoked by RbacManagerPlugin after the name of a collection changed.
+     * Function signature: (collectionId: string, name: string) => Promise<void>|void
+     */
+    collectionRelabeled: "rbac.collectionRelabeled"
+  },
   title: {
     /**
      * Merges the given slot values into the browser tab title (see `state.titleTemplate`)

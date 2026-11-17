@@ -11,6 +11,7 @@
 
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js';
 import Plugin from '../modules/plugin-base.js';
+import ep from '../extension-points.js';
 
 import { SessionActivityTracker } from '../modules/session-activity-tracker.js';
 
@@ -43,6 +44,41 @@ class AuthenticationPlugin extends Plugin {
     });
     /** @type {SessionActivityTracker|null} */
     this.activityTracker = null;
+  }
+
+  static extensionPoints = [ep.rbac.userRenamed, ep.rbac.userRelabeled];
+
+  /**
+   * Extension point handler for `ep.rbac.userRenamed`.
+   * Called by RbacManagerPlugin after an admin renamed a username; refreshes the user data
+   * if the logged-in user was renamed (the session moves to the new username on the server).
+   * Delegates to {@link AuthenticationPlugin#refreshUserIf}.
+   * @param {string} oldId
+   * @param {string} _newId
+   * @returns {Promise<void>}
+   */
+  [ep.rbac.userRenamed](oldId, _newId) { return this.refreshUserIf(oldId) }
+
+  /**
+   * Extension point handler for `ep.rbac.userRelabeled`.
+   * Called by RbacManagerPlugin after the full name of a user changed; refreshes the user data
+   * if it is the logged-in user.
+   * Delegates to {@link AuthenticationPlugin#refreshUserIf}.
+   * @param {string} username
+   * @param {string} _fullname
+   * @returns {Promise<void>}
+   */
+  [ep.rbac.userRelabeled](username, _fullname) { return this.refreshUserIf(username) }
+
+  /**
+   * Reloads the data of the logged-in user from the server if it has the given username.
+   * @param {string} username - Username before the change
+   * @returns {Promise<void>}
+   */
+  async refreshUserIf(username) {
+    if (this.state.user?.username !== username) return;
+    const authData = await this.#client.status();
+    await this.dispatchStateChange({ user: authData });
   }
 
   get #logger() { return this.getDependency('logger') }

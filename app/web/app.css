@@ -699,6 +699,9 @@ sl-menu[name="pluginsMenu"] small {
   font-size: var(--sl-font-size-x-small);
   color: var(--sl-color-neutral-500);
 }
+.xml-editor-context-menu__divider--redundant {
+  display: none !important;
+}
 /* XML Annotation Mode */
 .ann-badge {
   display: inline-block;
@@ -1034,5 +1037,79 @@ sl-drawer.diagnostics-drawer::part(footer) {
 
 .markdown-body p:has(> img:only-child) + p:has(> em:only-child) {
   color: var(--sl-color-neutral-600);
+  font-size: var(--sl-font-size-small);
+}
+
+/* Navigation XPaths dialog (xpath-navigation plugin) */
+.xpath-navigation-intro {
+  margin-top: 0;
+  font-size: var(--sl-font-size-small);
+}
+
+.xpath-navigation-list {
+  max-height: 40vh;
+  overflow: auto;
+  margin-bottom: 1rem;
+}
+
+.xpath-navigation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--sl-font-size-small);
+}
+
+.xpath-navigation-table th,
+.xpath-navigation-table td {
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--sl-color-neutral-200);
+  vertical-align: middle;
+}
+
+.xpath-navigation-table th {
+  font-weight: var(--sl-font-weight-semibold);
+  color: var(--sl-color-neutral-600);
+}
+
+.xpath-navigation-table td.xpath-navigation-xpath {
+  font-family: var(--sl-font-mono);
+  word-break: break-all;
+}
+
+.xpath-navigation-table td.xpath-navigation-actions {
+  white-space: nowrap;
+  text-align: right;
+  width: 1%;
+}
+
+.xpath-navigation-table tr.default td:not(:last-child) {
+  color: var(--sl-color-neutral-600);
+}
+
+.xpath-navigation-table tr.editing td {
+  background: var(--sl-color-primary-50);
+}
+
+.xpath-navigation-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sl-color-neutral-500);
+  font-size: var(--sl-font-size-x-small);
+}
+
+.xpath-navigation-form-row {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 10px;
+}
+
+.xpath-navigation-form-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.xpath-navigation-error {
+  color: var(--sl-color-danger-600);
   font-size: var(--sl-font-size-small);
 }

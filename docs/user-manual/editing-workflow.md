@@ -81,19 +81,41 @@ You can type directly in the editor at any time the document is not read-only. T
 
 **Right-click context menu:**
 
+The entries that plugins add, such as **Bookmark…** and **Comment…**, come first, followed by the entries that change the markup and the clipboard operations.
+
 | Item | What it does |
 | --- | --- |
-| Undo / Redo | History buttons at the top of the menu |
 | Current / Incoming | Accept or discard one diff chunk (only shown inside a changed chunk in merge view) |
-| Copy / Cut / Paste / Select All | Standard clipboard operations |
 | Remove tag | Unwrap the tag at the cursor, preserving its text content |
-| Insert `</tag><tag>` | Insert a tag boundary at the cursor position using the tag from the current XPath navigation selection |
+| Split `<tag>` | Split the element at the right-clicked position (or at the cursor, if you right-click into the selection) into two elements of the same name. The second element gets the attributes of the first one except `xml:id`, and the cursor is placed at its start. Not available inside a tag, comment or entity, or in the root element. Also available in the [visual annotation mode](#splitting-an-annotation) |
+| Split `<tag>` in new line | Shown instead of Split `<tag>` while you hold `Shift`: splits the same way and starts the second element on a new line, indented like the line on which the element starts |
+| Copy / Cut / Paste / Select All | Standard clipboard operations |
+
+To split an element, for example a `<body>` of a segmentation training document that covers two zones, right-click where the second part begins and choose **Split `<tag>`**. The entry shows the name of the element that will be split.
+
+![The context menu of the XML editor opened with the cursor in the text of a body element before "A key aspect", with the entry "Split <body>" below "Remove tag"](../images/editing-workflow-split-element.png)
+
+*The entry **Split `<body>`** splits the element that contains the cursor.*
+
+![The same text after the split: "Introduction <lb/>" ends with </body>, followed by a new <body> element that starts with "A key aspect"](../images/editing-workflow-split-element-result.png)
+
+*After the split, the text after the cursor is in a second `<body>` element.*
+
+Some entries of the context menu have a variant that is shown instead while you hold `Shift`, either when you right-click or while the menu is open. These entries are marked with **⇧**. Holding `Shift` turns **Split `<tag>`** into **Split `<tag>` in new line**, which puts the second element on its own line.
+
+![The context menu opened with Shift held, with the entry "Split <body> in new line" in place of "Split <body>"](../images/editing-workflow-split-element-new-line.png)
+
+*With `Shift` held, the menu offers **Split `<body>` in new line**.*
+
+![After the split, the second body element starts on a new line, indented like the line of the first one](../images/editing-workflow-split-element-new-line-result.png)
+
+*The second `<body>` element starts on its own line.*
 
 ---
 
 ## XPath Navigation
 
-The center of the statusbar contains node navigation controls. These are only shown once a document is loaded and the active variant provides navigation XPath expressions.
+The center of the statusbar contains node navigation controls. These are only shown once a document is loaded and the active variant has navigation XPath expressions. Annotators, reviewers and administrators also see the dropdown for variants without expressions, so that they can add some.
 
 1. Use the dropdown to select an XPath expression (the list is variant-specific).
 2. Use the **‹** / **›** buttons to move between matching nodes; the counter (e.g. `3/15`) shows the current position.
@@ -106,6 +128,27 @@ Node navigation is on while an XPath expression is selected in the dropdown. The
 **Tools → Review document annotations** always reviews the whole document with the model selected in **Tools → Inference**. To review only the current node, use the **LLM Review** button in the bottom right corner of the focused node in focus mode. The suggestions of a review are kept for the browser tab: after an accidental reload, or when you return to the document, they are shown again without a new review, except those whose text you have changed in the meantime.
 
 The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
+
+### Editing the Navigation XPaths
+
+The list of XPath expressions of a variant starts with the expressions that the extractor of the variant provides. Annotators, reviewers and administrators can add their own expressions with **Edit...** at the end of the dropdown:
+
+![The XPath dropdown of the statusbar, listing the expressions of the variant and the Edit... entry below a separator line](../images/editing-workflow-xpath-dropdown.png)
+
+*The XPath dropdown with the "Edit..." entry.*
+
+**Edit...** opens the **Navigation XPaths** dialog for the variant of the open document:
+
+![The Navigation XPaths dialog with the expression of the extractor marked as Default, an added expression with edit and delete buttons, and the form for adding an expression](../images/editing-workflow-xpath-dialog.png)
+
+*The Navigation XPaths dialog.*
+
+- The expressions of the extractor are marked **Default** and cannot be changed or deleted.
+- To add an expression, enter it under **XPath** and, optionally, a **Label** for the dropdown, and click **Add**. Without a label, the dropdown shows the expression itself.
+- The expression must be an absolute XPath 1.0 expression (starting with `/`) that selects elements. Use the prefix `tei:` for TEI elements, e.g. `//tei:listBibl/tei:bibl[@type="cited"]`. An invalid expression is not accepted and the dialog says what is wrong with it.
+- The pencil button loads an added expression into the form to change it; **Save** stores the change. The trash button deletes it. Deleting the expression that the navigation currently uses turns the navigation off.
+
+Changes are saved immediately and apply to all users of the installation. The list of other users is updated when they reload the page.
 
 ### Focus Mode
 
@@ -309,6 +352,18 @@ The attribute popup includes two merge operations for consolidating adjacent ann
 If no element sibling exists in the given direction, the element is unwrapped in place (equivalent to **Remove annotation**).
 
 Use these commands when a single logical annotation has been split across two spans, for example after correcting a word boundary or combining two separately tagged author names into one.
+
+### Splitting an annotation
+
+Right-click where the second part of an annotated span begins and choose **Split `<tag>`** in the context menu. The element is split into two elements of the same type, each with its own badge. This is the counterpart of the merge commands, for example when one `<body>` of a segmentation document covers two zones.
+
+![The visual annotation mode with the context menu opened in a BODY span before "A key aspect", with the entry "Split <body>" below "Remove tag"](../images/editing-workflow-split-element-visual.png)
+
+*Splitting an annotation in the visual mode.*
+
+![The same text after the split: a second BODY badge precedes "A key aspect"](../images/editing-workflow-split-element-visual-result.png)
+
+*After the split, a second badge marks the start of the new element.*
 
 ### Removing an annotation
 

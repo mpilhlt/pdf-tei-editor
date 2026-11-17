@@ -187,6 +187,13 @@ class BookmarkStore:
             return cursor.rowcount
 
 
+    def rename_user(self, old_username: str, new_username: str) -> int:
+        """Moves the bookmarks of a user to a new username; returns their number."""
+        with transaction(self.db_path) as conn:
+            cursor = conn.execute("UPDATE bookmark SET username = ? WHERE username = ?", (new_username, old_username))
+            return cursor.rowcount
+
+
 _stores: dict[str, BookmarkStore] = {}
 _stores_lock = threading.Lock()
 

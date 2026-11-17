@@ -1587,6 +1587,68 @@ class FileRepository:
             if self.logger:
                 self.logger.debug(f"Permanently deleted file record: {file_id}")
 
+    def rename_created_by(self, old_username: str, new_username: str) -> int:
+        """
+        Replace a username in the `created_by` column of all files, including deleted ones.
+
+        Args:
+            old_username: The current username
+            new_username: The username that replaces it
+
+        Returns:
+            Number of updated file records
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE files
+                SET created_by = ?,
+                    sync_status = CASE WHEN sync_status = 'synced' THEN 'modified' ELSE sync_status END,
+                    local_modified_at = CURRENT_TIMESTAMP
+                WHERE created_by = ?
+                """,
+                (new_username, old_username),
+            )
+            return cursor.rowcount
+
+    def rename_collection(self, old_collection_id: str, new_collection_id: str) -> int:
+        """
+        Replace a collection id in the `doc_collections` of all files, including deleted ones.
+
+        Files that are already in the new collection keep a single entry. Synced files are marked as
+        modified so that the change reaches the sync target.
+
+        Args:
+            old_collection_id: The current collection id
+            new_collection_id: The collection id that replaces it
+
+        Returns:
+            Number of updated file records
+        """
+        files = self.get_files_by_collection(old_collection_id, include_deleted=True)
+        updated = 0
+        with self.db.transaction() as conn:
+            for file in files:
+                if old_collection_id not in file.doc_collections:
+                    continue
+                collections: list[str] = []
+                for collection_id in file.doc_collections:
+                    renamed = new_collection_id if collection_id == old_collection_id else collection_id
+                    if renamed not in collections:
+                        collections.append(renamed)
+                conn.execute(
+                    """
+                    UPDATE files
+                    SET doc_collections = ?,
+                        sync_status = CASE WHEN sync_status = 'synced' THEN 'modified' ELSE sync_status END,
+                        local_modified_at = CURRENT_TIMESTAMP
+                    WHERE stable_id = ?
+                    """,
+                    (json.dumps(collections), file.stable_id),
+                )
+                updated += 1
+        return updated
+
     def update_file_metadata(
         self,
         stable_id: str,

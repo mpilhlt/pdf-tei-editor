@@ -15,7 +15,7 @@ import { registerTemplate, createFromTemplate, createHtmlElements } from '../mod
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { groupFilesByCollection, getCollectionName, groupVersionsByLineage } from '../modules/file-data-utils.js'
-import { getActiveProjects, getArchivedCollectionIds } from '../modules/collection-utils.js'
+import { getActiveProjects, getArchivedCollectionIds, compareCollectionNames } from '../modules/collection-utils.js'
 
 // Register templates
 await registerTemplate('file-selection', 'file-selection.html');
@@ -29,7 +29,30 @@ class FileSelectionPlugin extends Plugin {
     });
   }
 
-  static extensionPoints = [ep.filedata.loading, ep.toolbar.contentItems];
+  static extensionPoints = [ep.filedata.loading, ep.toolbar.contentItems, ep.rbac.collectionRenamed];
+
+  /**
+   * Extension point handler for `ep.rbac.collectionRenamed`.
+   * Called by RbacManagerPlugin after an admin renamed a collection id, so that a collection
+   * filter on the old id follows the rename.
+   * Delegates to {@link FileSelectionPlugin#onCollectionRenamed}.
+   * @param {string} oldId
+   * @param {string} newId
+   * @returns {Promise<void>}
+   */
+  [ep.rbac.collectionRenamed](oldId, newId) { return this.onCollectionRenamed(oldId, newId) }
+
+  /**
+   * Replaces the collection filter if it names a renamed collection.
+   * @param {string} oldId - The previous collection id
+   * @param {string} newId - The new collection id
+   * @returns {Promise<void>}
+   */
+  async onCollectionRenamed(oldId, newId) {
+    if (this.state.collectionFilter === oldId) {
+      await this.dispatchStateChange({ collectionFilter: newId });
+    }
+  }
 
   /**
    * Extension point handler for `ep.filedata.loading`.
@@ -460,7 +483,7 @@ class FileSelectionPlugin extends Plugin {
       this.#collections = Object.keys(grouped_files).sort((a, b) => {
         if (a === "__unfiled") return -1;
         if (b === "__unfiled") return 1;
-        return a.localeCompare(b);
+        return compareCollectionNames(getCollectionName(a, state.collections), getCollectionName(b, state.collections));
       });
       this.#pdf.dataset.collections = JSON.stringify(this.#collections);
 

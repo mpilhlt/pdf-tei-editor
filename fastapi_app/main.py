@@ -300,6 +300,7 @@ from .routers import (
     projects,
     messages,
     bookmarks,
+    navigation_xpath,
     files_comments
 )
 
@@ -336,6 +337,7 @@ api_v1.include_router(files_permissions.router)  # Document permissions (granula
 api_v1.include_router(files_comments.router)  # Replies to comment threads; before files_serve (catch-all)
 api_v1.include_router(messages.router)  # Messages for reviews and comments
 api_v1.include_router(bookmarks.router)  # Private bookmarks of the current user
+api_v1.include_router(navigation_xpath.router)  # XPath expressions of the node navigation
 api_v1.include_router(sse.router)  # SSE stream
 api_v1.include_router(maintenance.router)  # Admin maintenance controls
 api_v1.include_router(plugins_admin.router)  # Plugin management (admin); before plugins router

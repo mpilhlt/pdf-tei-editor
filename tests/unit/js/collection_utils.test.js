@@ -11,7 +11,10 @@ import {
   isCollectionOwner,
   canDeleteCollection,
   getActiveProjects,
-  getArchivedCollectionIds
+  getArchivedCollectionIds,
+  compareCollectionNames,
+  sortCollections,
+  sortProjectCollections
 } from '../../../app/src/modules/collection-utils.js'
 
 /** @param {string} username @param {string[]} [roles] @returns {import('../../../app/src/plugins/authentication.js').UserData} */
@@ -112,5 +115,36 @@ describe('getArchivedCollectionIds', () => {
 
   it('returns an empty set when no project is archived', () => {
     assert.strictEqual(getArchivedCollectionIds([proj('a', ['c1'])]).size, 0)
+  })
+})
+
+describe('sortCollections', () => {
+  it('sorts by name with numbers compared by value, ignoring the id order', () => {
+    const collections = [
+      { id: 'fossil-01', name: 'Fossil Batch 01' },
+      { id: 'fossil-10', name: 'Fossil Batch 10' },
+      { id: 'fossil-02', name: 'Fossil Batch 02' },
+      { id: 'b', name: 'batch 9' },
+    ]
+    assert.deepStrictEqual(sortCollections(collections).map(c => c.id), ['b', 'fossil-01', 'fossil-02', 'fossil-10'])
+  })
+
+  it('compares names case-insensitively and numerically', () => {
+    assert.ok(compareCollectionNames('Batch 2', 'batch 10') < 0)
+    assert.strictEqual(compareCollectionNames('Inbox', 'inbox'), 0)
+  })
+})
+
+describe('sortProjectCollections', () => {
+  it('orders the collection ids of each project by collection name and keeps unknown ids last', () => {
+    const collections = [
+      { id: 'fossil-1', name: 'Fossil Batch 01' },
+      { id: 'fossil-10', name: 'Fossil Batch 10' },
+      { id: 'fossil-2', name: 'Fossil Batch 02' },
+    ]
+    const projects = [proj('p', ['fossil-1', 'unknown', 'fossil-10', 'fossil-2'])]
+    const sorted = sortProjectCollections(projects, collections)
+    assert.deepStrictEqual(sorted[0].collections, ['fossil-1', 'fossil-2', 'fossil-10', 'unknown'])
+    assert.deepStrictEqual(projects[0].collections, ['fossil-1', 'unknown', 'fossil-10', 'fossil-2'])
   })
 })

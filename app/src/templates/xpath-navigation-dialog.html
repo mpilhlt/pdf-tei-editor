@@ -1,0 +1,21 @@
+<sl-dialog name="xpathNavigationDialog" label="Navigation XPaths" class="xpath-navigation-dialog" style="--width: 720px;">
+  <p name="intro" class="xpath-navigation-intro"></p>
+  <div name="entryList" class="xpath-navigation-list" data-testid="xpath-navigation-list"></div>
+
+  <form name="entryForm" class="dialog-column xpath-navigation-form">
+    <h4 name="formTitle" style="margin: 0;">Add XPath</h4>
+    <div class="xpath-navigation-form-row">
+      <sl-input name="xpathInput" label="XPath" placeholder="//tei:listBibl/tei:bibl" size="small" required maxlength="1000" autocomplete="off" spellcheck="false"></sl-input>
+      <sl-input name="labelInput" label="Label" placeholder="defaults to the XPath" size="small" maxlength="200" autocomplete="off"></sl-input>
+    </div>
+    <div name="xpathError" class="xpath-navigation-error" style="display: none;"></div>
+    <div class="xpath-navigation-form-buttons">
+      <sl-button name="submitBtn" type="submit" variant="primary" size="small">Add</sl-button>
+      <sl-button name="cancelEditBtn" size="small" style="display: none;">Cancel</sl-button>
+    </div>
+  </form>
+
+  <!-- icons the plugin sets from JS, listed here so that the build compiles them -->
+  <span hidden><sl-icon name="pencil"></sl-icon><sl-icon name="trash"></sl-icon><sl-icon name="lock"></sl-icon><sl-icon name="pencil-square"></sl-icon></span>
+  <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
+</sl-dialog>

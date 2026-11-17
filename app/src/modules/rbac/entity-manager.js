@@ -7,7 +7,7 @@
 
 /**
  * @import { EntitySchema } from './entity-schemas.js'
- * @import { ApiClientV1 } from '../api-client-v1.js'
+ * @import { ApiClientV1, RenameResponse } from '../api-client-v1.js'
  */
 
 import { getEntitySchema, validateEntity } from './entity-schemas.js'
@@ -145,6 +145,30 @@ export class EntityManager {
       console.error(`Failed to update ${this.entityType} ${id}:`, error)
       throw error
     }
+  }
+
+  /**
+   * Rename an entity, if its schema is renamable
+   * @param {string} id - Current entity ID
+   * @param {string} newId - New entity ID
+   * @returns {Promise<RenameResponse>}
+   */
+  async rename(id, newId) {
+    if (!this.schema.renamable) {
+      throw new Error(`${this.schema.label} cannot be renamed`)
+    }
+    if (this.schema.idPattern && !this.schema.idPattern.test(newId)) {
+      throw new Error(`Invalid ID "${newId}"`)
+    }
+    // Call typed rename method: renameUsers(id, body), renameProjects(id, body), renameCollections(id, body)
+    const methodName = 'rename' + this.getMethodPrefix()
+    const response = await this.apiClient[methodName](id, { new_id: newId })
+
+    const entity = this.entities.find(e => e[this.schema.idField] === id)
+    if (entity) {
+      entity[this.schema.idField] = newId
+    }
+    return response
   }
 
   /**

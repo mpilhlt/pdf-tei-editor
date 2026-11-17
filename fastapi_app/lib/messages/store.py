@@ -315,6 +315,26 @@ class MessageStore:
             for table in ("occurrence", "message", "read_state"):
                 conn.execute(f"DELETE FROM {table} WHERE recipient = ?", (recipient,))
 
+    def rename_user(self, old_username: str, new_username: str) -> int:
+        """
+        Replaces a username as recipient and author in all tables; rows of the new username are replaced.
+
+        Returns:
+            Number of changed rows
+        """
+        changed = 0
+        with transaction(self.db_path) as conn:
+            for table in ("occurrence", "message", "read_state"):
+                conn.execute(f"DELETE FROM {table} WHERE recipient = ?", (new_username,))
+                changed += conn.execute(
+                    f"UPDATE {table} SET recipient = ? WHERE recipient = ?", (new_username, old_username)
+                ).rowcount
+            for table in ("occurrence", "message"):
+                changed += conn.execute(
+                    f"UPDATE {table} SET author = ? WHERE author = ?", (new_username, old_username)
+                ).rowcount
+        return changed
+
     # ── Garbage collection ──────────────────────────────────────────────
 
     def recipients(self) -> set[str]:

@@ -228,6 +228,18 @@
  */
 
 /**
+ * @typedef {Object} RenameRequest
+ * @property {string} new_id - The new id
+ */
+
+/**
+ * @typedef {Object} RenameResponse
+ * @property {string} old_id - The previous id
+ * @property {string} new_id - The new id
+ * @property {Record<string, number>} changes - Number of changed records per data store
+ */
+
+/**
  * @typedef {Object} CollectionFileItem
  * @property {string} filename - Original filename
  * @property {string} stable_id - Stable file identifier
@@ -844,6 +856,35 @@
  * @property {Array<MessageItem>} items
  * @property {number} total - Number of messages matching the filter
  * @property {number} unread - Unread messages of the user
+ */
+
+/**
+ * @typedef {Object} NavigationXpathItem
+ * @property {string} value - XPath expression, e.g. `//tei:listBibl/tei:bibl`
+ * @property {string} label - HTML-escaped label shown in the dropdown
+ * @property {boolean=} edit - False for the defaults of the extractors, which cannot be changed or deleted
+ */
+
+/**
+ * @typedef {Object} NavigationXpathResponse
+ * @property {Object<string, Array<NavigationXpathItem>>} variants - Entries by variant id, defaults first
+ */
+
+/**
+ * @typedef {Object} NavigationXpathInput
+ * @property {string} value - XPath expression
+ * @property {string=} label - Plain-text label; empty to show the expression
+ */
+
+/**
+ * @typedef {Object} SaveNavigationXpathRequest
+ * @property {Array<NavigationXpathInput>} entries - The user entries of the variant, replacing the stored ones
+ */
+
+/**
+ * @typedef {Object} VariantNavigationXpathResponse
+ * @property {string} variant
+ * @property {Array<NavigationXpathItem>} entries - All entries of the variant, defaults first
  */
 
 /**
@@ -1645,6 +1686,19 @@ export class ApiClientV1 {
   }
 
   /**
+   * Rename a collection and replace its id in projects, groups and the collections of all files.
+   * Requires admin role.
+   *
+   * @param {string} collection_id
+   * @param {RenameRequest} requestBody
+   * @returns {Promise<RenameResponse>}
+   */
+  async renameCollections(collection_id, requestBody) {
+    const endpoint = `/collections/${collection_id}/rename`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * List all files in a specific collection.
    * Returns a simplified list of files (filename and stable_id only) for resume/skip logic
    * in batch operations. Only returns PDF files as those are the source files that get
@@ -1738,6 +1792,19 @@ export class ApiClientV1 {
   }
 
   /**
+   * Rename a user and replace the username in all application data stores.
+   * Requires admin role. Sessions move to the new username; TEI documents are not changed.
+   *
+   * @param {string} username
+   * @param {RenameRequest} requestBody
+   * @returns {Promise<RenameResponse>}
+   */
+  async renameUsers(username, requestBody) {
+    const endpoint = `/users/${username}/rename`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * Update own user profile.
    * Allows authenticated users to update their own fullname, email, and password.
    * Cannot modify roles or groups.
@@ -1805,6 +1872,18 @@ export class ApiClientV1 {
   async deleteProjects(project_id) {
     const endpoint = `/projects/${project_id}`
     return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Rename a project (admin).
+   *
+   * @param {string} project_id
+   * @param {RenameRequest} requestBody
+   * @returns {Promise<RenameResponse>}
+   */
+  async renameProjects(project_id, requestBody) {
+    const endpoint = `/projects/${project_id}/rename`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**
@@ -2431,6 +2510,28 @@ export class ApiClientV1 {
   async messagesRebuild() {
     const endpoint = `/messages/rebuild`
     return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * The navigation XPath entries of all variants: the defaults of the extractors first, then the user entries.
+   *
+   * @returns {Promise<NavigationXpathResponse>}
+   */
+  async navigationXpathList() {
+    const endpoint = `/navigation-xpath`
+    return this.callApi(endpoint, 'GET');
+  }
+
+  /**
+   * Replaces the user entries of the navigation XPath list of a variant (annotators, reviewers and admins).
+   *
+   * @param {string} variant
+   * @param {SaveNavigationXpathRequest} requestBody
+   * @returns {Promise<VariantNavigationXpathResponse>}
+   */
+  async navigationXpathSave(variant, requestBody) {
+    const endpoint = `/navigation-xpath/${encodeURIComponent(variant)}`
+    return this.callApi(endpoint, 'PUT', requestBody);
   }
 
   /**
