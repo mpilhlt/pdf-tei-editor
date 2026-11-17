@@ -266,6 +266,22 @@ class AccessTokenStore:
             self.revoke(token_id)
         return token_ids
 
+    def rename_user(self, old_username: str, new_username: str) -> int:
+        """
+        Replace a username in the owner (`username`) and creator (`created_by`) of all tokens.
+
+        Tokens stay valid, since they are verified by their id and secret, not by the username.
+
+        Returns:
+            Number of token records changed
+        """
+        conn = get_connection(self.db_path)
+        cursor = conn.execute("UPDATE access_tokens SET username = ? WHERE username = ?", (new_username, old_username))
+        changed = cursor.rowcount
+        cursor = conn.execute("UPDATE access_tokens SET created_by = ? WHERE created_by = ?", (new_username, old_username))
+        conn.commit()
+        return changed + cursor.rowcount
+
     def purge(self, older_than: float, dry_run: bool = False) -> int:
         """
         Delete tokens that were revoked or expired before a point in time.

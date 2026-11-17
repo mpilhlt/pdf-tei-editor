@@ -121,6 +121,21 @@ class SecretStore:
         conn.commit()
         return cursor.rowcount
 
+    def rename_user(self, old_username: str, new_username: str) -> int:
+        """
+        Move all secrets of a user to a new username; secrets of the new username are replaced.
+
+        The values are encrypted independently of the username and stay readable.
+
+        Returns:
+            Number of secrets moved
+        """
+        conn = get_connection(self.db_path)
+        conn.execute("DELETE FROM user_secrets WHERE username = ?", (new_username,))
+        cursor = conn.execute("UPDATE user_secrets SET username = ? WHERE username = ?", (new_username, old_username))
+        conn.commit()
+        return cursor.rowcount
+
     def list_services(self, username: str) -> list[str]:
         """Ids of the services the user has a secret for (never the values)."""
         rows = get_connection(self.db_path).execute(

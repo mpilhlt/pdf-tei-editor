@@ -5,6 +5,7 @@
  * @typedef {object} rbacManagerDialogPart
  * @property {HTMLDivElement & tabContainerPart} tabContainer
  * @property {HTMLDivElement & contentAreaPart} contentArea
+ * @property {import('../ui.js').SlDialog & renameDialogPart} renameDialog
  * @property {import('../ui.js').SlButton} closeBtn
  */
 
@@ -46,6 +47,7 @@
 /**
  * @typedef {object} formActionsPart
  * @property {import('../ui.js').SlButton} saveBtn
+ * @property {import('../ui.js').SlButton} renameBtn
  * @property {import('../ui.js').SlButton} deleteBtn
  */
 
@@ -89,6 +91,14 @@
 /**
  * @typedef {object} userProjectsSectionPart
  * @property {HTMLDivElement} userProjectsList
+ */
+
+/**
+ * @typedef {object} renameDialogPart
+ * @property {HTMLElement} renameDescription
+ * @property {import('../ui.js').SlInput} renameInput
+ * @property {import('../ui.js').SlButton} renameCancelBtn
+ * @property {import('../ui.js').SlButton} renameConfirmBtn
  */
 
 export {}

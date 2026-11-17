@@ -370,9 +370,11 @@ class DocumentActionsPlugin extends Plugin {
       if (userData) {
         const isOwnerBasedMode = this.getDependency('access-control').getMode() === 'owner-based'
         const fileData = getFileDataById(state.xml, state.fileData)
-        const isOwner = fileData?.item?.created_by === userData.username
+        const owner = fileData?.item?.created_by
+        // reviewers can edit documents without an owner in owner-based mode
+        const canEditInPlace = owner ? owner === userData.username : userHasRole(userData, ["admin", "reviewer"])
         // a superseded (frozen) version can only be continued in a new version
-        const forceCopy = (isOwnerBasedMode && !isOwner) || isFrozenFile(state.xml)
+        const forceCopy = (isOwnerBasedMode && !canEditInPlace) || isFrozenFile(state.xml)
         dlg.options.saveToNewCopySection.saveToNewCopy.checked = forceCopy
         dlg.options.saveToNewCopySection.saveToNewCopy.disabled = forceCopy
 

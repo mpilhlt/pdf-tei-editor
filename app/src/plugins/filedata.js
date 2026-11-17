@@ -22,6 +22,7 @@ import { PanelUtils } from '../modules/panels/index.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { standOffContributions, userIsAdmin } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
+import { sortCollections, sortProjectCollections } from '../modules/collection-utils.js'
 
 // Register templates
 await registerTemplate('gc-menu-item', 'gc-menu-item.html')
@@ -114,7 +115,10 @@ class FiledataPlugin extends Plugin {
   /** @type {(SlDialog & gcResultDialogPart) | null} */
   #gcResultDialog = null;
 
-  static extensionPoints = [ep.filedata.reload, ep.filedata.saveXml];
+  static extensionPoints = [
+    ep.filedata.reload, ep.filedata.saveXml,
+    ep.rbac.projectRenamed, ep.rbac.projectRelabeled, ep.rbac.collectionRenamed, ep.rbac.collectionRelabeled
+  ];
 
   /**
    * Extension point handler for `ep.filedata.reload`.
@@ -132,6 +136,46 @@ class FiledataPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   [ep.filedata.saveXml](...args) { return this.saveXml(...args) }
+
+  /**
+   * Extension point handler for `ep.rbac.projectRenamed`.
+   * Called by RbacManagerPlugin after an admin renamed a project id; the projects in the state are reloaded.
+   * Delegates to {@link FiledataPlugin#reloadAfterRbacChange}.
+   * @returns {Promise<void>}
+   */
+  [ep.rbac.projectRenamed]() { return this.reloadAfterRbacChange() }
+
+  /**
+   * Extension point handler for `ep.rbac.projectRelabeled`.
+   * Called by RbacManagerPlugin after the name of a project changed; the projects in the state are reloaded.
+   * Delegates to {@link FiledataPlugin#reloadAfterRbacChange}.
+   * @returns {Promise<void>}
+   */
+  [ep.rbac.projectRelabeled]() { return this.reloadAfterRbacChange() }
+
+  /**
+   * Extension point handler for `ep.rbac.collectionRenamed`.
+   * Called by RbacManagerPlugin after an admin renamed a collection id; the file data and collections are reloaded.
+   * Delegates to {@link FiledataPlugin#reloadAfterRbacChange}.
+   * @returns {Promise<void>}
+   */
+  [ep.rbac.collectionRenamed]() { return this.reloadAfterRbacChange() }
+
+  /**
+   * Extension point handler for `ep.rbac.collectionRelabeled`.
+   * Called by RbacManagerPlugin after the name of a collection changed; the collections are reloaded.
+   * Delegates to {@link FiledataPlugin#reloadAfterRbacChange}.
+   * @returns {Promise<void>}
+   */
+  [ep.rbac.collectionRelabeled]() { return this.reloadAfterRbacChange() }
+
+  /**
+   * Reloads the file data, collections and projects after a project or collection was renamed or relabeled.
+   * @returns {Promise<void>}
+   */
+  async reloadAfterRbacChange() {
+    await this.reload({ refresh: true });
+  }
 
   /**
    * @param {ApplicationState} state
@@ -397,11 +441,13 @@ class FiledataPlugin extends Plugin {
       this.#logger.error(`Failed to load projects: ${error}`);
     }
 
-    // Store fileData, collections, and projects in state and propagate them
+    // Store fileData, collections, and projects in state and propagate them. Collections, also
+    // those of each project, are in display order, so the menus need not sort them.
+    collections = sortCollections(collections);
     const newState = await this.dispatchStateChange({
       fileData: data,
       collections,
-      projects
+      projects: sortProjectCollections(projects, collections)
     });
     return newState;
   }

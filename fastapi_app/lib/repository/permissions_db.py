@@ -239,6 +239,26 @@ def set_document_permissions(
     )
 
 
+def rename_document_owner(old_owner: str, new_owner: str, permissions_db: PermissionsDB) -> int:
+    """
+    Replace a username as owner of all documents with explicit permissions.
+
+    Args:
+        old_owner: The current username
+        new_owner: The username that replaces it
+        permissions_db: PermissionsDB instance (use dependency injection)
+
+    Returns:
+        Number of changed permission records
+    """
+    with permissions_db.get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE document_permissions SET owner = ? WHERE owner = ?", (new_owner, old_owner)
+        )
+        conn.commit()
+        return cursor.rowcount
+
+
 def delete_document_permissions(stable_id: str, permissions_db: PermissionsDB) -> bool:
     """
     Delete permissions record for an artifact (when artifact is deleted).

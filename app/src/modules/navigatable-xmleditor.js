@@ -1,6 +1,5 @@
 import { XMLEditor } from "./xmleditor.js";
 import { focusRangeField } from './codemirror/focus-mode.js';
-import { parseXPath } from './utils.js'
 
 export {XMLEditor}
 
@@ -138,12 +137,20 @@ export class NavXmlEditor extends XMLEditor {
       return;
     }
 
-    // Bubble up from the cursor position until we find an ancestor whose local tag name
-    // matches the leaf element of the normative parentPath (e.g. "bibl" for "//tei:listBibl/tei:bibl")
-    const parentTagName = parseXPath(this.parentPath).tagName.toLowerCase()
-    const originalNode = selectedNode;
-    while (selectedNode) {
-      if (selectedNode.tagName && selectedNode.tagName.toLowerCase() === parentTagName) break;
+    // Bubble up from the cursor position to the nearest ancestor that the parentPath selects. Its
+    // 1-based position among all selected nodes gives `parentPath[index]`, the xpath for the state.
+    // Membership instead of the tag name also works for wildcards and predicates in the parentPath.
+    const xmlTree = this.getXmlTree();
+    const snapshot = xmlTree.evaluate(
+      this.parentPath, xmlTree, this.namespaceResolver,
+      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
+    );
+    /** @type {Map<Node, number>} */
+    const positions = new Map();
+    for (let i = 0; i < snapshot.snapshotLength; i++) {
+      positions.set(/** @type {Node} */ (snapshot.snapshotItem(i)), i + 1);
+    }
+    while (selectedNode && !positions.has(selectedNode)) {
       selectedNode = selectedNode.parentNode
     }
     if (!selectedNode) {
@@ -152,21 +159,7 @@ export class NavXmlEditor extends XMLEditor {
     if (this.selectedNode === selectedNode) {
       return;
     }
-
-    // Find the 1-based index of the bubbled-up node among all nodes matching parentPath.
-    // This gives us `parentPath[index]` — the canonical normative xpath for state.
-    const xmlTree = this.getXmlTree();
-    const snapshot = xmlTree.evaluate(
-      this.parentPath, xmlTree, this.namespaceResolver,
-      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
-    );
-    let nodeIndex = -1;
-    for (let i = 0; i < snapshot.snapshotLength; i++) {
-      if (snapshot.snapshotItem(i) === selectedNode) {
-        nodeIndex = i + 1; // 1-based
-        break;
-      }
-    }
+    const nodeIndex = positions.get(selectedNode) ?? -1;
 
     if (nodeIndex < 0) {
       return;

@@ -370,6 +370,7 @@ async def update_file(
 - `document.save` - Emitted before a TEI file is saved (payload includes the XML content; `file_id` is `None` for new versions)
 - `document.saved` - Emitted after a TEI file was saved (`stable_id`, `doc_id`, `username`)
 - `collection.modified` - Collection membership changed
+- `user.renamed`, `project.renamed`, `collection.renamed` - An id was renamed (`old_id`, `new_id`); plugins replace the id in their own stores
 - `plugin.initialized` - Plugin finished initialization
 
 **Handler Registration:**
