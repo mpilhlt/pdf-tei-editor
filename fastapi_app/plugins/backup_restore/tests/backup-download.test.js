@@ -149,11 +149,7 @@ describe('runBackup', () => {
   before(async () => {
     server = http.createServer((req, res) => {
       state.calls.push(`${req.method} ${req.url}`);
-      if (req.url === '/api/v1/auth/login') {
-        req.resume();
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ sessionId: 'sess1' }));
-      } else if (req.url === '/api/v1/auth/token-login') {
+      if (req.url === '/api/v1/auth/token-login') {
         if (req.headers.authorization !== 'Bearer pte_test') { res.statusCode = 401; return res.end(); }
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ sessionId: 'sess1' }));
@@ -179,7 +175,7 @@ describe('runBackup', () => {
 
   /** @param {object} [over] */
   const options = over => ({
-    destDir: dir, baseUrl, username: 'u', password: 'p', prefix: 'app', keepLast: 2, keepDays: 30,
+    destDir: dir, baseUrl, token: 'pte_test', prefix: 'app', keepLast: 2, keepDays: 30,
     keepWeekly: 0, keepMonthly: 0, minSize: 10, retries: 1, timeout: 10, backoffMs: [1], dryRun: false,
     log: () => {}, ...over,
   });
@@ -200,11 +196,16 @@ describe('runBackup', () => {
     rmSync(dir, { recursive: true });
   });
 
-  it('logs in with an access token instead of the password', async () => {
+  it('logs in with the access token', async () => {
     reset();
-    await runBackup(options({ token: 'pte_test', username: undefined, password: undefined }));
+    await runBackup(options());
     assert.ok(state.calls.includes('POST /api/v1/auth/token-login'));
-    assert.ok(!state.calls.includes('POST /api/v1/auth/login'));
+    rmSync(dir, { recursive: true });
+  });
+
+  it('maps a rejected token to the auth exit code', async () => {
+    reset();
+    await assert.rejects(runBackup(options({ token: 'pte_wrong' })), e => e.exitCode === EXIT.AUTH);
     rmSync(dir, { recursive: true });
   });
 
