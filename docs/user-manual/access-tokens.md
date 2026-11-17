@@ -1,6 +1,6 @@
 # Personal Access Tokens
 
-Scripts and other non-interactive clients (`bin/batch-extract.js`, `bin/manage-remote.js`, `scripts/dev/debug-api.js`, the auto-annotation plugin's client) can authenticate with a personal access token instead of a username and password. A token can be revoked at any time without changing a password, expires after a set time, and does not put a person's password into configuration files or CI secrets.
+Scripts and other non-interactive clients (`bin/batch-extract.js`, `bin/manage-remote.js`, `scripts/dev/debug-api.js`, the auto-annotation plugin's client) can authenticate with a personal access token instead of a username and password; `bin/batch-extract.js` requires one. A token can be revoked at any time without changing a password, expires after a set time, and does not put a person's password into configuration files or CI secrets.
 
 ## Creating a token
 
