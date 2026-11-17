@@ -121,13 +121,29 @@ describe('AccessControlPlugin on page reload (owner-based mode)', () => {
     assert.deepStrictEqual(scheduled, []);
   });
 
-  it('still reports a document that really has no owner', async () => {
-    const { plugin } = await makePlugin();
+  it('still reports a document that really has no owner to an annotator', async () => {
+    const roles = user.roles;
+    user.roles = ['annotator'];
+    try {
+      const { plugin, scheduled } = await makePlugin();
+      createIdLookupIndex(fileData(null));
+      await plugin.onStateUpdate(['xml']);
+
+      assert.strictEqual(notifyCalls.length, 1);
+      assert.match(notifyCalls[0][0], /has no owner/);
+      assert.deepStrictEqual(scheduled, [{ editorReadOnly: true }]);
+    } finally {
+      user.roles = roles;
+    }
+  });
+
+  it('lets a reviewer edit a document without an owner', async () => {
+    const { plugin, scheduled } = await makePlugin();
     createIdLookupIndex(fileData(null));
     await plugin.onStateUpdate(['xml']);
 
-    assert.strictEqual(notifyCalls.length, 1);
-    assert.match(notifyCalls[0][0], /has no owner/);
+    assert.strictEqual(notifyCalls.length, 0, `unexpected toast: ${JSON.stringify(notifyCalls)}`);
+    assert.deepStrictEqual(scheduled, []);
   });
 });
 

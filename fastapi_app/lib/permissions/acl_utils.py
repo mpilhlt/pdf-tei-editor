@@ -214,7 +214,7 @@ def get_access_control_mode() -> str:
     # Fall back to config
     from fastapi_app.lib.utils.config_utils import get_config
     config = get_config()
-    return config.get('access-control.mode', default='role-based')
+    return config.get('access-control.mode', default='owner-based')
 
 
 def _get_permissions_db():

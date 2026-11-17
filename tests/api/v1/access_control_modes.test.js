@@ -10,8 +10,8 @@
  * @testCovers fastapi_app/lib/acl_utils.py
  * @testCovers fastapi_app/routers/files_locks.py
  *
- * To test specific modes, set ACCESS_CONTROL_MODE environment variable:
- *   ACCESS_CONTROL_MODE=owner-based npm run test:api -- --grep "access_control_modes"
+ * The default mode is owner-based. To test other modes, set the ACCESS_CONTROL_MODE environment variable:
+ *   npm run test:api -- --grep "access_control_modes" --env ACCESS_CONTROL_MODE=role-based
  */
 
 import { test, describe, before, after } from 'node:test';
@@ -286,8 +286,8 @@ describe('Access Control Modes E2E Tests', { concurrency: 1 }, () => {
 
     const session = await getReviewerSession();
 
-    // Try to lock file owned by user - should fail even for reviewer
-    const response = await tryAcquireLock(session.sessionId, testState.userOwnedFileId, BASE_URL);
+    // Try to lock file owned by annotator - should fail even for reviewer
+    const response = await tryAcquireLock(session.sessionId, testState.annotatorOwnedFileId, BASE_URL);
     assert.strictEqual(response.status, 403, 'Reviewer should be denied lock on non-owned file');
     logger.success('Reviewer correctly denied lock on non-owned file in owner-based mode');
   });
@@ -303,13 +303,13 @@ describe('Access Control Modes E2E Tests', { concurrency: 1 }, () => {
     // Admin has wildcard roles, should they be able to edit?
     // According to the design, owner-based mode is strict about ownership
     // Let's check what actually happens
-    const response = await tryAcquireLock(session.sessionId, testState.userOwnedFileId, BASE_URL);
+    const response = await tryAcquireLock(session.sessionId, testState.annotatorOwnedFileId, BASE_URL);
 
     // Note: This test documents current behavior - may need adjustment
     // based on whether admins should override owner-based restrictions
     if (response.status === 200) {
       logger.info('Admin CAN lock files in owner-based mode (current behavior)');
-      await releaseLock(session.sessionId, testState.userOwnedFileId, BASE_URL);
+      await releaseLock(session.sessionId, testState.annotatorOwnedFileId, BASE_URL);
     } else {
       logger.info('Admin CANNOT lock files in owner-based mode (current behavior)');
     }
