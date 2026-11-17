@@ -228,6 +228,18 @@
  */
 
 /**
+ * @typedef {Object} RenameRequest
+ * @property {string} new_id - The new id
+ */
+
+/**
+ * @typedef {Object} RenameResponse
+ * @property {string} old_id - The previous id
+ * @property {string} new_id - The new id
+ * @property {Record<string, number>} changes - Number of changed records per data store
+ */
+
+/**
  * @typedef {Object} CollectionFileItem
  * @property {string} filename - Original filename
  * @property {string} stable_id - Stable file identifier
@@ -1645,6 +1657,19 @@ export class ApiClientV1 {
   }
 
   /**
+   * Rename a collection and replace its id in projects, groups and the collections of all files.
+   * Requires admin role.
+   *
+   * @param {string} collection_id
+   * @param {RenameRequest} requestBody
+   * @returns {Promise<RenameResponse>}
+   */
+  async renameCollections(collection_id, requestBody) {
+    const endpoint = `/collections/${collection_id}/rename`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * List all files in a specific collection.
    * Returns a simplified list of files (filename and stable_id only) for resume/skip logic
    * in batch operations. Only returns PDF files as those are the source files that get
@@ -1738,6 +1763,19 @@ export class ApiClientV1 {
   }
 
   /**
+   * Rename a user and replace the username in all application data stores.
+   * Requires admin role. Sessions move to the new username; TEI documents are not changed.
+   *
+   * @param {string} username
+   * @param {RenameRequest} requestBody
+   * @returns {Promise<RenameResponse>}
+   */
+  async renameUsers(username, requestBody) {
+    const endpoint = `/users/${username}/rename`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * Update own user profile.
    * Allows authenticated users to update their own fullname, email, and password.
    * Cannot modify roles or groups.
@@ -1805,6 +1843,18 @@ export class ApiClientV1 {
   async deleteProjects(project_id) {
     const endpoint = `/projects/${project_id}`
     return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Rename a project (admin).
+   *
+   * @param {string} project_id
+   * @param {RenameRequest} requestBody
+   * @returns {Promise<RenameResponse>}
+   */
+  async renameProjects(project_id, requestBody) {
+    const endpoint = `/projects/${project_id}/rename`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**

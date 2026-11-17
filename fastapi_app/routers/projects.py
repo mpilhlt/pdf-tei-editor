@@ -7,6 +7,7 @@ Implements:
 - POST /api/v1/projects - Create project (admin)
 - PUT /api/v1/projects/{project_id} - Update project (admin)
 - DELETE /api/v1/projects/{project_id} - Delete project (admin)
+- POST /api/v1/projects/{project_id}/rename - Rename project (admin)
 - GET /api/v1/projects/{project_id}/config - List project config overrides (admin)
 - POST /api/v1/projects/{project_id}/config - Set config override (admin)
 - DELETE /api/v1/projects/{project_id}/config/{key} - Delete config override (admin)
@@ -27,6 +28,9 @@ from ..lib.utils.project_utils import (
 )
 from ..lib.utils.data_utils import save_entity_data
 from ..lib.core.dependencies import get_current_user
+from ..lib.models.models_rename import RenameRequest, RenameResponse
+from ..lib.utils.rename_utils import RenameError, rename_project
+from ..lib.sse.event_bus import get_event_bus
 from ..lib.utils.logging_utils import get_logger
 from ..config import get_settings
 
@@ -184,6 +188,20 @@ def delete_project_endpoint(project_id: str, current_user: dict = Depends(requir
     save_entity_data(settings.db_dir, 'projects', remaining)
     logger.info(f"Project '{project_id}' deleted by '{current_user.get('username')}'")
     return {"success": True, "message": f"Project '{project_id}' deleted"}
+
+
+@router.post("/{project_id}/rename", response_model=RenameResponse)
+def rename_project_endpoint(project_id: str, body: RenameRequest,
+                            current_user: dict = Depends(require_admin)) -> RenameResponse:
+    """Rename a project (admin). Emits the `project.renamed` event (`old_id`, `new_id`)."""
+    settings = get_settings()
+    try:
+        changes = rename_project(settings.db_dir, project_id, body.new_id)
+    except RenameError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    logger.info(f"Project '{project_id}' renamed to '{body.new_id}' by '{current_user.get('username')}': {changes}")
+    get_event_bus().emit_from_thread("project.renamed", old_id=project_id, new_id=body.new_id)
+    return RenameResponse(old_id=project_id, new_id=body.new_id, changes=changes)
 
 
 @router.get("/{project_id}/config", response_model=ProjectConfigResponse)

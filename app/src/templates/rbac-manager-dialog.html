@@ -56,6 +56,10 @@
               <sl-icon slot="prefix" name="check"></sl-icon>
               Save
             </sl-button>
+            <sl-button name="renameBtn" variant="default" size="small" style="display: none;">
+              <sl-icon slot="prefix" name="pencil"></sl-icon>
+              Rename
+            </sl-button>
             <sl-button name="deleteBtn" variant="danger" size="small" disabled>
               <sl-icon slot="prefix" name="trash"></sl-icon>
               Delete
@@ -120,6 +124,14 @@
 
     </div>
   </div>
+
+  <!-- Rename dialog (shown by the Rename button for users, projects and collections) -->
+  <sl-dialog name="renameDialog" label="Rename" style="--width: 32rem;">
+    <p name="renameDescription" style="margin-top: 0;"></p>
+    <sl-input name="renameInput" label="New ID" autocomplete="off"></sl-input>
+    <sl-button slot="footer" name="renameCancelBtn" variant="neutral">Cancel</sl-button>
+    <sl-button slot="footer" name="renameConfirmBtn" variant="primary">Rename</sl-button>
+  </sl-dialog>
 
   <!-- Dialog Footer -->
   <sl-button slot="footer" name="closeBtn" variant="neutral">Close</sl-button>
