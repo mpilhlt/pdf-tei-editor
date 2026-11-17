@@ -8,7 +8,7 @@ The `manage-remote.js` script provides a command-line interface for managing use
 
 ## Personal Access Tokens
 
-Scripts can authenticate with a personal access token instead of a username and password (see [Personal Access Tokens](access-tokens.md)). `batch-extract.js`, `manage-remote.js` and `scripts/dev/debug-api.js` accept `--token <token>` or `API_TOKEN` in `.env`, which take precedence over `--user`/`--password` and `API_USER`/`API_PASSWORD`.
+Scripts that call the HTTP API authenticate with a personal access token (see [Personal Access Tokens](access-tokens.md)). `batch-extract.js`, `manage-remote.js` and `scripts/dev/debug-api.js` accept `--token <token>` or `API_TOKEN` in `.env`.
 
 `manage-remote.js token list|create|revoke` manages tokens through the API (see [manage-remote](cli-manage-remote.md#access-token-management)). On the server, `bin/manage.py token` works directly on the database, which is needed to create a first token without the web interface, e.g. in a container:
 
@@ -121,6 +121,8 @@ npm run batch-extract -- <directory> --extractor <id> [options]
 | `--collection <id>` | Collection ID (default: directory basename) |
 | `--recursive` | Search subdirectories |
 | `--option <key=value>` | Extractor option (repeatable) |
+| `--variant <id>` | Extractor variant ID (repeatable; each file is extracted once per variant) |
+| `--token <token>` | Personal access token (default: `API_TOKEN` in `.env`) |
 
 ### manage-remote maintenance repopulate
 
