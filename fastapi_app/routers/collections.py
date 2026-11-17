@@ -7,6 +7,7 @@ Implements standard REST endpoints:
 - GET /api/v1/collections/{collection_id} - Get collection details
 - PUT /api/v1/collections/{collection_id} - Update collection
 - DELETE /api/v1/collections/{collection_id} - Delete collection
+- POST /api/v1/collections/{collection_id}/rename - Rename collection (admin)
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +25,9 @@ from ..lib.utils.collection_utils import (
 )
 from ..lib.core.dependencies import get_current_user, get_file_repository
 from ..lib.repository.file_repository import FileRepository
+from ..lib.models.models_rename import RenameRequest, RenameResponse
+from ..lib.utils.rename_utils import RenameError, rename_collection
+from ..lib.sse.event_bus import get_event_bus
 from ..lib.utils.logging_utils import get_logger
 from ..config import get_settings
 
@@ -299,11 +303,11 @@ def update_collection(
             if not success:
                 raise HTTPException(status_code=400, detail=message)
 
-        # Note: ID changes are not allowed for collections (immutable)
+        # IDs are changed with POST /collections/{collection_id}/rename
         if collection.id != collection_id:
             raise HTTPException(
                 status_code=400,
-                detail="Collection ID cannot be changed"
+                detail="Collection ID cannot be changed here; use the rename endpoint"
             )
 
         logger.info(f"Collection '{collection_id}' updated by user '{current_user.get('username')}'")
@@ -313,6 +317,31 @@ def update_collection(
     except Exception as e:
         logger.error(f"Error updating collection: {e}")
         raise HTTPException(status_code=500, detail=f"Error updating collection: {str(e)}")
+
+
+@router.post("/{collection_id}/rename", response_model=RenameResponse)
+def rename_collection_endpoint(
+    collection_id: str,
+    body: RenameRequest,
+    current_user: dict = Depends(require_admin),
+    repo: FileRepository = Depends(get_file_repository),
+) -> RenameResponse:
+    """
+    Rename a collection and replace its id in projects, groups and the collections of all files.
+
+    Requires admin role. Emits the `collection.renamed` event (`old_id`, `new_id`).
+
+    Returns:
+        The number of changed records per data store
+    """
+    settings = get_settings()
+    try:
+        changes = rename_collection(settings.db_dir, collection_id, body.new_id, repo)
+    except RenameError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+    logger.info(f"Collection '{collection_id}' renamed to '{body.new_id}' by '{current_user.get('username')}': {changes}")
+    get_event_bus().emit_from_thread("collection.renamed", old_id=collection_id, new_id=body.new_id)
+    return RenameResponse(old_id=collection_id, new_id=body.new_id, changes=changes)
 
 
 class CollectionDeleteResponse(BaseModel):

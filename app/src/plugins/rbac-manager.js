@@ -23,6 +23,18 @@ import { notify } from '../modules/sl-utils.js'
 import { createValueEditor } from '../modules/config-value-editor.js'
 import { createMemberPicker } from '../modules/rbac/member-picker.js'
 import '../modules/filtered-combobox.js'
+import ep from '../extension-points.js'
+
+/**
+ * Extension points invoked after an entity id was renamed or its display label changed,
+ * and the field that holds the label.
+ * @type {Record<string, {renamed: string, relabeled: string, labelField: string}>}
+ */
+const ENTITY_CHANGE_ENDPOINTS = {
+  user: { renamed: ep.rbac.userRenamed, relabeled: ep.rbac.userRelabeled, labelField: 'fullname' },
+  project: { renamed: ep.rbac.projectRenamed, relabeled: ep.rbac.projectRelabeled, labelField: 'name' },
+  collection: { renamed: ep.rbac.collectionRenamed, relabeled: ep.rbac.collectionRelabeled, labelField: 'name' }
+}
 
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
@@ -36,6 +48,7 @@ await registerTemplate('rbac-manager-menu-item', 'rbac-manager-menu-item.html')
 // <sl-icon name="plus"></sl-icon>
 // <sl-icon name="check"></sl-icon>
 // <sl-icon name="trash"></sl-icon>
+// <sl-icon name="pencil"></sl-icon>
 
 class RbacManagerPlugin extends Plugin {
   /** @param {PluginContext} context */
@@ -121,6 +134,18 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="saveBtn"]').addEventListener('click', () => this.#saveEntity())
     dialog.querySelector('[name="deleteBtn"]').addEventListener('click', () => this.#deleteEntity())
     dialog.querySelector('[name="searchInput"]').addEventListener('input', e => this.#handleSearch(e))
+
+    const formActions = dialog.contentArea.formPanel.formHeader.formActions
+    formActions.renameBtn.addEventListener('click', () => this.#openRenameDialog())
+    const renameDialog = dialog.renameDialog
+    renameDialog.renameCancelBtn.addEventListener('click', () => renameDialog.hide())
+    renameDialog.renameConfirmBtn.addEventListener('click', () => this.#renameEntity())
+    renameDialog.renameInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') this.#renameEntity()
+    })
+    // Keep the closing of the nested rename dialog from closing the main dialog
+    renameDialog.addEventListener('sl-hide', event => event.stopPropagation())
+    renameDialog.addEventListener('sl-after-hide', event => event.stopPropagation())
   }
 
   /** Open the RBAC manager dialog */
@@ -341,6 +366,8 @@ class RbacManagerPlugin extends Plugin {
 
     dialog.querySelector('[name="saveBtn"]').disabled = false
     dialog.querySelector('[name="deleteBtn"]').disabled = this.#isNewEntity
+    dialog.contentArea.formPanel.formHeader.formActions.renameBtn.style.display =
+      schema.renamable && !this.#isNewEntity ? '' : 'none'
 
     let entityData = {}
     if (!this.#isNewEntity && this.#selectedEntityId) {
@@ -428,6 +455,7 @@ class RbacManagerPlugin extends Plugin {
     dialog.querySelector('[name="formTitle"]').textContent = 'Select an item'
     dialog.querySelector('[name="saveBtn"]').disabled = true
     dialog.querySelector('[name="deleteBtn"]').disabled = true
+    dialog.contentArea.formPanel.formHeader.formActions.renameBtn.style.display = 'none'
 
     const configSection = dialog.querySelector('[name="entityConfigSection"]')
     if (configSection) configSection.style.display = 'none'
@@ -472,20 +500,33 @@ class RbacManagerPlugin extends Plugin {
         }
       } else {
         if (this.#selectedEntityId) {
-          await this.#entityManagers[this.#currentEntityType].update(this.#selectedEntityId, data)
-          notify(`${getEntitySchema(this.#currentEntityType)?.singularLabel} updated successfully`, 'success')
+          const entityType = this.#currentEntityType
+          const entityId = this.#selectedEntityId
+          const changeEndpoints = ENTITY_CHANGE_ENDPOINTS[entityType]
+          const previousLabel = changeEndpoints
+            ? this.#entityManagers[entityType].findById(entityId)?.[changeEndpoints.labelField]
+            : undefined
+
+          await this.#entityManagers[entityType].update(entityId, data)
+          notify(`${getEntitySchema(entityType)?.singularLabel} updated successfully`, 'success')
 
           await this.#loadAllEntities()
+          this.#renderEntityList()
+          this.#showEntityForm()
+
+          const newLabel = changeEndpoints ? data[changeEndpoints.labelField] : undefined
+          if (changeEndpoints && newLabel !== undefined && (newLabel || '') !== (previousLabel || '')) {
+            await this.context.invokePluginEndpoint(changeEndpoints.relabeled, [entityId, newLabel], { throws: false })
+          } else if (entityType === 'project') {
+            // Other project changes (e.g. the archived flag) affect the file selection UIs
+            await this.getDependency('filedata').reload({ refresh: true })
+          }
+          return
         }
       }
 
       this.#renderEntityList()
       this.#showEntityForm()
-
-      // Project changes (e.g. the archived flag) affect the file selection UIs
-      if (this.#currentEntityType === 'project') {
-        await this.getDependency('filedata').reload({ refresh: true })
-      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       this.getDependency('logger').error(`Failed to save entity: ${errorMessage}`)
@@ -528,6 +569,69 @@ class RbacManagerPlugin extends Plugin {
       const errorMessage = error instanceof Error ? error.message : String(error)
       this.getDependency('logger').error(`Failed to delete entity: ${errorMessage}`)
       notify(`Failed to delete ${schema.singularLabel}: ${errorMessage}`, 'danger')
+    }
+  }
+
+  /** Open the rename dialog for the selected entity */
+  #openRenameDialog() {
+    const schema = getEntitySchema(this.#currentEntityType)
+    if (!schema?.renamable || !this.#selectedEntityId || this.#isNewEntity) return
+
+    const renameDialog = this.#ui.renameDialog
+    renameDialog.label = `Rename ${schema.singularLabel} "${this.#selectedEntityId}"`
+    renameDialog.renameDescription.textContent = schema.renameHint ?? ''
+    renameDialog.renameInput.value = this.#selectedEntityId
+    renameDialog.renameInput.helpText = schema.idPattern === undefined ? ''
+      : this.#currentEntityType === 'user'
+        ? 'Letters, numbers, dots, hyphens and underscores'
+        : 'Letters, numbers, hyphens and underscores'
+    renameDialog.renameConfirmBtn.loading = false
+    renameDialog.show()
+    renameDialog.renameInput.focus()
+    renameDialog.renameInput.select()
+  }
+
+  /** Rename the selected entity to the id entered in the rename dialog */
+  async #renameEntity() {
+    const schema = getEntitySchema(this.#currentEntityType)
+    const oldId = this.#selectedEntityId
+    if (!schema || !oldId) return
+
+    const renameDialog = this.#ui.renameDialog
+    const newId = String(renameDialog.renameInput.value).trim()
+    if (!newId || newId === oldId) {
+      renameDialog.hide()
+      return
+    }
+    if (schema.idPattern && !schema.idPattern.test(newId)) {
+      notify(`Invalid ID "${newId}". ${renameDialog.renameInput.helpText}.`, 'warning', 'exclamation-triangle')
+      return
+    }
+    if (this.#entityManagers[this.#currentEntityType].findById(newId)) {
+      notify(`${schema.singularLabel} "${newId}" already exists`, 'warning', 'exclamation-triangle')
+      return
+    }
+
+    const entityType = this.#currentEntityType
+    renameDialog.renameConfirmBtn.loading = true
+    try {
+      await this.#entityManagers[entityType].rename(oldId, newId)
+      renameDialog.hide()
+      notify(`${schema.singularLabel} "${oldId}" renamed to "${newId}"`, 'success', 'check-circle')
+
+      await this.#loadAllEntities()
+      this.#selectedEntityId = newId
+      this.#isNewEntity = false
+      this.#renderEntityList()
+      this.#showEntityForm()
+
+      await this.context.invokePluginEndpoint(ENTITY_CHANGE_ENDPOINTS[entityType].renamed, [oldId, newId], { throws: false })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      this.getDependency('logger').error(`Failed to rename ${entityType} "${oldId}": ${errorMessage}`)
+      notify(`Failed to rename ${schema.singularLabel}: ${errorMessage}`, 'danger', 'exclamation-octagon')
+    } finally {
+      renameDialog.renameConfirmBtn.loading = false
     }
   }
 

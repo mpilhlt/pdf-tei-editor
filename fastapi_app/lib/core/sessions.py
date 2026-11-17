@@ -280,6 +280,22 @@ class SessionManager:
 
         return count
 
+    def rename_user(self, old_username: str, new_username: str) -> int:
+        """
+        Move all sessions of a user to a new username, so that the user stays logged in after a rename.
+
+        Args:
+            old_username: The current username
+            new_username: The username that replaces it
+
+        Returns:
+            Number of sessions moved
+        """
+        conn = get_connection(self.db_path)
+        cursor = conn.execute("UPDATE sessions SET username = ? WHERE username = ?", (new_username, old_username))
+        conn.commit()
+        return cursor.rowcount
+
     def delete_token_sessions(self, token_id: str) -> int:
         """
         Delete all sessions created from a personal access token.
