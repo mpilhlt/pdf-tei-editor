@@ -3,6 +3,29 @@
  * Compact dropdown menu with customizable options using Shoelace components
  */
 
+/**
+ * An entry of the dropdown menu. `text` is HTML. An entry with `divider` is a separator line; an entry
+ * with `action` is a command (e.g. "Edit...") that does not change the selection: clicking it dispatches
+ * a `widget-action` event with `detail.action`.
+ * @typedef {object} StatusDropdownItem
+ * @property {string} [value] - Value of a selectable entry
+ * @property {string} [text] - Label (HTML)
+ * @property {boolean} [disabled]
+ * @property {boolean} [selected]
+ * @property {boolean} [divider] - A separator line
+ * @property {string} [action] - Name of the command
+ * @property {string} [icon] - Icon of a command
+ */
+
+/**
+ * Escapes a string for an HTML attribute value in double quotes
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeAttribute(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 class StatusDropdown extends HTMLElement {
   static get observedAttributes() {
     return ['text', 'selected', 'placeholder', 'disabled', 'variant'];
@@ -57,9 +80,17 @@ class StatusDropdown extends HTMLElement {
       if (!this._ready) return;
 
       const menuItem = e.target.closest('sl-menu-item');
-      if (menuItem && !menuItem.disabled) {
-        this.selectItem(menuItem.value);
+      if (!menuItem || menuItem.disabled) return;
+      const action = menuItem.dataset.action;
+      if (action) {
+        menuItem.closest('sl-dropdown')?.hide();
+        this.dispatchEvent(new CustomEvent('widget-action', {
+          bubbles: true,
+          detail: { action, widget: this }
+        }));
+        return;
       }
+      this.selectItem(menuItem.value);
     });
   }
 
@@ -73,15 +104,24 @@ class StatusDropdown extends HTMLElement {
     const placeholder = this.getAttribute('placeholder') || 'Select...';
     const disabled = this.hasAttribute('disabled');
 
-    const selectedItem = this.items.find(item => item.value === selected);
+    const selectedItem = this.items.find(item => !item.action && !item.divider && item.value === selected);
     const displayText = selectedItem ? selectedItem.text : (text || placeholder);
 
     // Create menu items HTML
-    const menuItems = this.items.map(item => `
-      <sl-menu-item value="${item.value}" ${item.disabled ? 'disabled' : ''}>
+    // Item texts are HTML, values are escaped so that they can hold quotes (e.g. XPath predicates)
+    const menuItems = this.items.map(item => {
+      if (item.divider) return '<sl-divider></sl-divider>';
+      if (item.action) {
+        return `
+      <sl-menu-item data-action="${escapeAttribute(item.action)}" ${item.disabled ? 'disabled' : ''}>
+        ${item.icon ? `<sl-icon slot="prefix" name="${escapeAttribute(item.icon)}"></sl-icon>` : ''}${item.text}
+      </sl-menu-item>`;
+      }
+      return `
+      <sl-menu-item value="${escapeAttribute(item.value)}" ${item.disabled ? 'disabled' : ''}>
         ${item.text}
-      </sl-menu-item>
-    `).join('');
+      </sl-menu-item>`;
+    }).join('');
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -159,6 +199,14 @@ class StatusDropdown extends HTMLElement {
           min-height: auto;
         }
 
+        sl-menu-item::part(prefix) {
+          font-size: var(--sl-font-size-x-small);
+        }
+
+        sl-divider {
+          --spacing: 2px;
+        }
+
         sl-menu-item::part(label) {
           font-size: var(--sl-font-size-x-small);
           line-height: 1.2;
@@ -178,7 +226,7 @@ class StatusDropdown extends HTMLElement {
   }
 
   selectItem(value) {
-    const item = this.items.find(i => i.value === value);
+    const item = this.items.find(i => !i.action && !i.divider && i.value === value);
     if (!item || item.disabled) return;
 
     this.selected = value;
@@ -239,7 +287,7 @@ class StatusDropdown extends HTMLElement {
 
   /**
    * Set dropdown items programmatically
-   * @param {Array} items - Array of {value, text, disabled?, selected?} objects
+   * @param {StatusDropdownItem[]} items
    */
   setItems(items) {
     this.items = items || [];

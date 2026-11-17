@@ -7,21 +7,19 @@
  * @import { StatusText } from '../modules/panels/widgets/status-text.js'
  * @import { StatusButton } from '../modules/panels/widgets/status-button.js'
  * @import { StatusToggleButton } from '../modules/panels/widgets/status-toggle-button.js'
- * @import { StatusDropdown } from '../modules/panels/widgets/status-dropdown.js'
  * @import { UIPart, SlDropdown, SlMenu, SlMenuItem } from '../ui.js'
  * @import { StatusBar } from '../modules/panels/status-bar.js'
  * @import { ToolBar } from '../modules/panels/tool-bar.js'
  * @import { xslViewerOverlayPart } from './xsl-viewer.js'
- * @import { UserData } from './authentication.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { EditorTheme } from '../modules/codemirror/editor-themes.js'
+ * @import { xpathNavigationStatusbarPart } from './xpath-navigation.js'
  */
 
 import ui, { updateUi } from '../ui.js'
 import { testLog } from '../modules/test-log.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
-import { parseXPath } from '../modules/utils.js'
 import { setDiagnostics } from '@codemirror/lint'
 import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
 import { detectXmlIndentation } from '../modules/codemirror/codemirror-utils.js'
@@ -97,14 +95,14 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  */
 
 /**
- * XML editor statusbar navigation properties
- * @typedef {object} xmlEditorStatusbarPart
- * @property {StatusButton} prevNodeBtn - Previous node navigation button
- * @property {StatusDropdown} xpathDropdown - XPath selector dropdown
- * @property {StatusButton} nextNodeBtn - Next node navigation button
- * @property {StatusText} nodeCounterWidget - Node counter display (index/size)
- * @property {StatusButton} clearNodeBtn - Clears the current node (removes focus on it and the `xpath` state)
- * @property {StatusToggleButton} focusToggle - Toggles focus mode (center navigated-to node, dim the rest)
+ * XML editor statusbar navigation properties. The node navigation widgets in the center are added by
+ * the xpath-navigation plugin (see {@link xpathNavigationStatusbarPart}).
+ * @typedef {xpathNavigationStatusbarPart & xmlEditorStatusbarPartOwn} xmlEditorStatusbarPart
+ */
+
+/**
+ * The statusbar widgets of the XML editor plugin itself
+ * @typedef {object} xmlEditorStatusbarPartOwn
  * @property {StatusText} indentationStatusWidget - The indentation status widget
  * @property {StatusText} cursorPositionWidget - The cursor position widget
  * @property {SlDropdown} themeDropdown - Editor theme picker dropdown
@@ -229,36 +227,9 @@ class XmlEditorPlugin extends Plugin {
   /** @type {StatusText} */
   #indentationStatusWidget;
 
-  // Node navigation widgets
-  /** @type {StatusButton} */
-  #prevNodeBtn;
-  /** @type {StatusDropdown} */
-  #xpathDropdown;
-  /** @type {StatusButton} */
-  #nextNodeBtn;
-  /** @type {StatusText} */
-  #nodeCounterWidget;
-  /** @type {StatusButton} */
-  #clearNodeBtn;
-  /** @type {StatusToggleButton} */
-  #focusToggle;
-  /** Whether the user has focus mode switched on (persisted in the UI storage) */
-  #focusPreferred = false;
-  /** Whether the navigation widgets are currently shown */
-  #navigationVisible = false;
-  /** Whether node navigation is on, i.e. an xpath is selected. Focus mode only works then */
-  #navigationActive = false;
-
   /** @type {ReturnType<typeof setTimeout>|undefined} Pending reload after another user's save */
   #followTimer = undefined;
 
-  // State for node navigation
-  /** @type {string|null} */
-  #currentVariant = null;
-  /** @type {object[]|null} */
-  #cachedExtractors = null;
-  /** @type {UserData|null} */
-  #currentUser = null;
   /** @type {string|null} */
   #hashBeingSaved = null;
   /** Set when a save is requested while another one is in flight, so it runs once that one ends */
@@ -295,7 +266,7 @@ class XmlEditorPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#xmlEditor;
-    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'addHeaderbarWidget', 'removeHeaderbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress', 'addContextMenuItem']);
+    const pluginMethods = new Set(['addStatusbarWidget', 'removeStatusbarWidget', 'addHeaderbarWidget', 'removeHeaderbarWidget', 'setReadOnlyContext', 'addToolbarWidget', 'appendToEditor', 'saveIfDirty', 'openDocumentAtLine', 'inProgress', 'addContextMenuItem', 'wrapLinesTransiently']);
     return /** @type {NavXmlEditor} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -541,17 +512,7 @@ class XmlEditorPlugin extends Plugin {
       notify(`The document contains ${diagnostics.length} validation error${diagnostics.length === 1 ? '' : 's'}.`);
     });
 
-    // selection => xpath state
-    // Use setTimeout so the dispatchStateChange never fires inside an active state-update
-    // propagation cycle (e.g. when selectByXpath triggers CodeMirror's synchronous update).
-    this.#xmlEditor.on('selectionChanged', _data => {
-      setTimeout(() => {
-        if (this.state) {
-          this.#onSelectionChange(this.state);
-        }
-      }, 0);
-      this.#updateCursorPosition();
-    });
+    this.#xmlEditor.on('selectionChanged', _data => this.#updateCursorPosition());
 
     // manually show diagnostics if validation is disabled
     this.#xmlEditor.on('editorXmlNotWellFormed', diagnostics => {
@@ -622,7 +583,7 @@ class XmlEditorPlugin extends Plugin {
       this.#redoBtn.disabled = true;
     });
 
-    // Restore line wrapping and xpath after XML is loaded
+    // Restore line wrapping after XML is loaded
     this.#xmlEditor.on('editorAfterLoad', () => {
       testLog('XML_EDITOR_DOCUMENT_LOADED', { isReady: true });
 
@@ -644,17 +605,6 @@ class XmlEditorPlugin extends Plugin {
         if (currentStableId) {
           await this.#maybeRestoreDraft(currentStableId);
         }
-
-        setTimeout(async () => {
-          if (!this.state?.xpath && this.state?.variant) {
-            const savedXpath = this.#getXpathPreference(this.state.variant);
-            const items = this.#xpathDropdown.items || [];
-            const savedXpathInItems = savedXpath && items.some(item => item.value === savedXpath);
-            if (savedXpathInItems) {
-              await this.scheduleStateChange({ xpath: `${savedXpath}[1]` });
-            }
-          }
-        }, 0);
       });
     });
 
@@ -711,130 +661,12 @@ class XmlEditorPlugin extends Plugin {
       evt.returnValue = 'You have unsaved changes in the XML editor.';
     });
 
-    // Create node navigation widgets for statusbar center section
-    this.#prevNodeBtn = PanelUtils.createButton({
-      icon: 'chevron-left',
-      tooltip: 'Previous node',
-      name: 'prevNodeBtn'
-    });
-
-    this.#xpathDropdown = PanelUtils.createDropdown({
-      placeholder: 'Select XPath...',
-      name: 'xpathDropdown'
-    });
-
-    this.#nextNodeBtn = PanelUtils.createButton({
-      icon: 'chevron-right',
-      tooltip: 'Next node',
-      name: 'nextNodeBtn'
-    });
-
-    this.#nodeCounterWidget = PanelUtils.createText({
-      text: '(0/0)',
-      name: 'nodeCounterWidget'
-    });
-
-    // Add navigation widgets to statusbar center section. They outrank the review meter (4)
-    // and give way only to the comment meter (6).
-    const NAVIGATION_PRIORITY = 5;
-    this.#statusbar.add(this.#prevNodeBtn, 'center', NAVIGATION_PRIORITY);
-    this.#statusbar.add(this.#xpathDropdown, 'center', NAVIGATION_PRIORITY);
-    this.#statusbar.add(this.#nextNodeBtn, 'center', NAVIGATION_PRIORITY);
-    this.#statusbar.add(this.#nodeCounterWidget, 'center', NAVIGATION_PRIORITY);
-
-    this.#focusToggle = PanelUtils.createToggleButton({
-      icon: 'search',
-      tooltip: 'Focus on the navigated-to node (Esc to exit)',
-      appearance: 'flat',
-      name: 'focusToggle',
-      disabled: true
-    });
-    this.#statusbar.add(this.#focusToggle, 'center', NAVIGATION_PRIORITY);
-    this.#focusPreferred = this.uiStorage.get('focusMode', true);
-    this.#focusToggle.checked = this.#focusPreferred;
-
-    this.#clearNodeBtn = PanelUtils.createButton({
-      icon: 'x-lg',
-      tooltip: 'Turn off node navigation',
-      name: 'clearNodeBtn',
-      disabled: true
-    });
-    this.#statusbar.add(this.#clearNodeBtn, 'center', NAVIGATION_PRIORITY);
-
-    // Update UI to register navigation widgets
-    updateUi();
-
-    // Initially hide navigation widgets
-    this.#setNavigationWidgetsVisible(false);
-
-    // XPath dropdown change handler - navigate to first node when selecting xpath
-    this.#xpathDropdown.addEventListener('widget-change', async (evt) => {
-      const customEvt = /** @type {CustomEvent} */ (evt);
-      const baseXpath = customEvt.detail.value;
-      if (this.#currentVariant) {
-        this.#setXpathPreference(this.#currentVariant, baseXpath);
-      }
-      await this.dispatchStateChange({ xpath: baseXpath ? `${baseXpath}[1]` : '' });
-    });
-
-    // Navigation button handlers
-    this.#prevNodeBtn.addEventListener('widget-click', () => this.#changeNodeIndex(this.state, -1));
-    this.#nextNodeBtn.addEventListener('widget-click', () => this.#changeNodeIndex(this.state, +1));
-
-    // Counter click handler (allow direct index input)
-    this.#nodeCounterWidget.addEventListener('click', () => this.#onClickSelectionIndex());
-
-    // Clear button: turns node navigation off. Removes the focus on the current node and the xpath
-    // state (and thus the URL parameter) and forgets the stored xpath selection of the variant, so that
-    // navigation only resumes when a new xpath is selected in the dropdown.
-    this.#clearNodeBtn.addEventListener('widget-click', async () => {
-      if (this.#currentVariant) {
-        this.#setXpathPreference(this.#currentVariant, '');
-      }
-      this.#xmlEditor.clearSelectedNode();
-      await this.dispatchStateChange({ xpath: null });
-    });
-
-    // Focus mode toggle
-    this.#focusToggle.addEventListener('widget-change', (e) => {
-      this.#setFocusMode(/** @type {CustomEvent} */ (e).detail.checked);
-    });
-
-    // Esc leaves focus mode or, if focus mode is off, the visual diff mode
+    // Esc ends the visual diff mode, unless focus mode is on (the xpath-navigation plugin leaves it then)
     document.addEventListener('keydown', (evt) => this.#onEscapeKey(evt));
 
     // Context menu — self-contained, mounts to the editor panel
     this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor);
     this.#contextMenu.mount(this.#xmlEditorEl);
-
-    // Built-in: insert tag boundary based on selected xpath navigation tag
-    const tagBoundaryItem = document.createElement('sl-menu-item');
-    tagBoundaryItem.addEventListener('click', () => {
-      const tagName = this.#tagNameFromXpath(this.#xpathDropdown.selected);
-      if (!tagName) return;
-      const view = this.#xmlEditor.getView();
-      const { head } = view.state.selection.main;
-      view.dispatch({ changes: { from: head, to: head, insert: `</${tagName}><${tagName}>` }, userEvent: 'input' });
-    });
-    this.#contextMenu.addItem(tagBoundaryItem, {
-      onBeforeShow: ({ readOnly }) => {
-        const tagName = this.#tagNameFromXpath(this.#xpathDropdown.selected);
-        tagBoundaryItem.disabled = readOnly || !tagName;
-        tagBoundaryItem.textContent = tagName ? `Insert </${tagName}><${tagName}>` : 'Insert tag boundary';
-      }
-    });
-  }
-
-  /**
-   * Runs when application startup is complete. Late layout changes during startup (e.g. line
-   * wrapping, folding the header, switching to the visual mode) shift the node that was selected
-   * from the restored xpath, so center it once more after they have settled.
-   */
-  async ready() {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    if (this.state?.xpath && this.#xmlEditor.isReady()) {
-      this.#xmlEditor.scrollSelectionToCenter();
-    }
   }
 
   /**
@@ -967,50 +799,6 @@ class XmlEditorPlugin extends Plugin {
       this.#lastLoadedStableId = state.xml;
     }
 
-    // Invalidate extractor cache when user changes so it is refreshed lazily
-    if (this.#currentUser !== state.user) {
-      this.#currentUser = state.user;
-      this.#cachedExtractors = null;
-    }
-
-    // Check if variant has changed, repopulate xpath dropdown
-    if (this.#currentVariant !== state.variant) {
-      this.#currentVariant = state.variant;
-      await this.#populateXpathDropdown(state);
-    }
-
-    // Update navigation widget visibility based on dropdown content and document load state
-    const hasNavigationPaths = this.#xpathDropdown.items && this.#xpathDropdown.items.length > 0
-      && !this.#xpathDropdown.items[0].disabled;
-    this.#setNavigationWidgetsVisible(hasNavigationPaths && Boolean(state.xml));
-
-    // Update xpath selection and counter
-    if (state.xpath && !state.xpath.startsWith('/')) {
-      this.#logger.warn(`Discarding invalid xpath state: "${state.xpath}"`);
-      this.scheduleStateChange({ xpath: '' });
-    }
-    if (state.xpath?.startsWith('/')) {
-      let { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath);
-      const nonIndexedPath = pathBeforePredicates + nonIndexPredicates;
-
-      const optionValues = this.#xpathDropdown.items?.map(item => item.value) || [];
-      const foundAtIndex = optionValues.indexOf(nonIndexedPath);
-      if (foundAtIndex >= 0) {
-        this.#xpathDropdown.selected = nonIndexedPath;
-      } else {
-        this.#xpathDropdown.selected = '';
-      }
-
-      this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(nonIndexedPath, index));
-    } else if (!state.xpath) {
-      // no node selected: navigation is off until an xpath is selected in the dropdown
-      this.#xpathDropdown.selected = '';
-      this.#nodeCounterWidget.text = '(0/0)';
-      this.#prevNodeBtn.disabled = this.#nextNodeBtn.disabled = true;
-    }
-
-    this.#updateNavigationActive(state);
-
     // Keep line wrapping switch always visible but disable when no document
     // (the ignore-whitespace switch is disabled/enabled by #updateDiffButtons based on merge view state)
     this.#wrapToggle.disabled = !state.xml;
@@ -1119,22 +907,6 @@ class XmlEditorPlugin extends Plugin {
       this.#downloadBtn.disabled = true;
       this.#uploadBtn.disabled = true;
     }
-
-    // xpath state => selection
-    if (this.#xmlEditor.isReady() && state.xpath?.startsWith('/') && state.xml) {
-      const { index, pathBeforePredicates } = parseXPath(state.xpath);
-      try {
-        const size = this.#xmlEditor.countDomNodesByXpath(pathBeforePredicates);
-        const pathChanged = this.#xmlEditor.parentPath !== pathBeforePredicates;
-        const indexChanged = index !== this.#xmlEditor.currentIndex;
-        if (size > 0 && (pathChanged || indexChanged)) {
-          this.#xmlEditor.parentPath = pathBeforePredicates;
-          this.#xmlEditor.selectByIndex(index || 1);
-        }
-      } catch (e) {
-        this.#logger.error(e);
-      }
-    }
   }
 
   /**
@@ -1232,6 +1004,16 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
+   * Turns on line wrapping without changing the stored wrapping preference, e.g. for focus mode. The
+   * line wrapping toggle shows the change; the preference applies again when the next document is loaded.
+   */
+  wrapLinesTransiently() {
+    if (this.#wrapToggle.checked) return
+    this.#wrapToggle.checked = true
+    this.#xmlEditor.setLineWrapping(true)
+  }
+
+  /**
    * Add a contributed item to the XML editor right-click context menu.
    * @param {HTMLElement} element - An <sl-menu-item> or <sl-divider>
    * @param {string} [_group] - Reserved for future group-label support
@@ -1256,19 +1038,6 @@ class XmlEditorPlugin extends Plugin {
   //
   // Private methods
   //
-
-  /**
-   * Extracts the local element name from an XPath expression (last step, no predicates).
-   * E.g. `//body/listBibl/bibl[@type="cited"]` → `bibl`
-   * @param {string} xpath
-   * @returns {string|null}
-   */
-  #tagNameFromXpath(xpath) {
-    if (!xpath) return null;
-    const steps = xpath.split('/').filter(Boolean);
-    const lastStep = steps[steps.length - 1];
-    return lastStep?.replace(/\[.*$/, '').replace(/^[^:]+:/, '') || null;
-  }
 
   /**
    * @returns {boolean}
@@ -1296,45 +1065,6 @@ class XmlEditorPlugin extends Plugin {
    */
   #setStrictDiffPreference(enabled) {
     this.uiStorage.set('strictDiff', enabled);
-  }
-
-  /**
-   * @param {string} variantId
-   * @returns {string|null}
-   */
-  #getXpathPreference(variantId) {
-    return this.uiStorage.get(`xpath.${variantId}`, null);
-  }
-
-  /**
-   * @param {string} variantId
-   * @param {string} xpath
-   */
-  #setXpathPreference(variantId, xpath) {
-    if (xpath) {
-      this.uiStorage.set(`xpath.${variantId}`, xpath);
-    } else {
-      this.uiStorage.remove(`xpath.${variantId}`);
-    }
-  }
-
-  /**
-   * Called when the selection in the editor changes to update the xpath state.
-   * Only dispatches when a normative parentPath is active (i.e. the user has
-   * selected a navigation path in the statusbar dropdown), so that random clicks
-   * without a selected xpath type do not overwrite state.
-   * @param {ApplicationState} state
-   */
-  async #onSelectionChange(state) {
-    if (!this.#xmlEditor.parentPath) return;
-    const selectedXpath = this.#xmlEditor.selectedXpath;
-    if (!selectedXpath) {
-      this.#logger.debug('Could not determine xpath of last selected node');
-      return;
-    }
-    if (selectedXpath !== state.xpath) {
-      await this.dispatchStateChange({ xpath: selectedXpath });
-    }
   }
 
   /**
@@ -1779,184 +1509,19 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * @param {boolean} visible
-   */
-  #setNavigationWidgetsVisible(visible) {
-    const display = visible ? 'inline-flex' : 'none';
-    this.#prevNodeBtn.style.display = display;
-    this.#xpathDropdown.style.display = display;
-    this.#nextNodeBtn.style.display = display;
-    this.#nodeCounterWidget.style.display = display;
-    this.#clearNodeBtn.style.display = display;
-    this.#focusToggle.style.display = display;
-    this.#navigationVisible = visible;
-  }
-
-  /**
-   * Switches node navigation on or off: it is on while an xpath is selected. The buttons that only
-   * make sense with an active navigation are disabled otherwise. Focus mode is switched off while the
-   * navigation is off, but its stored choice is kept and applies again when navigation resumes.
-   * @param {ApplicationState} state
-   */
-  #updateNavigationActive(state) {
-    const active = this.#navigationVisible && Boolean(state.xpath);
-    this.#focusToggle.disabled = !active;
-    this.#clearNodeBtn.disabled = !active;
-    if (active !== this.#navigationActive) {
-      this.#navigationActive = active;
-      this.#applyFocusMode();
-    }
-  }
-
-  /**
-   * Turns focus mode on or off as a user choice: keeps the statusbar toggle in sync and persists the
-   * choice. Enabling it also turns on line wrapping.
-   * @param {boolean} enabled
-   */
-  #setFocusMode(enabled) {
-    this.#focusPreferred = enabled;
-    this.uiStorage.set('focusMode', enabled);
-    this.#focusToggle.checked = enabled;
-    if (enabled && !this.#wrapToggle.checked) {
-      // wrapped lines keep the focused node readable; applied transiently, the stored preference is untouched
-      this.#wrapToggle.checked = true;
-      this.#xmlEditor.setLineWrapping(true);
-    }
-    this.#applyFocusMode();
-    this.#logger.debug(`Focus mode ${enabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Applies the stored focus mode choice to the editor. Focus mode only takes effect while node
-   * navigation is on; the choice itself is kept for when it is on again.
-   */
-  #applyFocusMode() {
-    this.#xmlEditor.setFocusMode(this.#focusPreferred && this.#navigationActive);
-  }
-
-  /**
-   * Handles the Escape key: leaves focus mode if it is active, otherwise ends the visual
-   * diff mode. Ignored if the key was already handled (e.g. by CodeMirror closing the
-   * search panel or the autocomplete popup) or pressed inside a dialog, drawer or dropdown.
+   * Handles the Escape key: ends the visual diff mode, unless focus mode is on (the xpath-navigation
+   * plugin leaves focus mode then). Ignored if the key was already handled (e.g. by CodeMirror closing
+   * the search panel or the autocomplete popup) or pressed inside a dialog, drawer or dropdown.
    * @param {KeyboardEvent} evt
    */
   async #onEscapeKey(evt) {
     if (evt.key !== 'Escape' || evt.defaultPrevented) return;
     const inOverlay = evt.composedPath().some(el =>
       el instanceof HTMLElement && ['SL-DIALOG', 'SL-DRAWER', 'SL-DROPDOWN'].includes(el.tagName));
-    if (inOverlay) return;
-    if (this.#xmlEditor.isFocusMode()) {
-      this.#setFocusMode(false);
-    } else if (this.#mergeViewActive) {
+    if (inOverlay || this.#xmlEditor.isFocusMode()) return;
+    if (this.#mergeViewActive) {
       await this.getDependency('services').removeMergeView();
     }
-  }
-
-  /**
-   * @param {string} xpath
-   * @param {number|null} index
-   */
-  #updateNodeCounter(xpath, index) {
-    let size;
-    try {
-      size = this.#xmlEditor.countDomNodesByXpath(xpath);
-    } catch (e) {
-      this.#logger.warn('Cannot update counter: ' + String(e));
-      size = 0;
-    }
-    index = index || 1;
-    this.#nodeCounterWidget.text = `(${size > 0 ? index : 0}/${size})`;
-    this.#nextNodeBtn.disabled = this.#prevNodeBtn.disabled = size < 2;
-  }
-
-  /**
-   * Navigate to previous/next node
-   * @param {ApplicationState} state
-   * @param {number} delta
-   */
-  async #changeNodeIndex(state, delta) {
-    if (isNaN(delta)) {
-      throw new TypeError('Second argument must be a number');
-    }
-    if (!state?.xpath) {
-      return;
-    }
-    let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath);
-    const normativeXpath = pathBeforePredicates + nonIndexPredicates;
-    const size = this.#xmlEditor.countDomNodesByXpath(normativeXpath);
-    if (size < 2) {
-      return;
-    }
-    if (index === null) index = 1;
-    index += delta;
-    if (index < 1) index = size;
-    if (index > size) index = 1;
-    const xpath = normativeXpath + `[${index}]`;
-    await this.dispatchStateChange({ xpath });
-  }
-
-  /**
-   * Called when the user clicks on the counter to enter the node index.
-   * Dispatches a state change so the counter, dropdown, and editor stay in sync.
-   */
-  async #onClickSelectionIndex() {
-    const index = prompt('Enter node index');
-    if (!index) return;
-    const parsedIndex = parseInt(index, 10);
-    if (isNaN(parsedIndex) || !this.state?.xpath) return;
-    try {
-      const { pathBeforePredicates, nonIndexPredicates } = parseXPath(this.state.xpath);
-      await this.dispatchStateChange({ xpath: `${pathBeforePredicates}${nonIndexPredicates}[${parsedIndex}]` });
-    } catch (error) {
-      this.#logger.warn('Failed to select by index: ' + String(error));
-    }
-  }
-
-  /**
-   * Populates the xpath dropdown based on the current variant
-   * @param {ApplicationState} state
-   */
-  async #populateXpathDropdown(state) {
-    const variantId = state.variant;
-
-    if (!variantId) {
-      this.#xpathDropdown.setItems([{ value: '', text: 'No variant selected', disabled: true }]);
-      return;
-    }
-
-    if (this.#cachedExtractors === null) {
-      try {
-        this.#cachedExtractors = await this.#client.getExtractorList();
-        this.#logger.debug('Loaded extractor list for node navigation');
-      } catch (error) {
-        this.#logger.warn('Failed to load extractor list: ' + String(error));
-        this.#xpathDropdown.setItems([{ value: '', text: 'Error loading navigation paths', disabled: true }]);
-        return;
-      }
-    }
-
-    let navigationXpathList = null;
-    for (const extractor of this.#cachedExtractors) {
-      const navigationXpath = extractor.navigation_xpath?.[variantId];
-      if (navigationXpath) {
-        navigationXpathList = navigationXpath;
-        break;
-      }
-    }
-
-    if (!navigationXpathList) {
-      this.#xpathDropdown.setItems([{ value: '', text: `No navigation paths for variant: ${variantId}`, disabled: true }]);
-      return;
-    }
-
-    const items = navigationXpathList
-      .filter(item => item.value !== null)
-      .map(item => ({
-        value: item.value,
-        text: item.label
-      }));
-
-    this.#xpathDropdown.setItems(items);
   }
 }
 

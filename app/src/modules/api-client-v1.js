@@ -859,6 +859,35 @@
  */
 
 /**
+ * @typedef {Object} NavigationXpathItem
+ * @property {string} value - XPath expression, e.g. `//tei:listBibl/tei:bibl`
+ * @property {string} label - HTML-escaped label shown in the dropdown
+ * @property {boolean=} edit - False for the defaults of the extractors, which cannot be changed or deleted
+ */
+
+/**
+ * @typedef {Object} NavigationXpathResponse
+ * @property {Object<string, Array<NavigationXpathItem>>} variants - Entries by variant id, defaults first
+ */
+
+/**
+ * @typedef {Object} NavigationXpathInput
+ * @property {string} value - XPath expression
+ * @property {string=} label - Plain-text label; empty to show the expression
+ */
+
+/**
+ * @typedef {Object} SaveNavigationXpathRequest
+ * @property {Array<NavigationXpathInput>} entries - The user entries of the variant, replacing the stored ones
+ */
+
+/**
+ * @typedef {Object} VariantNavigationXpathResponse
+ * @property {string} variant
+ * @property {Array<NavigationXpathItem>} entries - All entries of the variant, defaults first
+ */
+
+/**
  * @typedef {Object} BookmarkItem
  * @property {string} id
  * @property {string} stable_id - The file the bookmark opens
@@ -2481,6 +2510,28 @@ export class ApiClientV1 {
   async messagesRebuild() {
     const endpoint = `/messages/rebuild`
     return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * The navigation XPath entries of all variants: the defaults of the extractors first, then the user entries.
+   *
+   * @returns {Promise<NavigationXpathResponse>}
+   */
+  async navigationXpathList() {
+    const endpoint = `/navigation-xpath`
+    return this.callApi(endpoint, 'GET');
+  }
+
+  /**
+   * Replaces the user entries of the navigation XPath list of a variant (annotators, reviewers and admins).
+   *
+   * @param {string} variant
+   * @param {SaveNavigationXpathRequest} requestBody
+   * @returns {Promise<VariantNavigationXpathResponse>}
+   */
+  async navigationXpathSave(variant, requestBody) {
+    const endpoint = `/navigation-xpath/${encodeURIComponent(variant)}`
+    return this.callApi(endpoint, 'PUT', requestBody);
   }
 
   /**
