@@ -9,12 +9,11 @@
  *
  * Options:
  *   --env <path>              Path to .env file (default: ./.env)
- *   --token <token>           Personal access token (default: from .env API_TOKEN); preferred over --user/--password
- *   --user <username>         Username for authentication (default: from .env API_USER)
- *   --password <password>     Password for authentication (default: from .env API_PASSWORD)
+ *   --token <token>           Personal access token (default: from .env API_TOKEN)
  *   --base-url <url>          API base URL (default: from .env API_BASE_URL or http://localhost:8000)
  *   --collection <id>         Collection ID (default: directory basename, required for --extract-only)
  *   --extractor <id>          Extractor ID (required, can be specified multiple times)
+ *   --variant <id>            Extractor variant_id (can be specified multiple times; each file is extracted once per variant)
  *   --option <key=value>      Extractor option (can be specified multiple times)
  *   --recursive               Recursively search directories
  *   --extract-only            Extract from existing files in collection (no upload)
@@ -24,19 +23,17 @@
  *   path                      Directory containing PDF files (required unless --extract-only)
  *
  * Environment variables (from .env file):
- *   API_TOKEN                 Personal access token (used instead of API_USER/API_PASSWORD if set)
- *   API_USER                  Username for authentication
- *   API_PASSWORD              Password for authentication
+ *   API_TOKEN                 Personal access token
  *   API_BASE_URL              API base URL
  */
 
 import { Command } from 'commander';
 import { readFile } from 'fs/promises';
-import { join, resolve } from 'path';
+import { basename, resolve } from 'path';
 import { glob } from 'glob';
 import dotenv from 'dotenv';
 import { stdout } from 'process';
-import { login, resolveCredentials } from './lib/api-auth.js';
+import { loginWithToken } from './lib/api-auth.js';
 
 /**
  * Create a progress bar string
@@ -155,7 +152,7 @@ async function uploadFile(baseUrl, sessionId, filePath) {
   // Read file and create Blob
   const fileBuffer = await readFile(filePath);
   const blob = new Blob([fileBuffer], { type: 'application/pdf' });
-  const fileName = filePath.split('/').pop();
+  const fileName = basename(filePath);
   formData.append('file', blob, fileName);
 
   const response = await fetch(`${baseUrl}/api/v1/files/upload`, {
@@ -336,12 +333,11 @@ async function batchUpload(options) {
   const {
     env: envPath,
     token: cliToken,
-    user: cliUser,
-    password: cliPassword,
     baseUrl: cliBaseUrl,
     collection: collectionArg,
     extractor: extractors,
     option: optionPairs,
+    variant: variants,
     recursive,
     path: dirPath
   } = options;
@@ -355,16 +351,16 @@ async function batchUpload(options) {
     throw envConfig.error;
   }
 
-  // Get credentials - CLI args override env vars
-  const credentials = resolveCredentials({ token: cliToken, user: cliUser, password: cliPassword });
-  const baseUrl = cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
+  // Get token - CLI arg overrides env var
+  const token = cliToken || process.env.API_TOKEN;
+  const baseUrl = (cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-  if (!credentials.token && (!credentials.username || !credentials.password)) {
-    throw new Error('Provide an access token via --token or API_TOKEN, or username and password via --user/--password or API_USER/API_PASSWORD in .env file');
+  if (!token) {
+    throw new Error('Provide a personal access token via --token or API_TOKEN in the .env file');
   }
 
   // Default collection to directory basename if not provided
-  const collection = collectionArg || dirPath.split('/').filter(Boolean).pop();
+  const collection = collectionArg || dirPath.split(/[\\/]/).filter(Boolean).pop();
 
   // Parse extractor options
   const extractorOptions = { collection };
@@ -380,7 +376,7 @@ async function batchUpload(options) {
 
   // Find PDF files
   const pattern = recursive ? '**/*.pdf' : '*.pdf';
-  const searchPath = join(dirPath, pattern);
+  const searchPath = `${dirPath.replace(/\\/g, '/').replace(/\/+$/, '')}/${pattern}`;
   const files = await glob(searchPath, { nodir: true });
 
   if (files.length === 0) {
@@ -392,13 +388,16 @@ async function batchUpload(options) {
   console.log(`Base URL: ${baseUrl}`);
   console.log(`Collection: ${collection}`);
   console.log(`Extractor(s): ${extractors.join(', ')}`);
+  if (variants?.length) {
+    console.log(`Variant(s): ${variants.join(', ')}`);
+  }
   if (Object.keys(extractorOptions).length > 1) {
     console.log(`Options: ${JSON.stringify(extractorOptions, null, 2)}`);
   }
 
   // Login
   console.log('\nLogging in...');
-  const sessionId = await login(baseUrl, credentials);
+  const sessionId = await loginWithToken(baseUrl, token);
   console.log('Login successful');
 
   // Validate extractors exist
@@ -417,7 +416,7 @@ async function batchUpload(options) {
 
   // Filter out files that already exist
   const filesToProcess = files.filter(filePath => {
-    const fileName = filePath.split('/').pop();
+    const fileName = basename(filePath);
     return !existingFiles.has(fileName);
   });
 
@@ -446,7 +445,7 @@ async function batchUpload(options) {
   console.log(''); // Empty line before progress bar
 
   for (const filePath of filesToProcess) {
-    const fileName = filePath.split('/').pop();
+    const fileName = basename(filePath);
     currentFile++;
 
     try {
@@ -465,16 +464,18 @@ async function batchUpload(options) {
 
       // Run extraction for each extractor
       for (const extractor of extractors) {
-        const extractProgress = createProgressBar(currentFile - 1, filesToProcess.length);
-        updateProgress(`${extractProgress} Extracting (${extractor}): ${fileName}${doi ? ` (DOI: ${doi})` : ''}`);
+        for (const variant of variants?.length ? variants : [undefined]) {
+          const extractProgress = createProgressBar(currentFile - 1, filesToProcess.length);
+          updateProgress(`${extractProgress} Extracting (${extractor}${variant ? `, ${variant}` : ''}): ${fileName}${doi ? ` (DOI: ${doi})` : ''}`);
 
-        await extractMetadata(
-          baseUrl,
-          sessionId,
-          uploadResult.filename,
-          extractor,
-          fileExtractorOptions
-        );
+          await extractMetadata(
+            baseUrl,
+            sessionId,
+            uploadResult.filename,
+            extractor,
+            variant ? { ...fileExtractorOptions, variant_id: variant } : fileExtractorOptions
+          );
+        }
       }
 
       successCount++;
@@ -515,12 +516,11 @@ async function batchExtractOnly(options) {
   const {
     env: envPath,
     token: cliToken,
-    user: cliUser,
-    password: cliPassword,
     baseUrl: cliBaseUrl,
     collection,
     extractor: extractors,
     option: optionPairs,
+    variant: variants,
     doc: docIds,
   } = options;
 
@@ -537,12 +537,12 @@ async function batchExtractOnly(options) {
     throw envConfig.error;
   }
 
-  // Get credentials - CLI args override env vars
-  const credentials = resolveCredentials({ token: cliToken, user: cliUser, password: cliPassword });
-  const baseUrl = cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
+  // Get token - CLI arg overrides env var
+  const token = cliToken || process.env.API_TOKEN;
+  const baseUrl = (cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
-  if (!credentials.token && (!credentials.username || !credentials.password)) {
-    throw new Error('Provide an access token via --token or API_TOKEN, or username and password via --user/--password or API_USER/API_PASSWORD in .env file');
+  if (!token) {
+    throw new Error('Provide a personal access token via --token or API_TOKEN in the .env file');
   }
 
   // Parse extractor options
@@ -560,6 +560,9 @@ async function batchExtractOnly(options) {
   console.log(`Base URL: ${baseUrl}`);
   console.log(`Collection: ${collection}`);
   console.log(`Extractor(s): ${extractors.join(', ')}`);
+  if (variants?.length) {
+    console.log(`Variant(s): ${variants.join(', ')}`);
+  }
   console.log(`Mode: extract-only (no upload)`);
   if (Object.keys(extractorOptions).length > 1) {
     console.log(`Options: ${JSON.stringify(extractorOptions, null, 2)}`);
@@ -567,7 +570,7 @@ async function batchExtractOnly(options) {
 
   // Login
   console.log('\nLogging in...');
-  const sessionId = await login(baseUrl, credentials);
+  const sessionId = await loginWithToken(baseUrl, token);
   console.log('Login successful');
 
   // Validate extractors exist
@@ -606,16 +609,18 @@ async function batchExtractOnly(options) {
 
       // Run extraction for each extractor
       for (const extractor of extractors) {
-        const extractProgress = createProgressBar(currentFile - 1, collectionFiles.length);
-        updateProgress(`${extractProgress} Extracting (${extractor}): ${filename}${doi ? ` (DOI: ${doi})` : ''}`);
+        for (const variant of variants?.length ? variants : [undefined]) {
+          const extractProgress = createProgressBar(currentFile - 1, collectionFiles.length);
+          updateProgress(`${extractProgress} Extracting (${extractor}${variant ? `, ${variant}` : ''}): ${filename}${doi ? ` (DOI: ${doi})` : ''}`);
 
-        await extractMetadata(
-          baseUrl,
-          sessionId,
-          stable_id,
-          extractor,
-          fileExtractorOptions
-        );
+          await extractMetadata(
+            baseUrl,
+            sessionId,
+            stable_id,
+            extractor,
+            variant ? { ...fileExtractorOptions, variant_id: variant } : fileExtractorOptions
+          );
+        }
       }
 
       successCount++;
@@ -673,18 +678,22 @@ Examples:
   $ npm run batch-extract -- /path/to/pdfs --extractor llamore-gemini
     # Processes: 10.5771__2699-1284-2024-3-149.pdf → DOI: 10.5771/2699-1284-2024-3-149
 
+  # Several variants in one pass (GROBID caches all training documents in the backend)
+  $ npm run batch-extract -- /path/to/pdfs --extractor grobid --variant grobid.training.segmentation --variant grobid.training.references
+
   # Extract-only mode (re-extract existing files in a collection without re-uploading)
   $ npm run batch-extract -- --extract-only --collection my_collection --extractor grobid
 `)
   .showHelpAfterError()
   .argument('[path]', 'Directory containing PDF files (required unless --extract-only)')
   .option('--env <path>', 'Path to .env file', './.env')
-  .option('--token <token>', 'Personal access token (default: from .env API_TOKEN); preferred over --user/--password')
-  .option('--user <username>', 'Username for authentication (default: from .env API_USER)')
-  .option('--password <password>', 'Password for authentication (default: from .env API_PASSWORD)')
+  .option('--token <token>', 'Personal access token (default: from .env API_TOKEN)')
   .option('--base-url <url>', 'API base URL (default: from .env API_BASE_URL or http://localhost:8000)')
   .option('--collection <id>', 'Collection ID (default: directory basename, required for --extract-only)')
   .requiredOption('--extractor <id>', 'Extractor ID (can be specified multiple times)', (value, previous) => {
+    return previous ? [...previous, value] : [value];
+  })
+  .option('--variant <id>', 'Extractor variant_id (repeatable; each file is extracted once per variant)', (value, previous) => {
     return previous ? [...previous, value] : [value];
   })
   .option('--option <key=value>', 'Extractor option (repeatable)', (value, previous) => {
