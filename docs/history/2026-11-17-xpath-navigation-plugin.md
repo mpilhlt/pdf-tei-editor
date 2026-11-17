@@ -44,3 +44,11 @@ Issue: [#803](https://github.com/mpilhlt/pdf-tei-editor/issues/803)
 
 - User manual: "Editing the Navigation XPaths" in `docs/user-manual/editing-workflow.md`, with two new screenshots.
 - `docs/code-assistant/architecture-backend.md`, `docs/code-assistant/ui-storage.md`.
+
+## Review fix: the dropdown no longer switches by itself
+
+Choosing `/tei:TEI/tei:text/*[normalize-space()]` while `//tei:listBibl` was active selected the `<listBibl>` and then switched the dropdown back to `//tei:listBibl`: the selection → `xpath` state sync dispatched the xpath of the node at the cursor, computed for the previous expression.
+
+- `#onSelectionChange()` only updates the index: it dispatches only while the editor's navigation path is the expression selected in the dropdown.
+- The navigation path (`NavXmlEditor.parentPath`) keeps the non-index predicates, so the index counts the same nodes as the counter (`[normalize-space()]` skips empty elements).
+- `NavXmlEditor.handeSelectionChange()` bubbles up to the nearest ancestor that the path selects, instead of comparing tag names, so cursor moves also work for wildcards and predicates.

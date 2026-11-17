@@ -4,6 +4,8 @@
  * As an annotator, opens the "Navigation XPaths" dialog from the "Edit..." entry of the navigation
  * dropdown, checks that the default of the extractor cannot be changed, that an invalid expression is
  * rejected, adds an expression without a label, navigates with it, renames it and deletes it.
+ * Checks that an expression with a wildcard and a predicate stays selected in the dropdown when it
+ * replaces another one, and that the index follows the cursor among the nodes it selects.
  *
  * @testCovers app/src/plugins/xpath-navigation.js
  * @testCovers app/src/templates/xpath-navigation-dialog.html
@@ -33,6 +35,13 @@ const ALLOWED_ERROR_PATTERNS = [
 /** A variant of the mock extractor, whose default navigation XPath is `//tei:biblStruct` */
 const VARIANT = 'mock-default';
 
+const TEXT_CHILDREN = `<text>
+    <listBibl><bibl>Alpha</bibl></listBibl>
+    <front>Front matter</front>
+    <back/>
+    <div>Div text</div>
+  </text>`;
+
 const TEXT = `<text>
     <listBibl>
       <bibl>Alpha 2001</bibl>
@@ -45,9 +54,10 @@ const TEXT = `<text>
 /**
  * Loads an editable copy of the first document with the test <text> and the mock variant.
  * @param {Page} page
+ * @param {string} [text] - The <text> element
  * @returns {Promise<string>} The stable id of the copy
  */
-async function loadNavigationDocument(page) {
+async function loadNavigationDocument(page, text = TEXT) {
   const stableId = await page.evaluate(async ({ text, variant }) => {
     const w = /** @type {any} */ (window);
     const xml = w.app.getDependency('xmleditor').getXML()
@@ -59,7 +69,7 @@ async function loadNavigationDocument(page) {
     await w.app.getDependency('filedata').reload({ refresh: true });
     await w.app.getDependency('services').load({ xml: res.file_id });
     return res.file_id;
-  }, { text: TEXT, variant: VARIANT });
+  }, { text, variant: VARIANT });
   await page.waitForFunction(({ expectedXml, variant }) => {
     const state = /** @type {any} */ (window).app.getCurrentState();
     return state.xml === expectedXml && state.variant === variant && state.editorReadOnly === false;
@@ -81,6 +91,19 @@ async function clickDropdownEntry(page, text) {
 }
 
 /**
+ * The `xpath` state, the dropdown selection and the counter text
+ * @param {Page} page
+ * @returns {Promise<{xpath: string|null, selected: string, counter: string}>}
+ */
+async function navigationState(page) {
+  return page.evaluate(() => ({
+    xpath: (/** @type {any} */ (window)).app.getCurrentState().xpath,
+    selected: /** @type {any} */ (document.querySelector('status-dropdown[name="xpathDropdown"]')).selected,
+    counter: /** @type {any} */ (document.querySelector('[name="nodeCounterWidget"]')).text
+  }));
+}
+
+/**
  * The texts of the selectable dropdown entries
  * @param {Page} page
  * @returns {Promise<string[]>}
@@ -88,7 +111,7 @@ async function clickDropdownEntry(page, text) {
 async function dropdownTexts(page) {
   return page.evaluate(() => {
     const dropdown = /** @type {any} */ (document.querySelector('status-dropdown[name="xpathDropdown"]'));
-    return dropdown.items.filter(item => !item.action && !item.divider).map(item => item.value);
+    return (dropdown?.items ?? []).filter(item => !item.action && !item.divider).map(item => item.value);
   });
 }
 
@@ -173,6 +196,50 @@ test.describe('XPath navigation', () => {
       await expect.poll(() => dropdownTexts(page)).toEqual(['//tei:biblStruct']);
       await expect.poll(() => page.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().xpath))
         .toBeFalsy();
+    } finally {
+      await page.evaluate(async (variant) => {
+        try {
+          await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, { entries: [] });
+        } catch { /* nothing to clean up */ }
+      }, VARIANT).catch(() => {});
+      await releaseAllLocks(page).catch(() => {});
+      stopErrorMonitoring();
+    }
+  });
+
+  test('the dropdown keeps an expression with a wildcard and a predicate', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const CHILDREN = '/tei:TEI/tei:text/*[normalize-space()]';
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.evaluate(async ({ variant, children }) => {
+        await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, {
+          entries: [{ value: '//tei:listBibl', label: 'listBibl' }, { value: children, label: '' }]
+        });
+      }, { variant: VARIANT, children: CHILDREN });
+      await loadNavigationDocument(page, TEXT_CHILDREN);
+      // reload the entries
+      await page.reload();
+      await expect.poll(() => dropdownTexts(page)).toContain(CHILDREN);
+
+      // the first non-empty child of <text> is the <listBibl> selected before
+      await clickDropdownEntry(page, 'listBibl');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: '//tei:listBibl[1]', selected: '//tei:listBibl', counter: '(1/1)' });
+      await clickDropdownEntry(page, CHILDREN);
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[1]`, selected: CHILDREN, counter: '(1/3)' });
+      await page.waitForTimeout(1000);
+      expect(await navigationState(page)).toEqual({ xpath: `${CHILDREN}[1]`, selected: CHILDREN, counter: '(1/3)' });
+
+      // the index counts only the nodes that the predicate selects: <back/> is empty
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf('Div text') + 2 } });
+      });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[3]`, selected: CHILDREN, counter: '(3/3)' });
     } finally {
       await page.evaluate(async (variant) => {
         try {

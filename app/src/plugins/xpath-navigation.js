@@ -257,15 +257,17 @@ class XpathNavigationPlugin extends Plugin {
 
     this.#updateNavigationActive(state)
 
-    // xpath state => editor selection
+    // xpath state => editor selection. The navigation path keeps the predicates other than the index
+    // (e.g. `[normalize-space()]`), so that the index counts the same nodes as the counter.
     if (this.#xmlEditor.isReady() && state.xpath?.startsWith('/') && state.xml) {
-      const { index, pathBeforePredicates } = parseXPath(state.xpath)
+      const { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
+      const navigationPath = pathBeforePredicates + nonIndexPredicates
       try {
-        const size = this.#xmlEditor.countDomNodesByXpath(pathBeforePredicates)
-        const pathChanged = this.#xmlEditor.parentPath !== pathBeforePredicates
+        const size = this.#xmlEditor.countDomNodesByXpath(navigationPath)
+        const pathChanged = this.#xmlEditor.parentPath !== navigationPath
         const indexChanged = index !== this.#xmlEditor.currentIndex
         if (size > 0 && (pathChanged || indexChanged)) {
-          this.#xmlEditor.parentPath = pathBeforePredicates
+          this.#xmlEditor.parentPath = navigationPath
           this.#xmlEditor.selectByIndex(index || 1)
         }
       } catch (e) {
@@ -414,18 +416,22 @@ class XpathNavigationPlugin extends Plugin {
   //
 
   /**
-   * Called when the selection in the editor changes to update the xpath state. Only dispatches when a
-   * normative parentPath is active (i.e. the user has selected a navigation path in the dropdown), so
-   * that random clicks without a selected xpath type do not overwrite state.
+   * Called when the selection in the editor changes to update the index of the xpath state to the node
+   * at the cursor. Only dispatches while navigation is on, and never changes the expression selected in
+   * the dropdown.
    * @param {ApplicationState} state
    */
   async #onSelectionChange(state) {
-    if (!this.#xmlEditor.parentPath) return
+    const navigationPath = this.#xmlEditor.parentPath
+    if (!navigationPath) return
     const selectedXpath = this.#xmlEditor.selectedXpath
     if (!selectedXpath) {
       this.#logger.debug('Could not determine xpath of last selected node')
       return
     }
+    // Only the index follows the cursor: the expression stays the one chosen in the dropdown. A
+    // selection made for another expression (e.g. one that was active before) is ignored.
+    if (navigationPath !== this.#xpathDropdown.selected || !selectedXpath.startsWith(`${navigationPath}[`)) return
     if (selectedXpath !== state.xpath) {
       await this.dispatchStateChange({ xpath: selectedXpath })
     }
