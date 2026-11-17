@@ -33,7 +33,7 @@ import { basename, resolve } from 'path';
 import { glob } from 'glob';
 import dotenv from 'dotenv';
 import { stdout } from 'process';
-import { loginWithToken } from './lib/api-auth.js';
+import { loginWithToken, resolveToken } from './lib/api-auth.js';
 
 /**
  * Create a progress bar string
@@ -352,7 +352,7 @@ async function batchUpload(options) {
   }
 
   // Get token - CLI arg overrides env var
-  const token = cliToken || process.env.API_TOKEN;
+  const token = resolveToken(cliToken);
   const baseUrl = (cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
   if (!token) {
@@ -538,7 +538,7 @@ async function batchExtractOnly(options) {
   }
 
   // Get token - CLI arg overrides env var
-  const token = cliToken || process.env.API_TOKEN;
+  const token = resolveToken(cliToken);
   const baseUrl = (cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
   if (!token) {
