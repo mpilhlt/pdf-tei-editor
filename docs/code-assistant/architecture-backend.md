@@ -162,6 +162,7 @@ Bookmarks are served by `routers/bookmarks.py` (`/api/v1/bookmarks`); every quer
 | `collection_utils.py` | Collection utilities |
 | `server_utils.py` | Server utilities |
 | `server_startup.py` | Server startup |
+| `navigation_xpath.py` | XPath expressions of the node navigation in `data/db/navigation_xpath.json`: the extractors' `navigation_xpath` defaults (`"edit": false`) merged in on every read, user entries per variant, XPath validation. Served by `routers/navigation_xpath.py` (`/api/v1/navigation-xpath`) |
 
 ### `interfaces/` — Abstract Base Classes
 

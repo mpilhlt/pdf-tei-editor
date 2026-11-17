@@ -113,7 +113,7 @@ Keys are stored as `ui.<namespace>.<key>`:
 
 - `ui.layout.splitPosition`
 - `ui.xmleditor.lineWrapping`
-- `ui.xmleditor.xpath.variant1`
+- `ui.xpath-navigation.xpath.variant1`
 - `ui.teitools.teiHeaderVisible`
 
 The namespace comes from `this.name` on the plugin. Sub-keys (like `xpath.${variantId}`) use dot notation within the key string — UIStorage treats the whole thing as an opaque string.
