@@ -13,6 +13,7 @@
 
 import { undo, redo, selectAll, undoDepth, redoDepth } from '@codemirror/commands'
 import { acceptChunk, rejectChunk, getChunks } from '@codemirror/merge'
+import { findSplitTarget, splitElementAt } from './split-element.js'
 
 /** True when running on macOS — used to pick ⌘ vs Ctrl shortcut labels. */
 const IS_MAC = /Mac/.test(navigator.userAgent);
@@ -66,6 +67,8 @@ export class XmlEditorContextMenu {
   #pluginDivider = null;
   /** @type {HTMLElement|null} */
   #unwrapItem = null;
+  /** @type {HTMLElement|null} */
+  #splitItem = null;
   /** @type {number} */
   #clickDocPos = 0;
   /** @type {Array<(ctx: {readOnly: boolean, pos: number}) => void>} */
@@ -136,10 +139,13 @@ export class XmlEditorContextMenu {
     const editSep     = document.createElement('sl-divider');
     const unwrapItem  = document.createElement('sl-menu-item');
     unwrapItem.textContent = 'Remove tag';
+    const splitItem   = document.createElement('sl-menu-item');
+    splitItem.textContent = 'Split element';
+    splitItem.dataset.testid = 'split-element-menu-item';
     const pluginDiv   = document.createElement('sl-divider');
     pluginDiv.style.display = 'none';
 
-    menu.append(copyItem, cutItem, pasteItem, sep, selAllItem, editSep, unwrapItem, pluginDiv);
+    menu.append(copyItem, cutItem, pasteItem, sep, selAllItem, editSep, unwrapItem, splitItem, pluginDiv);
     overlay.appendChild(menu);
 
     parent.appendChild(overlay);
@@ -157,6 +163,7 @@ export class XmlEditorContextMenu {
     this.#menu          = menu;
     this.#pluginDivider = pluginDiv;
     this.#unwrapItem    = unwrapItem;
+    this.#splitItem     = splitItem;
 
     // Bind commands
     undoBtn.addEventListener('click',   () => { undo(this.#editor.getView());       this.#hide(); });
@@ -166,6 +173,7 @@ export class XmlEditorContextMenu {
     pasteItem.addEventListener('click', () => this.#paste());
     selAllItem.addEventListener('click',() => { selectAll(this.#editor.getView()); this.#hide(); });
     unwrapItem.addEventListener('click', () => this.#unwrapAtClickPos());
+    splitItem.addEventListener('click',  () => this.#splitAtCursor());
 
     // Close the menu on any sl-menu item click (covers plugin-contributed items)
     menu.addEventListener('click', () => this.#hide());
@@ -261,6 +269,13 @@ export class XmlEditorContextMenu {
       this.#unwrapItem.disabled = !canUnwrap;
     }
 
+    // "Split <tag>" splits the element that contains the cursor into two
+    if (this.#splitItem) {
+      const target = readOnly ? null : findSplitTarget(view.state, view.state.selection.main.head);
+      this.#splitItem.disabled = !target;
+      this.#splitItem.textContent = target ? `Split <${target.tagName}>` : 'Split element';
+    }
+
     // Show "Incoming"/"Current" buttons only when right-clicking inside a merge-view chunk.
     //
     // In showMergeView() the annotated XML is passed as `original` (B) and the
@@ -341,6 +356,14 @@ export class XmlEditorContextMenu {
     } catch (err) {
       console.warn('xml-editor-context-menu: unwrap failed:', err.message);
     }
+  }
+
+  /** Split the element that contains the cursor into two sibling elements. */
+  #splitAtCursor() {
+    const view = this.#editor.getView();
+    const spec = splitElementAt(view.state, view.state.selection.main.head);
+    if (spec) view.dispatch(spec);
+    view.focus();
   }
 
   #hide() {

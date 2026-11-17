@@ -87,7 +87,17 @@ You can type directly in the editor at any time the document is not read-only. T
 | Current / Incoming | Accept or discard one diff chunk (only shown inside a changed chunk in merge view) |
 | Copy / Cut / Paste / Select All | Standard clipboard operations |
 | Remove tag | Unwrap the tag at the cursor, preserving its text content |
-| Insert `</tag><tag>` | Insert a tag boundary at the cursor position using the tag from the current XPath navigation selection |
+| Split `<tag>` | Split the element that contains the cursor into two elements of the same name at the cursor position. The second element gets the attributes of the first one except `xml:id`, and the cursor is placed at its start. Not available inside a tag, comment or entity, or in the root element |
+
+To split an element, for example a `<body>` of a segmentation training document that covers two zones, place the cursor where the second part begins, right-click and choose **Split `<tag>`**. The entry shows the name of the element that will be split.
+
+![The context menu of the XML editor opened with the cursor in the text of a body element before "A key aspect", with the entry "Split <body>" below "Remove tag"](../images/editing-workflow-split-element.png)
+
+*The entry **Split `<body>`** splits the element that contains the cursor.*
+
+![The same text after the split: "Introduction <lb/>" ends with </body>, followed by a new <body> element that starts with "A key aspect"](../images/editing-workflow-split-element-result.png)
+
+*After the split, the text after the cursor is in a second `<body>` element.*
 
 ---
 
