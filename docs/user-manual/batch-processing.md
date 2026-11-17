@@ -35,18 +35,10 @@ uv sync # only for the python scripts
 
 ## Authentication
 
-In order to use the scripts, you need to store your credentials in a file called `.env` in the directory from which you launch the scripts. Preferably, use a [personal access token](access-tokens.md) (user menu > Access Tokens):
+In order to use the scripts, you need to store a [personal access token](access-tokens.md) (user menu > Access Tokens) in a file called `.env` in the directory from which you launch the scripts:
 
 ```env
 API_TOKEN=<your access token>
-API_BASE_URL=<the url of the PDF-TEI-Editor instance>
-```
-
-`batch-extract.js` requires an access token. The other scripts also accept your user name and password:
-
-```env
-API_USER=<your user name>
-API_PASSWORD=<your password>
 API_BASE_URL=<the url of the PDF-TEI-Editor instance>
 ```
 
