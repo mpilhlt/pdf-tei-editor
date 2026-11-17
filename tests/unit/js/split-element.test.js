@@ -20,7 +20,7 @@ import { findSplitTarget, splitElementAt } from '../../../app/src/modules/codemi
  */
 function stateAt(marked) {
   const pos = marked.indexOf('|');
-  const state = EditorState.create({ doc: marked.replace('|', ''), extensions: [xml()] });
+  const state = EditorState.create({ doc: marked.slice(0, pos) + marked.slice(pos + 1), extensions: [xml()] });
   ensureSyntaxTree(state, state.doc.length, 5000);
   return { state, pos };
 }
