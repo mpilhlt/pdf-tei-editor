@@ -271,29 +271,27 @@ test('auth login calls correct endpoint', async () => {
 When creating CLI scripts or external tools that access the HTTP API programmatically, support these standard environment variables:
 
 ```bash
-# API credentials: a personal access token (preferred) ...
+# Personal access token (see docs/user-manual/access-tokens.md)
 API_TOKEN=pte_...
-# ... or username and password (used if API_TOKEN is not set)
-API_USER=admin
-API_PASSWORD=admin
 
 # API base URL (default: http://localhost:8000)
 API_BASE_URL=http://localhost:8000
 ```
 
-**Standard pattern for CLI scripts:** use the shared login helper in [bin/lib/api-auth.js](../../bin/lib/api-auth.js), which prefers a token (`POST /api/v1/auth/token-login` with `Authorization: Bearer`) and falls back to password login:
+**Standard pattern for CLI scripts:** use the shared login helper in [bin/lib/api-auth.js](../../bin/lib/api-auth.js), which exchanges the token for a session (`POST /api/v1/auth/token-login` with `Authorization: Bearer`). CLI scripts do not log in with a username and password:
 
 ```javascript
 import dotenv from 'dotenv';
-import { login, resolveCredentials } from './lib/api-auth.js';
+import { loginWithToken, resolveToken } from './lib/api-auth.js';
 
 // Load .env file
 dotenv.config({ path: envPath });
 
-// --token/--user/--password override API_TOKEN/API_USER/API_PASSWORD; a token overrides user and password
-const credentials = resolveCredentials({ token: cliToken, user: cliUser, password: cliPassword });
+// --token overrides API_TOKEN
+const token = resolveToken(cliToken);
+if (!token) throw new Error('Provide a personal access token via --token or API_TOKEN');
 const baseUrl = cliBaseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
-const sessionId = await login(baseUrl, credentials);
+const sessionId = await loginWithToken(baseUrl, token);
 
 // Make authenticated requests with X-Session-ID header
 await fetch(`${baseUrl}/api/v1/files/list`, {
@@ -305,8 +303,6 @@ await fetch(`${baseUrl}/api/v1/files/list`, {
 
 - `--env <path>` - Path to .env file (default: `./.env`)
 - `--token <token>` - Override API_TOKEN from env
-- `--user <username>` - Override API_USER from env
-- `--password <password>` - Override API_PASSWORD from env
 - `--base-url <url>` - Override API_BASE_URL from env
 
 **Example implementations:**
@@ -321,7 +317,7 @@ await fetch(`${baseUrl}/api/v1/files/list`, {
 - **Use typed parameters**: Let IDE autocomplete guide you
 - **Handle errors at transport layer**: Let `callApi` manage retries
 - **Add JSDoc to shims**: Type annotations in wrapper functions
-- **Support standard env vars in CLI scripts**: Use API_TOKEN, API_USER, API_PASSWORD, API_BASE_URL (via `bin/lib/api-auth.js`)
+- **Support standard env vars in CLI scripts**: Use API_TOKEN and API_BASE_URL (via `bin/lib/api-auth.js`); never add username/password login
 
 ### DON'T ❌
 
