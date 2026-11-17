@@ -804,7 +804,11 @@ class XmlEditorPlugin extends Plugin {
     document.addEventListener('keydown', (evt) => this.#onEscapeKey(evt));
 
     // Context menu — self-contained, mounts to the editor panel
-    this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor);
+    // The visual annotation mode makes the editor read-only for typing, but the document stays
+    // editable for menu commands such as "Split <tag>".
+    this.#contextMenu = new XmlEditorContextMenu(this.#xmlEditor, {
+      isDocumentEditable: () => !!this.state && !this.state.editorReadOnly
+    });
     this.#contextMenu.mount(this.#xmlEditorEl);
   }
 

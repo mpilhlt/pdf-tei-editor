@@ -2,8 +2,10 @@
  * Split element end-to-end test
  *
  * Right-clicks into the text of an element and splits it with the "Split <tag>" entry of the XML
- * editor's context menu. Checks that the entry is disabled inside a tag and that the second
- * element gets the attributes of the first one except xml:id.
+ * editor's context menu. Checks that the entry is disabled inside a tag, that the second element
+ * gets the attributes of the first one except xml:id, and that splitting works while the editor is
+ * read-only for typing but the document is editable (as in the visual annotation mode), at the
+ * right-clicked position. Holding Shift swaps in "Split <tag> in new line".
  *
  * @testCovers app/src/modules/codemirror/xml-editor-context-menu.js
  * @testCovers app/src/modules/codemirror/split-element.js
@@ -102,8 +104,45 @@ test.describe('Split element', () => {
       await expect(item).toHaveText('Split <p>');
       await item.click();
 
-      const text = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
+      let text = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
       expect(text).toContain('<p xml:id="p1" n="1">First part </p><p n="1">Second part</p>');
+
+      // like the visual annotation mode: the editor is read-only for typing, the document is
+      // editable, and a right-click away from the cursor splits at the clicked position
+      await page.evaluate(async () => {
+        const xmlEditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        await xmlEditor.setReadOnly(true);
+        xmlEditor.getView().dispatch({ selection: { anchor: 0 } });
+      });
+      const point = await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const coords = view.coordsAtPos(view.state.doc.toString().indexOf('part </p>'));
+        return { x: coords.left + 1, y: (coords.top + coords.bottom) / 2 };
+      });
+      await page.mouse.click(point.x, point.y, { button: 'right' });
+      await expect(item).toBeVisible();
+      await expect(item).toHaveText('Split <p>');
+      await item.click();
+      text = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
+      expect(text).toContain('<p xml:id="p1" n="1">First </p><p n="1">part </p><p n="1">Second part</p>');
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').setReadOnly(false));
+
+      // holding Shift swaps in "Split <p> in new line", which starts the second element on a new line
+      const lineItem = page.getByTestId('split-element-newline-menu-item');
+      await rightClickAt(page, 'part</p>');
+      await expect(item).toBeVisible();
+      await expect(lineItem).toBeHidden();
+      await page.keyboard.down('Shift');
+      await expect(item).toBeHidden();
+      await expect(lineItem).toBeVisible();
+      await expect(lineItem).toHaveText('Split <p> in new line');
+      await page.keyboard.up('Shift');
+      await expect(lineItem).toBeHidden();
+      await page.keyboard.down('Shift');
+      await lineItem.click();
+      await page.keyboard.up('Shift');
+      text = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
+      expect(text).toContain('<p n="1">part </p><p n="1">Second </p>\n      <p n="1">part</p>');
     } finally {
       if (stableId) {
         await page.evaluate(async (id) => {

@@ -3,7 +3,7 @@
  *
  * Works on the CodeMirror XML syntax tree, so it needs no DOM sync and does not depend on the
  * navigation XPath. The second element gets a copy of the opening tag of the first one, minus its
- * `xml:id` attribute, which must stay unique.
+ * `xml:id` attribute, which must stay unique. Optionally, the second element starts on a new line.
  *
  * @import { EditorState, TransactionSpec } from '@codemirror/state'
  * @import { SyntaxNode } from '@lezer/common'
@@ -22,6 +22,12 @@ const UNSPLITTABLE = new Set([
  * @property {string} tagName - The name of the element that is split
  * @property {number} pos - The position at which it is split
  * @property {string} insert - The text inserted at `pos`: the closing tag and the new opening tag
+ */
+
+/**
+ * @typedef {object} SplitOptions
+ * @property {boolean} [newLine] - Start the second element on a new line, indented like the line
+ *   on which the first element starts
  */
 
 /**
@@ -44,9 +50,10 @@ function childNamed(node, name) {
  * parser could not match.
  * @param {EditorState} state
  * @param {number} pos
+ * @param {SplitOptions} [options]
  * @returns {SplitTarget|null}
  */
-export function findSplitTarget(state, pos) {
+export function findSplitTarget(state, pos, options = {}) {
   /** @type {SyntaxNode|null} */
   let node = syntaxTree(state).resolveInner(pos, 0);
   for (let n = node; n; n = n.parent) {
@@ -76,7 +83,10 @@ export function findSplitTarget(state, pos) {
   }
   openTagText += state.sliceDoc(copiedTo, openTag.to);
 
-  return { tagName, pos, insert: `</${tagName}>${openTagText}` };
+  const lineBreak = options.newLine
+    ? '\n' + (/^[ \t]*/.exec(state.doc.lineAt(openTag.from).text)?.[0] ?? '')
+    : '';
+  return { tagName, pos, insert: `</${tagName}>${lineBreak}${openTagText}` };
 }
 
 /**
@@ -84,10 +94,11 @@ export function findSplitTarget(state, pos) {
  * of the content of the new second element, or null if no element can be split there.
  * @param {EditorState} state
  * @param {number} pos
+ * @param {SplitOptions} [options]
  * @returns {TransactionSpec|null}
  */
-export function splitElementAt(state, pos) {
-  const target = findSplitTarget(state, pos);
+export function splitElementAt(state, pos, options = {}) {
+  const target = findSplitTarget(state, pos, options);
   if (!target) return null;
   return {
     changes: { from: target.pos, insert: target.insert },

@@ -6,6 +6,10 @@
  * - `addItem(element)` — append a contributed <sl-menu-item> or <sl-divider>
  * - `prependRow(element)` — add a contributed button row above the "History" row
  *
+ * Items can be swapped by holding Shift, when the menu opens or while it is open: an item with
+ * `data-show-with="shift"` is only shown while Shift is held, an item with `data-hide-with="shift"`
+ * is hidden then. Built-in example: "Split <tag>" / "Split <tag> in new line".
+ *
  * No dependency on the template system or navigable-element infrastructure.
  *
  * @import { XMLEditor } from '../xmleditor.js'
@@ -35,13 +39,23 @@ function makeMenuItem(label, shortcut) {
 }
 
 export class XmlEditorContextMenu {
-  /** @param {XMLEditor} editor */
-  constructor(editor) {
+  /**
+   * @param {XMLEditor} editor
+   * @param {{ isDocumentEditable?: () => boolean }} [options] - `isDocumentEditable` tells whether
+   *   the document may be changed by menu commands such as "Split <tag>". It defaults to the
+   *   editor not being read-only; pass it when the editor is read-only for typing although the
+   *   document is editable, as in the visual annotation mode.
+   */
+  constructor(editor, options = {}) {
     this.#editor = editor;
+    this.#isDocumentEditable = options.isDocumentEditable ?? (() => !editor.isReadOnly());
   }
 
   /** @type {XMLEditor} */
   #editor;
+
+  /** @type {() => boolean} */
+  #isDocumentEditable;
 
   /** @type {HTMLElement|null} */
   #overlay = null;
@@ -69,6 +83,10 @@ export class XmlEditorContextMenu {
   #unwrapItem = null;
   /** @type {HTMLElement|null} */
   #splitItem = null;
+  /** @type {HTMLElement|null} */
+  #splitLineItem = null;
+  /** @type {number} Position at which "Split <tag>" splits, recorded when the menu is shown */
+  #splitPos = 0;
   /** @type {number} */
   #clickDocPos = 0;
   /** @type {Array<(ctx: {readOnly: boolean, pos: number}) => void>} */
@@ -142,10 +160,16 @@ export class XmlEditorContextMenu {
     const splitItem   = document.createElement('sl-menu-item');
     splitItem.textContent = 'Split element';
     splitItem.dataset.testid = 'split-element-menu-item';
+    splitItem.dataset.hideWith = 'shift';
+    const splitLineItem = document.createElement('sl-menu-item');
+    splitLineItem.textContent = 'Split element in new line';
+    splitLineItem.dataset.testid = 'split-element-newline-menu-item';
+    splitLineItem.dataset.showWith = 'shift';
+    splitLineItem.style.display = 'none';
     const pluginDiv   = document.createElement('sl-divider');
     pluginDiv.style.display = 'none';
 
-    menu.append(copyItem, cutItem, pasteItem, sep, selAllItem, editSep, unwrapItem, splitItem, pluginDiv);
+    menu.append(copyItem, cutItem, pasteItem, sep, selAllItem, editSep, unwrapItem, splitItem, splitLineItem, pluginDiv);
     overlay.appendChild(menu);
 
     parent.appendChild(overlay);
@@ -164,6 +188,7 @@ export class XmlEditorContextMenu {
     this.#pluginDivider = pluginDiv;
     this.#unwrapItem    = unwrapItem;
     this.#splitItem     = splitItem;
+    this.#splitLineItem = splitLineItem;
 
     // Bind commands
     undoBtn.addEventListener('click',   () => { undo(this.#editor.getView());       this.#hide(); });
@@ -173,7 +198,8 @@ export class XmlEditorContextMenu {
     pasteItem.addEventListener('click', () => this.#paste());
     selAllItem.addEventListener('click',() => { selectAll(this.#editor.getView()); this.#hide(); });
     unwrapItem.addEventListener('click', () => this.#unwrapAtClickPos());
-    splitItem.addEventListener('click',  () => this.#splitAtCursor());
+    splitItem.addEventListener('click',  () => this.#splitAtRecordedPos());
+    splitLineItem.addEventListener('click', () => this.#splitAtRecordedPos({ newLine: true }));
 
     // Close the menu on any sl-menu item click (covers plugin-contributed items)
     menu.addEventListener('click', () => this.#hide());
@@ -186,6 +212,7 @@ export class XmlEditorContextMenu {
     cm?.addEventListener('contextmenu', evt => {
       evt.preventDefault();
       this.#show(evt.clientX, evt.clientY);
+      this.#applyModifier(evt.shiftKey);
     });
 
     // Dismiss on outside click or Escape
@@ -196,6 +223,10 @@ export class XmlEditorContextMenu {
     });
     document.addEventListener('keydown', evt => {
       if (evt.key === 'Escape') this.#hide();
+      if (evt.key === 'Shift' && this.#isShown()) this.#applyModifier(true);
+    });
+    document.addEventListener('keyup', evt => {
+      if (evt.key === 'Shift' && this.#isShown()) this.#applyModifier(false);
     });
   }
 
@@ -269,11 +300,19 @@ export class XmlEditorContextMenu {
       this.#unwrapItem.disabled = !canUnwrap;
     }
 
-    // "Split <tag>" splits the element that contains the cursor into two
+    // "Split <tag>" splits the element at the cursor into two. A right-click outside the selection
+    // splits at the clicked position instead: in the visual annotation mode, a right-click does not
+    // move the cursor.
     if (this.#splitItem) {
-      const target = readOnly ? null : findSplitTarget(view.state, view.state.selection.main.head);
+      const inSelection = this.#clickDocPos >= from && this.#clickDocPos <= to;
+      this.#splitPos = inSelection ? view.state.selection.main.head : this.#clickDocPos;
+      const target = this.#isDocumentEditable() ? findSplitTarget(view.state, this.#splitPos) : null;
       this.#splitItem.disabled = !target;
       this.#splitItem.textContent = target ? `Split <${target.tagName}>` : 'Split element';
+      if (this.#splitLineItem) {
+        this.#splitLineItem.disabled = !target;
+        this.#splitLineItem.textContent = target ? `Split <${target.tagName}> in new line` : 'Split element in new line';
+      }
     }
 
     // Show "Incoming"/"Current" buttons only when right-clicking inside a merge-view chunk.
@@ -358,12 +397,31 @@ export class XmlEditorContextMenu {
     }
   }
 
-  /** Split the element that contains the cursor into two sibling elements. */
-  #splitAtCursor() {
+  /** Split the element at the position recorded when the menu was shown into two elements. */
+  /** @param {{ newLine?: boolean }} [options] */
+  #splitAtRecordedPos(options = {}) {
     const view = this.#editor.getView();
-    const spec = splitElementAt(view.state, view.state.selection.main.head);
+    const spec = splitElementAt(view.state, this.#splitPos, options);
     if (spec) view.dispatch(spec);
     view.focus();
+  }
+
+  /** @returns {boolean} Whether the menu is shown */
+  #isShown() {
+    return !!this.#overlay && this.#overlay.style.display !== 'none';
+  }
+
+  /**
+   * Shows the items that are swapped in by holding Shift and hides their counterparts, or the
+   * other way round.
+   * @param {boolean} shift - Whether Shift is held
+   */
+  #applyModifier(shift) {
+    for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.#menu?.querySelectorAll('[data-show-with], [data-hide-with]') ?? [])) {
+      const hide = el.dataset.showWith === 'shift' ? !shift : el.dataset.hideWith === 'shift' && shift;
+      // Shoelace menu items set `display` on their host, which overrides the `hidden` attribute
+      el.style.display = hide ? 'none' : '';
+    }
   }
 
   #hide() {

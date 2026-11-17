@@ -28,11 +28,12 @@ function stateAt(marked) {
 /**
  * Splits at the marked position and returns the resulting document and the cursor, or null.
  * @param {string} marked
+ * @param {{newLine?: boolean}} [options]
  * @returns {{doc: string, cursor: number}|null}
  */
-function split(marked) {
+function split(marked, options = {}) {
   const { state, pos } = stateAt(marked);
-  const spec = splitElementAt(state, pos);
+  const spec = splitElementAt(state, pos, options);
   if (!spec) return null;
   const tr = state.update(spec);
   return { doc: tr.state.doc.toString(), cursor: tr.state.selection.main.head };
@@ -64,6 +65,17 @@ describe('splitElementAt', () => {
   it('splits at the start and the end of the content', () => {
     assert.strictEqual(split('<r><p>|ab</p></r>')?.doc, '<r><p></p><p>ab</p></r>');
     assert.strictEqual(split('<r><p>ab|</p></r>')?.doc, '<r><p>ab</p><p></p></r>');
+  });
+
+  it('starts the second element on a new line, indented like the first one', () => {
+    const result = split('<TEI>\n  <text>\n    <body n="1">One <lb/>|Two</body>\n  </text>\n</TEI>', { newLine: true });
+    assert.strictEqual(result?.doc, '<TEI>\n  <text>\n    <body n="1">One <lb/></body>\n    <body n="1">Two</body>\n  </text>\n</TEI>');
+    assert.strictEqual(result.doc.slice(result.cursor, result.cursor + 3), 'Two');
+  });
+
+  it('indents the new line like the line on which the element starts', () => {
+    const result = split('<r>\n\t<front>A</front><body>B|C</body>\n</r>', { newLine: true });
+    assert.strictEqual(result?.doc, '<r>\n\t<front>A</front><body>B</body>\n\t<body>C</body>\n</r>');
   });
 
   it('reports the tag name of the element', () => {
