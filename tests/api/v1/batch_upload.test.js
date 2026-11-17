@@ -58,6 +58,12 @@ function runBatchExtract(args) {
 describe('Batch Extract Script Tests', () => {
   let testDir = null;
   let envFile = null;
+  /** @type {string|null} */
+  let adminSessionId = null;
+  /** @type {string|null} */
+  let token = null;
+  /** @type {string|null} */
+  let tokenId = null;
 
   // Setup: Create test directory with PDFs
   test('Setup: create test directory with sample PDFs', async () => {
@@ -76,10 +82,21 @@ describe('Batch Extract Script Tests', () => {
     logger.success(`Created test directory: ${testDir}`);
   });
 
-  test('Setup: create .env file for authentication', async () => {
+  test('Setup: create access token and .env file for authentication', async () => {
+    adminSessionId = (await login('admin', 'admin', BASE_URL)).sessionId;
+    const created = await authenticatedApiCall(
+      adminSessionId,
+      '/auth/tokens',
+      'POST',
+      { label: 'batch-extract test', expires_in_days: 1 },
+      BASE_URL
+    );
+    token = created.token;
+    tokenId = created.info.token_id;
+    assert.ok(token, 'Should create an access token');
+
     envFile = join(testDir, '.env');
-    const envContent = `API_USER=admin
-API_PASSWORD=admin
+    const envContent = `API_TOKEN=${token}
 API_BASE_URL=${BASE_URL}
 `;
     await writeFile(envFile, envContent);
@@ -188,21 +205,23 @@ API_BASE_URL=${BASE_URL}
     logger.success('Recursive batch extract completed successfully');
   });
 
-  test('Batch extract should use CLI credentials over .env', async () => {
+  test('Batch extract should use CLI token over .env', async () => {
+    const invalidEnvFile = join(testDir, 'invalid.env');
+    await writeFile(invalidEnvFile, 'API_TOKEN=pte_invalid\n');
+
     const result = await runBatchExtract([
       testDir,
-      '--env', envFile,
-      '--user', 'admin',
-      '--password', 'admin',
+      '--env', invalidEnvFile,
+      '--token', token,
       '--base-url', BASE_URL,
       '--collection', 'test_batch_cli',
       '--extractor', 'mock-extractor'
     ]);
 
-    assert.strictEqual(result.exitCode, 0, 'Should exit successfully with CLI credentials');
+    assert.strictEqual(result.exitCode, 0, 'Should exit successfully with CLI token');
     assert.ok(result.stdout.includes('Success:'), 'Should process files successfully');
 
-    logger.success('CLI credentials override worked correctly');
+    logger.success('CLI token override worked correctly');
   });
 
   test('Batch extract should skip already-processed files (resume)', async () => {
@@ -239,11 +258,8 @@ API_BASE_URL=${BASE_URL}
   });
 
   test('Verify files were extracted successfully', async () => {
-    // Login as admin to check that files exist
-    const session = await login('admin', 'admin', BASE_URL);
-
     const filesResponse = await authenticatedApiCall(
-      session.sessionId,
+      adminSessionId,
       '/files/list',
       'GET',
       null,
@@ -261,7 +277,10 @@ API_BASE_URL=${BASE_URL}
     logger.success(`Found ${files.length} document groups from batch extract`);
   });
 
-  test('Cleanup: remove test directory', async () => {
+  test('Cleanup: revoke access token and remove test directory', async () => {
+    if (adminSessionId && tokenId) {
+      await authenticatedApiCall(adminSessionId, `/auth/tokens/${tokenId}`, 'DELETE', null, BASE_URL);
+    }
     if (testDir) {
       await rm(testDir, { recursive: true, force: true });
       logger.success('Cleaned up test directory');

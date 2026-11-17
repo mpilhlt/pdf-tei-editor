@@ -21,9 +21,7 @@ node bin/manage-remote.js <command> <subcommand> [options]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--env <path>` | Path to .env file | `./.env` |
-| `--token <token>` | Personal access token, used instead of `--user`/`--password` | from `API_TOKEN` in .env |
-| `--user <username>` | Username for authentication | from `API_USER` in .env |
-| `--password <password>` | Password for authentication | from `API_PASSWORD` in .env |
+| `--token <token>` | Personal access token | from `API_TOKEN` in .env |
 | `--base-url <url>` | API base URL | from `API_BASE_URL` in .env or `http://localhost:8000` |
 
 ## Environment Variables
@@ -31,9 +29,7 @@ node bin/manage-remote.js <command> <subcommand> [options]
 Configure these in your `.env` file:
 
 ```bash
-API_TOKEN=pte_...          # personal access token (preferred, see access-tokens.md)
-API_USER=admin             # used if API_TOKEN is not set
-API_PASSWORD=admin
+API_TOKEN=pte_...          # personal access token, see access-tokens.md
 API_BASE_URL=http://localhost:8000
 ```
 

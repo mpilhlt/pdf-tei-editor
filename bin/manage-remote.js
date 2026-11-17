@@ -10,9 +10,7 @@
  *
  * Global Options:
  *   --env <path>          Path to .env file (default: ./.env)
- *   --token <token>       Personal access token (default: from .env API_TOKEN); preferred over --user/--password
- *   --user <username>     Username for authentication (default: from .env API_USER)
- *   --password <password> Password for authentication (default: from .env API_PASSWORD)
+ *   --token <token>       Personal access token (default: from .env API_TOKEN)
  *   --base-url <url>      API base URL (default: from .env API_BASE_URL or http://localhost:8000)
  *
  * Commands:
@@ -30,11 +28,7 @@ import { Command } from 'commander';
 import { resolve } from 'path';
 import { createInterface } from 'readline';
 import dotenv from 'dotenv';
-import { login, resolveCredentials } from './lib/api-auth.js';
-
-/**
- * @import { ApiCredentials } from './lib/api-auth.js'
- */
+import { loginWithToken, resolveToken } from './lib/api-auth.js';
 
 // ============================================================================
 // Utility Functions
@@ -129,9 +123,9 @@ async function apiRequest(baseUrl, sessionId, method, path, body = null) {
 }
 
 /**
- * Initialize environment and get credentials
- * @param {object} options - Command options with env, token, user, password, baseUrl
- * @returns {{baseUrl: string, credentials: ApiCredentials}}
+ * Initialize environment and get the access token
+ * @param {{env?: string, token?: string, baseUrl?: string}} options - Global command options
+ * @returns {{baseUrl: string, token: string|undefined}}
  */
 function initEnv(options) {
   const envFile = resolve(options.env || './.env');
@@ -142,10 +136,10 @@ function initEnv(options) {
     throw envConfig.error;
   }
 
-  const credentials = resolveCredentials(options);
+  const token = resolveToken(options.token);
   const baseUrl = options.baseUrl || process.env.API_BASE_URL || 'http://localhost:8000';
 
-  return { baseUrl, credentials };
+  return { baseUrl, token };
 }
 
 /**
@@ -155,18 +149,13 @@ function initEnv(options) {
  */
 async function runAuthenticated(options, action) {
   try {
-    const { baseUrl, credentials } = initEnv(options);
+    const { baseUrl, token } = initEnv(options);
 
-    if (!credentials.token) {
-      if (!credentials.username) {
-        throw new Error('Access token or username required. Use --token or --user, or set API_TOKEN or API_USER in .env');
-      }
-      if (!credentials.password) {
-        credentials.password = await promptPassword('Password: ');
-      }
+    if (!token) {
+      throw new Error('Personal access token required. Use --token or set API_TOKEN in .env');
     }
 
-    const sessionId = await login(baseUrl, credentials);
+    const sessionId = await loginWithToken(baseUrl, token);
     await action(baseUrl, sessionId);
   } catch (error) {
     console.error(`Error: ${error.message}`);
@@ -983,9 +972,7 @@ program
   .description('Remote management CLI for PDF-TEI-Editor')
   .version('1.0.0')
   .option('--env <path>', 'Path to .env file', './.env')
-  .option('--token <token>', 'Personal access token (overrides .env API_TOKEN); preferred over --user/--password')
-  .option('--user <username>', 'Username for authentication (overrides .env API_USER)')
-  .option('--password <password>', 'Password for authentication (overrides .env API_PASSWORD)')
+  .option('--token <token>', 'Personal access token (overrides .env API_TOKEN)')
   .option('--base-url <url>', 'API base URL (overrides .env API_BASE_URL)');
 
 // Get global options from program
