@@ -699,6 +699,9 @@ sl-menu[name="pluginsMenu"] small {
   font-size: var(--sl-font-size-x-small);
   color: var(--sl-color-neutral-500);
 }
+.xml-editor-context-menu__divider--redundant {
+  display: none !important;
+}
 /* XML Annotation Mode */
 .ann-badge {
   display: inline-block;

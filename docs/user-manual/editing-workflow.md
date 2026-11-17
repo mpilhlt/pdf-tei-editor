@@ -81,14 +81,15 @@ You can type directly in the editor at any time the document is not read-only. T
 
 **Right-click context menu:**
 
+The entries that plugins add, such as **Bookmark…** and **Comment…**, come first, followed by the entries that change the markup and the clipboard operations.
+
 | Item | What it does |
 | --- | --- |
-| Undo / Redo | History buttons at the top of the menu |
 | Current / Incoming | Accept or discard one diff chunk (only shown inside a changed chunk in merge view) |
-| Copy / Cut / Paste / Select All | Standard clipboard operations |
 | Remove tag | Unwrap the tag at the cursor, preserving its text content |
 | Split `<tag>` | Split the element at the right-clicked position (or at the cursor, if you right-click into the selection) into two elements of the same name. The second element gets the attributes of the first one except `xml:id`, and the cursor is placed at its start. Not available inside a tag, comment or entity, or in the root element. Also available in the [visual annotation mode](#splitting-an-annotation) |
 | Split `<tag>` in new line | Shown instead of Split `<tag>` while you hold `Shift`: splits the same way and starts the second element on a new line, indented like the line on which the element starts |
+| Copy / Cut / Paste / Select All | Standard clipboard operations |
 
 To split an element, for example a `<body>` of a segmentation training document that covers two zones, right-click where the second part begins and choose **Split `<tag>`**. The entry shows the name of the element that will be split.
 
@@ -100,7 +101,7 @@ To split an element, for example a `<body>` of a segmentation training document 
 
 *After the split, the text after the cursor is in a second `<body>` element.*
 
-Some entries of the context menu have a variant that is shown instead while you hold `Shift`, either when you right-click or while the menu is open. Holding `Shift` turns **Split `<tag>`** into **Split `<tag>` in new line**, which puts the second element on its own line.
+Some entries of the context menu have a variant that is shown instead while you hold `Shift`, either when you right-click or while the menu is open. These entries are marked with **⇧**. Holding `Shift` turns **Split `<tag>`** into **Split `<tag>` in new line**, which puts the second element on its own line.
 
 ![The context menu opened with Shift held, with the entry "Split <body> in new line" in place of "Split <body>"](../images/editing-workflow-split-element-new-line.png)
 
@@ -335,7 +336,7 @@ Use these commands when a single logical annotation has been split across two sp
 
 Right-click where the second part of an annotated span begins and choose **Split `<tag>`** in the context menu. The element is split into two elements of the same type, each with its own badge. This is the counterpart of the merge commands, for example when one `<body>` of a segmentation document covers two zones.
 
-![The visual annotation mode with the context menu opened in a BODY span before "A key aspect", with the entry "Split <body>" at the bottom](../images/editing-workflow-split-element-visual.png)
+![The visual annotation mode with the context menu opened in a BODY span before "A key aspect", with the entry "Split <body>" below "Remove tag"](../images/editing-workflow-split-element-visual.png)
 
 *Splitting an annotation in the visual mode.*
 

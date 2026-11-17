@@ -94,14 +94,15 @@ test.describe('Split element', () => {
       await rightClickAt(page, 'n="1"', 1);
       await expect(item).toBeVisible();
       await expect(item).toHaveAttribute('disabled', '');
-      await expect(item).toHaveText('Split element');
+      await expect(item).toContainText('Split element');
       await page.keyboard.press('Escape');
 
       // splits the <p> at the cursor
       await rightClickAt(page, 'Second part');
       await expect(item).toBeVisible();
       await expect(item).not.toHaveAttribute('disabled', '');
-      await expect(item).toHaveText('Split <p>');
+      await expect(item).toContainText('Split <p>');
+      await expect(item.locator('[slot="suffix"]')).toHaveText('⇧');
       await item.click();
 
       let text = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
@@ -121,7 +122,7 @@ test.describe('Split element', () => {
       });
       await page.mouse.click(point.x, point.y, { button: 'right' });
       await expect(item).toBeVisible();
-      await expect(item).toHaveText('Split <p>');
+      await expect(item).toContainText('Split <p>');
       await item.click();
       text = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.doc.toString());
       expect(text).toContain('<p xml:id="p1" n="1">First </p><p n="1">part </p><p n="1">Second part</p>');
@@ -135,7 +136,7 @@ test.describe('Split element', () => {
       await page.keyboard.down('Shift');
       await expect(item).toBeHidden();
       await expect(lineItem).toBeVisible();
-      await expect(lineItem).toHaveText('Split <p> in new line');
+      await expect(lineItem).toContainText('Split <p> in new line');
       await page.keyboard.up('Shift');
       await expect(lineItem).toBeHidden();
       await page.keyboard.down('Shift');

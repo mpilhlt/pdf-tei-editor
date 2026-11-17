@@ -38,6 +38,20 @@ function makeMenuItem(label, shortcut) {
   return item;
 }
 
+/**
+ * A "⇧" hint in the suffix of a menu item that has a variant shown while Shift is held.
+ * @param {string} title - Tooltip of the hint
+ * @returns {HTMLElement}
+ */
+function makeShiftHint(title) {
+  const hint = document.createElement('span');
+  hint.slot = 'suffix';
+  hint.className = 'xml-editor-context-menu__shortcut';
+  hint.textContent = '⇧';
+  hint.title = title;
+  return hint;
+}
+
 export class XmlEditorContextMenu {
   /**
    * @param {XMLEditor} editor
@@ -85,6 +99,10 @@ export class XmlEditorContextMenu {
   #splitItem = null;
   /** @type {HTMLElement|null} */
   #splitLineItem = null;
+  /** @type {Text|null} */
+  #splitLabel = null;
+  /** @type {Text|null} */
+  #splitLineLabel = null;
   /** @type {number} Position at which "Split <tag>" splits, recorded when the menu is shown */
   #splitPos = 0;
   /** @type {number} */
@@ -119,6 +137,8 @@ export class XmlEditorContextMenu {
     redoBtn.textContent = 'Redo';
 
     historyRow.append(historyLabel, undoBtn, redoBtn);
+    // Hidden: undo and redo are rarely used from the context menu. Kept for now.
+    historyRow.style.display = 'none';
     overlay.appendChild(historyRow);
 
     // Diff row — shown only when right-clicking inside a merge-view chunk
@@ -149,27 +169,33 @@ export class XmlEditorContextMenu {
     // sl-menu with built-in items
     const menu = document.createElement('sl-menu');
 
+    // Structural commands come first, below the items that plugins prepend (e.g. "Comment…").
+    // Dividers that end up at the start or end of the menu or next to another one are hidden
+    // when the menu is shown (see #hideRedundantDividers).
+    const structTopSep = document.createElement('sl-divider');
+    const unwrapItem  = document.createElement('sl-menu-item');
+    unwrapItem.textContent = 'Remove tag';
+    const splitItem   = document.createElement('sl-menu-item');
+    const splitLabel  = document.createTextNode('Split element');
+    splitItem.append(splitLabel, makeShiftHint('Hold Shift to split in a new line'));
+    splitItem.dataset.testid = 'split-element-menu-item';
+    splitItem.dataset.hideWith = 'shift';
+    const splitLineItem = document.createElement('sl-menu-item');
+    const splitLineLabel = document.createTextNode('Split element in new line');
+    splitLineItem.append(splitLineLabel, makeShiftHint('Release Shift to split in the same line'));
+    splitLineItem.dataset.testid = 'split-element-newline-menu-item';
+    splitLineItem.dataset.showWith = 'shift';
+    splitLineItem.style.display = 'none';
+    const structSep   = document.createElement('sl-divider');
     const copyItem    = makeMenuItem('Copy',       'Ctrl+C');
     const cutItem     = makeMenuItem('Cut',        'Ctrl+X');
     const pasteItem   = makeMenuItem('Paste',      'Ctrl+V');
     const sep         = document.createElement('sl-divider');
     const selAllItem  = makeMenuItem('Select All', 'Ctrl+A');
-    const editSep     = document.createElement('sl-divider');
-    const unwrapItem  = document.createElement('sl-menu-item');
-    unwrapItem.textContent = 'Remove tag';
-    const splitItem   = document.createElement('sl-menu-item');
-    splitItem.textContent = 'Split element';
-    splitItem.dataset.testid = 'split-element-menu-item';
-    splitItem.dataset.hideWith = 'shift';
-    const splitLineItem = document.createElement('sl-menu-item');
-    splitLineItem.textContent = 'Split element in new line';
-    splitLineItem.dataset.testid = 'split-element-newline-menu-item';
-    splitLineItem.dataset.showWith = 'shift';
-    splitLineItem.style.display = 'none';
     const pluginDiv   = document.createElement('sl-divider');
     pluginDiv.style.display = 'none';
 
-    menu.append(copyItem, cutItem, pasteItem, sep, selAllItem, editSep, unwrapItem, splitItem, splitLineItem, pluginDiv);
+    menu.append(structTopSep, unwrapItem, splitItem, splitLineItem, structSep, copyItem, cutItem, pasteItem, sep, selAllItem, pluginDiv);
     overlay.appendChild(menu);
 
     parent.appendChild(overlay);
@@ -189,6 +215,8 @@ export class XmlEditorContextMenu {
     this.#unwrapItem    = unwrapItem;
     this.#splitItem     = splitItem;
     this.#splitLineItem = splitLineItem;
+    this.#splitLabel    = splitLabel;
+    this.#splitLineLabel = splitLineLabel;
 
     // Bind commands
     undoBtn.addEventListener('click',   () => { undo(this.#editor.getView());       this.#hide(); });
@@ -213,6 +241,7 @@ export class XmlEditorContextMenu {
       evt.preventDefault();
       this.#show(evt.clientX, evt.clientY);
       this.#applyModifier(evt.shiftKey);
+      this.#hideRedundantDividers();
     });
 
     // Dismiss on outside click or Escape
@@ -308,11 +337,9 @@ export class XmlEditorContextMenu {
       this.#splitPos = inSelection ? view.state.selection.main.head : this.#clickDocPos;
       const target = this.#isDocumentEditable() ? findSplitTarget(view.state, this.#splitPos) : null;
       this.#splitItem.disabled = !target;
-      this.#splitItem.textContent = target ? `Split <${target.tagName}>` : 'Split element';
-      if (this.#splitLineItem) {
-        this.#splitLineItem.disabled = !target;
-        this.#splitLineItem.textContent = target ? `Split <${target.tagName}> in new line` : 'Split element in new line';
-      }
+      if (this.#splitLabel) this.#splitLabel.data = target ? `Split <${target.tagName}>` : 'Split element';
+      if (this.#splitLineItem) this.#splitLineItem.disabled = !target;
+      if (this.#splitLineLabel) this.#splitLineLabel.data = target ? `Split <${target.tagName}> in new line` : 'Split element in new line';
     }
 
     // Show "Incoming"/"Current" buttons only when right-clicking inside a merge-view chunk.
@@ -422,6 +449,30 @@ export class XmlEditorContextMenu {
       // Shoelace menu items set `display` on their host, which overrides the `hidden` attribute
       el.style.display = hide ? 'none' : '';
     }
+  }
+
+  /**
+   * Hides dividers at the start or end of the menu and dividers that follow another visible
+   * divider, so that hidden items (e.g. of plugins) leave no double or dangling dividers.
+   */
+  #hideRedundantDividers() {
+    const REDUNDANT = 'xml-editor-context-menu__divider--redundant';
+    /** @param {Element} el */
+    const visible = el => !(/** @type {HTMLElement} */ (el)).hidden && (/** @type {HTMLElement} */ (el)).style.display !== 'none';
+    const children = [...(this.#menu?.children ?? [])];
+    for (const el of children) el.classList.remove(REDUNDANT);
+    /** @type {Element|null} */
+    let previous = null;
+    for (const el of children) {
+      if (!visible(el)) continue;
+      const isDivider = el.tagName === 'SL-DIVIDER';
+      if (isDivider && (previous === null || previous.tagName === 'SL-DIVIDER')) {
+        el.classList.add(REDUNDANT);
+        continue;
+      }
+      previous = el;
+    }
+    if (previous?.tagName === 'SL-DIVIDER') previous.classList.add(REDUNDANT);
   }
 
   #hide() {
