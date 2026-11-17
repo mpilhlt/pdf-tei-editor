@@ -3,7 +3,7 @@
 /**
  * Download a backup of the application data for use in cron jobs.
  *
- * Logs in with a personal access token (preferred) or a username and password, downloads the backup ZIP from the Backup & Restore plugin to a
+ * Logs in with a personal access token, downloads the backup ZIP from the Backup & Restore plugin to a
  * timestamped file, verifies it, and prunes old backups. The user needs the
  * `backup` role.
  *
@@ -257,27 +257,20 @@ export function acquireLock(lockPath) {
 // ============================================================================
 
 /**
- * Log in with the access token if one is given, otherwise with username and password, and return the session id.
+ * Exchange the personal access token for a session and return the session id.
  * @param {string} baseUrl
- * @param {{token?: string, username?: string, password?: string}} credentials
+ * @param {string} token - personal access token
  * @param {AbortSignal} signal
  * @returns {Promise<string>}
  */
-async function login(baseUrl, { token, username, password }, signal) {
+async function login(baseUrl, token, signal) {
   let res;
   try {
-    res = token
-      ? await fetch(`${baseUrl}/api/v1/auth/token-login`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        signal,
-      })
-      : await fetch(`${baseUrl}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-        signal,
-      });
+    res = await fetch(`${baseUrl}/api/v1/auth/token-login`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    });
   } catch (err) {
     throw new BackupError(`Login request failed: ${err.message}`, EXIT.FAILED, true);
   }
@@ -373,9 +366,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
  * @typedef {object} RunOptions
  * @property {string} destDir
  * @property {string} baseUrl
- * @property {string} [token] - personal access token; used instead of username and password if set
- * @property {string} [username]
- * @property {string} [password]
+ * @property {string} token - personal access token
  * @property {string} prefix
  * @property {number} keepLast
  * @property {number} keepDays
@@ -431,7 +422,7 @@ export async function runBackup(o) {
       const signal = AbortSignal.timeout(o.timeout * 1000);
       let sessionId = null;
       try {
-        sessionId = await login(o.baseUrl, { token: o.token, username: o.username, password: o.password }, signal);
+        sessionId = await login(o.baseUrl, o.token, signal);
         const bytes = await downloadTo(o.baseUrl, sessionId, partPath, signal);
         verifyBackup(partPath, o.minSize);
         renameSync(partPath, finalPath);
@@ -495,11 +486,9 @@ async function main() {
     .name('backup-download')
     .description('Download a backup of the application data, verify it and prune old backups')
     .requiredOption('--dest-dir <dir>', 'Target directory for backups')
-    .option('--env <path>', 'Path to .env file with API_BASE_URL and API_TOKEN (or API_USER, API_PASSWORD)', './.env')
+    .option('--env <path>', 'Path to .env file with API_BASE_URL and API_TOKEN', './.env')
     .option('--base-url <url>', 'API base URL (default: API_BASE_URL or http://localhost:8000)')
-    .option('--token-file <path>', 'File containing a personal access token (default: API_TOKEN); used instead of username and password')
-    .option('--user <name>', 'Username (default: API_USER)')
-    .option('--password-file <path>', 'File containing the password (default: API_PASSWORD)')
+    .option('--token-file <path>', 'File containing a personal access token (default: API_TOKEN)')
     .option('--prefix <str>', 'File name prefix', 'pdf-tei-editor')
     .option('--keep-last <n>', 'Always keep the newest n backups', parseCount, 7)
     .option('--keep-days <n>', 'Delete backups older than n days (never below --keep-last)', parseCount, 30)
@@ -523,17 +512,8 @@ async function main() {
       throw new BackupError(`Cannot read token file: ${err.message}`, EXIT.USAGE);
     }
   }
-  const username = opts.user || process.env.API_USER;
-  let password = process.env.API_PASSWORD;
-  if (opts.passwordFile) {
-    try {
-      password = readFileSync(opts.passwordFile, 'utf8').replace(/\r?\n$/, '');
-    } catch (err) {
-      throw new BackupError(`Cannot read password file: ${err.message}`, EXIT.USAGE);
-    }
-  }
-  if (!token && (!username || !password)) {
-    throw new BackupError('Access token (--token-file or API_TOKEN) or username and password (--user/--password-file or API_USER/API_PASSWORD) required', EXIT.USAGE);
+  if (!token) {
+    throw new BackupError('Personal access token (--token-file or API_TOKEN) required', EXIT.USAGE);
   }
 
   const destDir = resolve(opts.destDir);
@@ -542,8 +522,6 @@ async function main() {
       destDir,
       baseUrl: (opts.baseUrl || process.env.API_BASE_URL || 'http://localhost:8000').replace(/\/$/, ''),
       token,
-      username,
-      password,
       prefix: opts.prefix,
       keepLast: opts.keepLast,
       keepDays: opts.keepDays,
