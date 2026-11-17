@@ -12,7 +12,8 @@
  * @typedef {{ tag: string, label: string, color: string,
  *   attributes?: Array<{ name: string, values?: string[]|null, required?: boolean }>|null,
  *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
- *   description?: string|null, childTags?: string[]|null, empty?: boolean }} AnnotationTagDef
+ *   description?: string|null, childTags?: string[]|null, empty?: boolean,
+ *   readOnly?: boolean }} AnnotationTagDef
  */
 
 /**
@@ -227,7 +228,7 @@ export class XmlAnnotationPopup {
     parent.addEventListener('ann-badge-click', (e) => {
       const { tag, from, clientX = 0, clientY = 0 } = /** @type {CustomEvent} */ (e).detail;
       const def = this.#tagMap.get(tag);
-      if (!def) return;
+      if (!def || def.readOnly) return;
       const element = this.#resolveElement(from);
       if (!element) return;
       this.#show({ clientX, clientY }, def, element, from);
@@ -610,7 +611,7 @@ export class XmlAnnotationPopup {
    * Renders one split-button chip per tag definition into `container`,
    * sorted alphabetically by tag name. Definitions marked `empty` appear
    * only when `currentDef` is itself empty, and the others only when it
-   * isn't. `currentElement` is the DOM element
+   * isn't; definitions marked `readOnly` never appear. `currentElement` is the DOM element
    * the "Change to" popup was opened on, or `null` for a fresh-selection
    * "Annotate as…" popup (where nothing is "current" and every action is
    * enabled). Muting is computed per-action, not per-chip: since one
@@ -629,9 +630,10 @@ export class XmlAnnotationPopup {
   #renderPalette(container, currentDef, currentElement, onPick) {
     // Empty elements (gap, pb, ...) don't wrap content: they are only offered in the "Change to"
     // palette of another empty element, never for a text selection or an element with content
+    // Display-only elements (e.g. text) are never offered
     const emptyPalette = currentDef?.empty === true;
     const sorted = this.#tagDefs
-      .filter(def => (def.empty === true) === emptyPalette)
+      .filter(def => def.readOnly !== true && (def.empty === true) === emptyPalette)
       .sort((a, b) => a.tag.localeCompare(b.tag));
     const row = document.createElement('div');
     Object.assign(row.style, { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' });

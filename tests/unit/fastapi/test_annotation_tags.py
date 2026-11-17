@@ -104,6 +104,17 @@ class TestGenerateAnnotationTags(unittest.TestCase):
         self.assertFalse(tags["unclear"]["empty"], "text")
         self.assertFalse(tags["expan"]["empty"], "mixed content, even with its only child excluded")
 
+    def test_read_only_flag(self):
+        tags = self._tags(exclude={"lb"}, read_only={"p"})
+        self.assertTrue(tags["p"]["readOnly"])
+        self.assertFalse(tags["unclear"]["readOnly"])
+
+    def test_read_only_adds_tag_outside_scope(self):
+        tags = {t["tag"]: t for t in generate_annotation_tags(self.schema_path, "choice", read_only={"p", "missing"})}
+        self.assertEqual(sorted(tags), ["abbr", "choice", "expan", "p"])
+        self.assertTrue(tags["p"]["readOnly"])
+        self.assertFalse(tags["choice"]["readOnly"])
+
     def test_tag_data(self):
         unclear = self._tags()["unclear"]
         self.assertEqual(unclear["label"], "unclear")

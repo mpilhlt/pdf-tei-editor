@@ -28,7 +28,8 @@ import { EditorSelection, EditorState } from '@codemirror/state'
  * @typedef {{ tag: string, label: string, color: string,
  *   attributes?: Array<{name:string, values?: string[]|null, required?: boolean}>|null,
  *   variants?: AnnotationTagVariant[]|null, bareAllowed?: boolean,
- *   description?: string|null, childTags?: string[]|null, empty?: boolean }} AnnotationTagDef
+ *   description?: string|null, childTags?: string[]|null, empty?: boolean,
+ *   readOnly?: boolean }} AnnotationTagDef
  */
 
 class XmlAnnotationPlugin extends Plugin {
@@ -329,14 +330,15 @@ class XmlAnnotationPlugin extends Plugin {
 
   /**
    * Walks the Lezer syntax tree upward from `from` to find the innermost annotation
-   * element (tag in `#tagDefs`) that fully contains the range [from, to].
+   * element (tag in `#tagDefs`) that fully contains the range [from, to]. Display-only
+   * (`readOnly`) elements are skipped: they are containers that are never split.
    * @param {import('@codemirror/state').EditorState} state
    * @param {number} from
    * @param {number} to
    * @returns {{ tagName: string, openTagText: string, contentFrom: number, contentTo: number, elementFrom: number, elementTo: number }|null}
    */
   #findEnclosingAnnotation(state, from, to) {
-    const tagSet = new Set(this.#tagDefs.map(d => d.tag))
+    const tagSet = new Set(this.#tagDefs.filter(d => !d.readOnly).map(d => d.tag))
     let node = syntaxTree(state).resolveInner(from, 1)
     while (node) {
       if (node.name === 'Element') {

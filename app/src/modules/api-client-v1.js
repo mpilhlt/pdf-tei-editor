@@ -57,6 +57,7 @@
  * @property {string=} description - Tooltip text for the chip itself
  * @property {Array<string>=} childTags - Tag names that may be nested inside this element rather than splitting it
  * @property {boolean=} empty - Element without content (e.g. gap, pb): shown as a clickable badge for its attributes, but not offered in the palette for wrapping text
+ * @property {boolean=} readOnly - Display-only element (e.g. text): shown as a badge, but not editable, not offered in the palette and without coloring of its content, so that its children are displayed as top-level elements
  */
 
 /**
