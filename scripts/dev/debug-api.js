@@ -9,7 +9,7 @@
  * Options:
  *   --env-path <file>  Path to a custom .env file (default: .env)
  *
- * Authentication: API_TOKEN (personal access token) if set, otherwise API_USER and API_PASSWORD.
+ * Authentication: API_TOKEN (personal access token).
  *
  * Examples:
  *   node scripts/dev/debug-api.js GET /api/v1/plugins
@@ -19,7 +19,7 @@
  */
 
 import dotenv from 'dotenv';
-import { login, resolveCredentials } from '../../bin/lib/api-auth.js';
+import { loginWithToken, resolveToken } from '../../bin/lib/api-auth.js';
 
 /**
  * Call API endpoint
@@ -101,15 +101,15 @@ async function main() {
   dotenv.config({ path: envPath });
 
   const baseUrl = process.env.API_BASE_URL || 'http://localhost:8000';
-  const credentials = resolveCredentials({});
+  const token = resolveToken();
 
-  if (!credentials.token && (!credentials.username || !credentials.password)) {
-    console.error('Error: API_TOKEN, or API_USER and API_PASSWORD, must be set in .env file');
+  if (!token) {
+    console.error('Error: API_TOKEN must be set in .env file');
     process.exit(1);
   }
 
-  console.log(credentials.token ? 'Authenticating with access token...' : `Authenticating as ${credentials.username}...`);
-  const sessionId = await login(baseUrl, credentials);
+  console.log('Authenticating with access token...');
+  const sessionId = await loginWithToken(baseUrl, token);
   console.log(`Session ID: ${sessionId.substring(0, 10)}...\n`);
 
   console.log(`Calling: ${method} ${path}`);

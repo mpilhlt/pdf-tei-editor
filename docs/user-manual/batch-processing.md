@@ -35,18 +35,10 @@ uv sync # only for the python scripts
 
 ## Authentication
 
-In order to use the scripts, you need to store your credentials in a file called `.env` in the directory from which you launch the scripts. Preferably, use a [personal access token](access-tokens.md) (user menu > Access Tokens):
+In order to use the scripts, you need to store a [personal access token](access-tokens.md) (user menu > Access Tokens) in a file called `.env` in the directory from which you launch the scripts:
 
 ```env
 API_TOKEN=<your access token>
-API_BASE_URL=<the url of the PDF-TEI-Editor instance>
-```
-
-Alternatively, use your user name and password:
-
-```env
-API_USER=<your user name>
-API_PASSWORD=<your password>
 API_BASE_URL=<the url of the PDF-TEI-Editor instance>
 ```
 
@@ -67,21 +59,20 @@ Usage: batch-extract [options] [path]
 Batch extract metadata from PDFs in a directory
 
 Arguments:
-  path                   Directory containing PDF files (required unless --extract-only)
+  path                  Directory containing PDF files (required unless --extract-only)
 
 Options:
-  --env <path>           Path to .env file (default: "./.env")
-  --token <token>        Personal access token (default: from .env API_TOKEN); preferred over --user/--password
-  --user <username>      Username for authentication (default: from .env API_USER)
-  --password <password>  Password for authentication (default: from .env API_PASSWORD)
-  --base-url <url>       API base URL (default: from .env API_BASE_URL or http://localhost:8000)
-  --collection <id>      Collection ID (default: directory basename, required for --extract-only)
-  --extractor <id>       Extractor ID (can be specified multiple times)
-  --option <key=value>   Extractor option (repeatable)
-  --recursive            Recursively search directories (default: false)
-  --extract-only         Extract from existing files in collection (no upload) (default: false)
-  --doc <id>             With --extract-only: only this document, by its filename without extension (repeatable)
-  -h, --help             display help for command
+  --env <path>          Path to .env file (default: "./.env")
+  --token <token>       Personal access token (default: from .env API_TOKEN)
+  --base-url <url>      API base URL (default: from .env API_BASE_URL or http://localhost:8000)
+  --collection <id>     Collection ID (default: directory basename, required for --extract-only)
+  --extractor <id>      Extractor ID (can be specified multiple times)
+  --variant <id>        Extractor variant_id (repeatable; each file is extracted once per variant)
+  --option <key=value>  Extractor option (repeatable)
+  --recursive           Recursively search directories (default: false)
+  --extract-only        Extract from existing files in collection (no upload) (default: false)
+  --doc <id>            With --extract-only: only this document, by its filename without extension (repeatable)
+  -h, --help            display help for command
 
 DOI Filename Encoding:
   If PDF filenames contain DOIs, they will be automatically extracted and passed

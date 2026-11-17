@@ -11,8 +11,8 @@
  *   --concurrency <n>    Concurrent requests per round (default: 1)
  *   --url1 <url>         First URL to benchmark (default: containerized deployment)
  *   --url2 <url>         Second URL to benchmark (default: non-containerized deployment)
- *   --env-path1 <file>   .env file with API_TOKEN (or API_USER/API_PASSWORD) and API_BASE_URL for url1 (optional)
- *   --env-path2 <file>   .env file with API_TOKEN (or API_USER/API_PASSWORD) and API_BASE_URL for url2 (optional)
+ *   --env-path1 <file>   .env file with API_TOKEN and API_BASE_URL for url1 (optional)
+ *   --env-path2 <file>   .env file with API_TOKEN and API_BASE_URL for url2 (optional)
  *   --paths <json>       JSON array of paths to test (default: see PATHS below)
  *   --delay <ms>         Delay between rounds in ms (default: 500)
  *
@@ -21,7 +21,7 @@
  */
 
 import { readFileSync } from "fs";
-import { login } from "../../bin/lib/api-auth.js";
+import { loginWithToken } from "../../bin/lib/api-auth.js";
 
 const DEFAULTS = {
   rounds: 10,
@@ -99,9 +99,9 @@ async function resolveSession(envPath, fallbackUrl) {
   if (!envPath) return { sessionId: null, baseUrl: fallbackUrl };
   const env = parseEnvFile(envPath);
   const baseUrl = env.API_BASE_URL || fallbackUrl;
-  const { API_TOKEN: token, API_USER: username, API_PASSWORD: password } = env;
-  if (!token && (!username || !password)) throw new Error(`${envPath} must define API_TOKEN, or API_USER and API_PASSWORD`);
-  const sessionId = await login(baseUrl, token ? { token } : { username, password });
+  const token = env.API_TOKEN;
+  if (!token) throw new Error(`${envPath} must define API_TOKEN`);
+  const sessionId = await loginWithToken(baseUrl, token);
   return { sessionId, baseUrl };
 }
 
