@@ -23,6 +23,18 @@ import { notify } from '../modules/sl-utils.js'
 import { createValueEditor } from '../modules/config-value-editor.js'
 import { createMemberPicker } from '../modules/rbac/member-picker.js'
 import '../modules/filtered-combobox.js'
+import ep from '../extension-points.js'
+
+/**
+ * Extension points invoked after an entity id was renamed or its display label changed,
+ * and the field that holds the label.
+ * @type {Record<string, {renamed: string, relabeled: string, labelField: string}>}
+ */
+const ENTITY_CHANGE_ENDPOINTS = {
+  user: { renamed: ep.rbac.userRenamed, relabeled: ep.rbac.userRelabeled, labelField: 'fullname' },
+  project: { renamed: ep.rbac.projectRenamed, relabeled: ep.rbac.projectRelabeled, labelField: 'name' },
+  collection: { renamed: ep.rbac.collectionRenamed, relabeled: ep.rbac.collectionRelabeled, labelField: 'name' }
+}
 
 // Register templates
 await registerTemplate('rbac-manager-dialog', 'rbac-manager-dialog.html')
@@ -488,20 +500,33 @@ class RbacManagerPlugin extends Plugin {
         }
       } else {
         if (this.#selectedEntityId) {
-          await this.#entityManagers[this.#currentEntityType].update(this.#selectedEntityId, data)
-          notify(`${getEntitySchema(this.#currentEntityType)?.singularLabel} updated successfully`, 'success')
+          const entityType = this.#currentEntityType
+          const entityId = this.#selectedEntityId
+          const changeEndpoints = ENTITY_CHANGE_ENDPOINTS[entityType]
+          const previousLabel = changeEndpoints
+            ? this.#entityManagers[entityType].findById(entityId)?.[changeEndpoints.labelField]
+            : undefined
+
+          await this.#entityManagers[entityType].update(entityId, data)
+          notify(`${getEntitySchema(entityType)?.singularLabel} updated successfully`, 'success')
 
           await this.#loadAllEntities()
+          this.#renderEntityList()
+          this.#showEntityForm()
+
+          const newLabel = changeEndpoints ? data[changeEndpoints.labelField] : undefined
+          if (changeEndpoints && newLabel !== undefined && (newLabel || '') !== (previousLabel || '')) {
+            await this.context.invokePluginEndpoint(changeEndpoints.relabeled, [entityId, newLabel], { throws: false })
+          } else if (entityType === 'project') {
+            // Other project changes (e.g. the archived flag) affect the file selection UIs
+            await this.getDependency('filedata').reload({ refresh: true })
+          }
+          return
         }
       }
 
       this.#renderEntityList()
       this.#showEntityForm()
-
-      // Project changes (e.g. the archived flag) affect the file selection UIs
-      if (this.#currentEntityType === 'project') {
-        await this.getDependency('filedata').reload({ refresh: true })
-      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       this.getDependency('logger').error(`Failed to save entity: ${errorMessage}`)
@@ -600,12 +625,7 @@ class RbacManagerPlugin extends Plugin {
       this.#renderEntityList()
       this.#showEntityForm()
 
-      if (entityType === 'user' && this.state.user?.username === oldId) {
-        // The session moved to the new username; refresh the user data in the state
-        await this.getDependency('authentication').ensureAuthenticated()
-      } else if (entityType === 'project' || entityType === 'collection') {
-        await this.getDependency('filedata').reload({ refresh: true })
-      }
+      await this.context.invokePluginEndpoint(ENTITY_CHANGE_ENDPOINTS[entityType].renamed, [oldId, newId], { throws: false })
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       this.getDependency('logger').error(`Failed to rename ${entityType} "${oldId}": ${errorMessage}`)
