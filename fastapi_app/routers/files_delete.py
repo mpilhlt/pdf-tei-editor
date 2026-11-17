@@ -91,7 +91,7 @@ async def delete_files(
             continue  # Skip non-existent files
 
         # Check write permissions
-        if not check_file_access(file_metadata, current_user, 'write'):
+        if not check_file_access(file_metadata, current_user, 'delete'):
             raise HTTPException(
                 status_code=403,
                 detail=f"Insufficient permissions to delete {file_id}"
@@ -142,7 +142,7 @@ async def delete_history(
 
     history = repo.get_exclusive_history(file_metadata.stable_id)
     for item in history:
-        if not check_file_access(item, current_user, 'write'):
+        if not check_file_access(item, current_user, 'delete'):
             raise HTTPException(status_code=403, detail=f"Insufficient permissions to delete {item.stable_id}")
 
     stable_ids = [item.stable_id for item in history]
