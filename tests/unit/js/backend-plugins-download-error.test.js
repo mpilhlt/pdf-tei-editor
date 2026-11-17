@@ -55,16 +55,16 @@ describe('BackendPluginsPlugin.triggerDownload errors', () => {
   });
 
   it('shows the detail message of a JSON error response', async () => {
-    stubFetch(502, JSON.stringify({ detail: 'GROBID could not create training data for 1 document (d1).' }));
+    stubFetch(502, JSON.stringify({ detail: 'The service could not process 1 document (d1).' }));
     const original = console.error;
     console.error = () => {};
     try {
-      await makePlugin().triggerDownload({ id: 'grobid' }, '/api/plugins/grobid/download');
+      await makePlugin().triggerDownload({ id: 'example' }, '/api/plugins/example/download');
     } finally {
       console.error = original;
     }
     assert.deepStrictEqual(notifyCalls.map(c => c.slice(0, 2)), [
-      ['Download failed: GROBID could not create training data for 1 document (d1).', 'danger']
+      ['Download failed: The service could not process 1 document (d1).', 'danger']
     ]);
   });
 
@@ -73,7 +73,7 @@ describe('BackendPluginsPlugin.triggerDownload errors', () => {
     const original = console.error;
     console.error = () => {};
     try {
-      await makePlugin().triggerDownload({ id: 'grobid' }, '/x');
+      await makePlugin().triggerDownload({ id: 'example' }, '/x');
     } finally {
       console.error = original;
     }
@@ -82,7 +82,7 @@ describe('BackendPluginsPlugin.triggerDownload errors', () => {
 
   it('stays silent on a cancelled download', async () => {
     stubFetch(499, JSON.stringify({ detail: 'Download cancelled by user' }));
-    await makePlugin().triggerDownload({ id: 'grobid' }, '/x');
+    await makePlugin().triggerDownload({ id: 'example' }, '/x');
     assert.deepStrictEqual(notifyCalls, []);
   });
 });
