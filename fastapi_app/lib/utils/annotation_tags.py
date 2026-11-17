@@ -7,8 +7,10 @@ An extractor declares the chips for a variant in its info under
 variants that have some. Call `generate_annotation_tags()` with the
 variant's schema file and the scope of its chips: the element whose
 content-model children become chips, the children to leave out (e.g. empty
-milestones such as `lb`), and the chips whose own children become chips
-too (e.g. the alternatives grouped in `choice`).
+milestones such as `lb`), the chips whose own children become chips
+too (e.g. the alternatives grouped in `choice`), and the chips that are only
+displayed (e.g. the `text` root): they are rendered as a badge, but cannot be
+edited, are not offered in the palette and do not color their content.
 
 See docs/superpowers/specs/2026-09-05-annotation-chip-schema-redesign-design.md.
 """
@@ -43,6 +45,7 @@ class AnnotationTag(TypedDict):
     bareAllowed: bool
     childTags: list[str]
     empty: bool
+    readOnly: bool
 
 
 AnnotationTagsMap = dict[str, list[AnnotationTag]]
@@ -58,7 +61,7 @@ PALETTE: list[str] = [
     "#b4befe", "#bac2de", "#fab387", "#f5e0dc", "#d18455",
 ]
 
-_CacheKey = tuple[Path, float, str, frozenset[str], tuple[str, ...]]
+_CacheKey = tuple[Path, float, str, frozenset[str], tuple[str, ...], frozenset[str]]
 _CACHE: dict[_CacheKey, list[AnnotationTag]] = {}
 
 
@@ -88,6 +91,7 @@ def generate_annotation_tags(
     root: str,
     exclude: Iterable[str] = (),
     expand: Iterable[str] = (),
+    read_only: Iterable[str] = (),
 ) -> list[AnnotationTag]:
     """
     Build a chip list from the RelaxNG schema at `schema_path`: `root` and
@@ -96,6 +100,11 @@ def generate_annotation_tags(
     chip's `childTags`). A chip whose element allows neither text nor any
     of its `childTags` is marked `empty` (e.g. `gap`, `pb`): the editor shows
     a badge for it, but does not offer it for wrapping selected text.
+    A chip named in `read_only` is marked `readOnly` (e.g. the `text` root):
+    the editor shows a badge for it, but does not let it be edited, offers
+    it nowhere in the palette and does not color its content, so that its
+    children are displayed as top-level chips. A `read_only` tag outside
+    the chip scope is added if the schema defines it.
     Chips are sorted by tag name. Returns an empty
     list if the schema file doesn't exist. The result is cached until the
     file's mtime changes; callers get a copy they may modify.
@@ -104,7 +113,8 @@ def generate_annotation_tags(
         return []
     excluded = frozenset(exclude)
     expanded = tuple(expand)
-    key: _CacheKey = (schema_path.resolve(), schema_path.stat().st_mtime, root, excluded, expanded)
+    display_only = frozenset(read_only)
+    key: _CacheKey = (schema_path.resolve(), schema_path.stat().st_mtime, root, excluded, expanded, display_only)
     cached = _CACHE.get(key)
     if cached is not None:
         return copy.deepcopy(cached)
@@ -119,6 +129,10 @@ def generate_annotation_tags(
             child_definition = parser.extract_tag_definitions(child, set(excluded)).get(child)
             if child_definition is not None:
                 definitions[child] = child_definition
+    for tag_name in display_only - definitions.keys():
+        tag_definition = parser.extract_tag_definitions(tag_name, set(excluded)).get(tag_name)
+        if tag_definition is not None:
+            definitions[tag_name] = tag_definition
 
     tags: list[AnnotationTag] = []
     taken_colors: set[str] = set()
@@ -137,6 +151,7 @@ def generate_annotation_tags(
             "bareAllowed": data["bareAllowed"],
             "childTags": child_tags,
             "empty": not data["textAllowed"] and not child_tags,
+            "readOnly": tag_name in display_only,
         })
     _CACHE[key] = tags
     return copy.deepcopy(tags)

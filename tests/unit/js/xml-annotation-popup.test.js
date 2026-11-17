@@ -1339,3 +1339,34 @@ describe('XmlAnnotationPopup - follows editor scroll', () => {
     }
   });
 });
+
+describe('XmlAnnotationPopup - display-only (readOnly) tags', () => {
+  const defs = [
+    { tag: 'text', label: 'text', color: '#89dceb', attributes: [], variants: [], bareAllowed: true, childTags: ['front'], readOnly: true },
+    { tag: 'front', label: 'front', color: '#f38ba8', attributes: [], variants: [], bareAllowed: true, childTags: [] },
+  ];
+
+  it('opens no popup for a read-only badge', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const overlay = triggerPopup(container, 'text', document.createElement('text'), defs);
+      assert.strictEqual(overlay?.style.display, 'none');
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+
+  it('does not offer a read-only tag in the palette', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    try {
+      const overlay = triggerPopup(container, 'front', document.createElement('front'), defs);
+      const labels = [...overlay.querySelectorAll('span')].map((s) => s.textContent);
+      assert.ok(labels.includes('front'), `front is offered, got: ${labels.join(', ')}`);
+      assert.ok(!labels.includes('text'), `text must not be offered, got: ${labels.join(', ')}`);
+    } finally {
+      document.body.removeChild(container);
+    }
+  });
+});

@@ -192,3 +192,41 @@ describe('createAnnotationField with nested badges', () => {
     });
   }
 });
+
+describe('createAnnotationField with display-only elements', () => {
+  const tagDefs = [
+    { tag: 'text', label: 'text', color: '#89dceb', attributes: [], readOnly: true },
+    { tag: 'front', label: 'front', color: '#f38ba8', attributes: [] },
+  ];
+  const extensions = createAnnotationField(tagDefs);
+  const annotationField = extensions[0];
+
+  it('renders a non-clickable badge without content mark and lets children be top-level', () => {
+    const parent = document.getElementById('editor');
+    parent.innerHTML = '';
+    const doc = '<text><front>title</front> rest</text>';
+    const view = new EditorView({
+      state: EditorState.create({ doc, extensions: [xml(), extensions] }),
+      parent
+    });
+    const ranges = [];
+    view.state.field(annotationField).decos.between(0, doc.length, (f, t, value) => { ranges.push({ f, t, value }); });
+
+    const textBadge = ranges.find(r => r.f === 0 && r.value.spec.widget);
+    assert.ok(textBadge, 'a badge replaces <text>');
+    const dom = textBadge.value.spec.widget.toDOM();
+    assert.ok(dom.classList.contains('ann-badge--readonly'));
+    let clicked = false;
+    dom.addEventListener('ann-badge-click', () => { clicked = true; });
+    dom.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    assert.ok(!clicked, 'a read-only badge does not open the popup');
+
+    const marks = ranges.filter(r => r.value.spec.class);
+    assert.deepStrictEqual(marks.map(r => r.value.spec.class), ['ann-outer'],
+      'only <front> is colored, as a top-level element');
+    assert.strictEqual(marks[0].f, doc.indexOf('title'));
+
+    const closeText = doc.indexOf('</text>');
+    assert.ok(ranges.some(r => r.f === closeText && r.t === doc.length), '</text> is hidden');
+  });
+});
