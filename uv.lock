@@ -844,56 +844,56 @@ requires-dist = [
     { name = "flask", specifier = ">=3.1.3" },
     { name = "lxml", specifier = ">=6.1.0" },
     { name = "packaging", specifier = ">=25.0" },
-    { name = "pte-plugin-annotation-history", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-history", marker = "extra == 'annotation-history'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-progress", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-progress", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-progress", marker = "extra == 'annotation-progress'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-progress", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-review", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-review", marker = "extra == 'annotation-review'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-annotation-review", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-anthropic-llm", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-anthropic-llm", marker = "extra == 'anthropic-llm'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-anthropic-llm", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-archival-edition", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-archival-edition", marker = "extra == 'archival-edition'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-collection-overview", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-collection-overview", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-collection-overview", marker = "extra == 'collection-overview'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-collection-overview", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-edit-history", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-edit-history", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-edit-history", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-edit-history", marker = "extra == 'edit-history'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-google-llm", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-google-llm", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-google-llm", marker = "extra == 'google-llm'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-grobid", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-grobid", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-grobid", marker = "extra == 'grobid'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-iaa-analyzer", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-iaa-analyzer", marker = "extra == 'iaa-analyzer'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-kisski", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-kisski", marker = "extra == 'kisski'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-llamore-extractor", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-llamore-extractor", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-llamore-extractor", marker = "extra == 'llamore-extractor'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-local-sync", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-local-sync", marker = "extra == 'local-sync'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-metadata-extraction", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-metadata-extraction", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-metadata-extraction", marker = "extra == 'metadata-extraction'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-revision-feed", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-revision-feed", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-revision-feed", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-revision-feed", marker = "extra == 'revision-feed'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-rng-converter", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-rng-converter", marker = "extra == 'rng-converter'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-update-metadata", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-update-metadata", marker = "extra == 'update-metadata'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-webdav-sync", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
-    { name = "pte-plugin-webdav-sync", marker = "extra == 'webdav-sync'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066" },
+    { name = "pte-plugin-annotation-history", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-history", marker = "extra == 'annotation-history'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'annotation-progress'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-progress", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'annotation-review'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-annotation-review", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-anthropic-llm", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-anthropic-llm", marker = "extra == 'anthropic-llm'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-anthropic-llm", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-archival-edition", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-archival-edition", marker = "extra == 'archival-edition'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'collection-overview'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-collection-overview", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-edit-history", marker = "extra == 'edit-history'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-google-llm", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-google-llm", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-google-llm", marker = "extra == 'google-llm'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-grobid", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-grobid", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-grobid", marker = "extra == 'grobid'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-iaa-analyzer", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-iaa-analyzer", marker = "extra == 'iaa-analyzer'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-kisski", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-kisski", marker = "extra == 'kisski'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-llamore-extractor", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-llamore-extractor", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-llamore-extractor", marker = "extra == 'llamore-extractor'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-local-sync", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-local-sync", marker = "extra == 'local-sync'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-metadata-extraction", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-metadata-extraction", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-metadata-extraction", marker = "extra == 'metadata-extraction'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'analytics'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'default'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-revision-feed", marker = "extra == 'revision-feed'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-rng-converter", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-rng-converter", marker = "extra == 'rng-converter'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-update-metadata", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-update-metadata", marker = "extra == 'update-metadata'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-webdav-sync", marker = "extra == 'all'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
+    { name = "pte-plugin-webdav-sync", marker = "extra == 'webdav-sync'", git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8" },
     { name = "py3langid", specifier = ">=0.4.0" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pypdf", specifier = ">=6.16.1" },
@@ -980,27 +980,27 @@ wheels = [
 [[package]]
 name = "pte-plugin-annotation-history"
 version = "1.0.2"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-annotation-progress"
 version = "1.2.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-progress&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-annotation-review"
 version = "1.3.0"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fannotation-review&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-anthropic-llm"
 version = "1.1.0"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fanthropic-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-archival-edition"
 version = "0.2.0"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Farchival-edition&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 dependencies = [
     { name = "pte-plugin-anthropic-llm" },
     { name = "pymupdf" },
@@ -1009,7 +1009,7 @@ dependencies = [
 [[package]]
 name = "pte-plugin-collection-overview"
 version = "1.0.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fcollection-overview&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 dependencies = [
     { name = "pte-plugin-annotation-progress" },
 ]
@@ -1017,12 +1017,12 @@ dependencies = [
 [[package]]
 name = "pte-plugin-edit-history"
 version = "1.0.3"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fedit-history&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-google-llm"
 version = "1.2.0"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgoogle-llm&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 dependencies = [
     { name = "google-genai" },
     { name = "httpx" },
@@ -1031,17 +1031,17 @@ dependencies = [
 [[package]]
 name = "pte-plugin-grobid"
 version = "1.4.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fgrobid&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-iaa-analyzer"
 version = "1.0.2"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fiaa-analyzer&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-kisski"
 version = "2.0.4"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fkisski&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 dependencies = [
     { name = "jsonschema" },
     { name = "pdf2image" },
@@ -1050,7 +1050,7 @@ dependencies = [
 [[package]]
 name = "pte-plugin-llamore-extractor"
 version = "1.0.0"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fllamore-extractor&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 dependencies = [
     { name = "llamore" },
     { name = "pypdf" },
@@ -1059,12 +1059,12 @@ dependencies = [
 [[package]]
 name = "pte-plugin-local-sync"
 version = "1.0.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Flocal-sync&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-metadata-extraction"
 version = "1.1.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fmetadata-extraction&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 dependencies = [
     { name = "pte-plugin-grobid" },
 ]
@@ -1072,22 +1072,22 @@ dependencies = [
 [[package]]
 name = "pte-plugin-revision-feed"
 version = "1.0.2"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frevision-feed&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-rng-converter"
 version = "1.0.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Frng-converter&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-update-metadata"
 version = "1.0.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fupdate-metadata&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 
 [[package]]
 name = "pte-plugin-webdav-sync"
 version = "1.0.1"
-source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=f43b73648d36cb9a39ef9756f6eba937cd83f066#f43b73648d36cb9a39ef9756f6eba937cd83f066" }
+source = { git = "https://github.com/mpilhlt/pte-plugins?subdirectory=plugins%2Fwebdav-sync&rev=d9e29c224fdf7bc229c65587b31936bd7c6225f8#d9e29c224fdf7bc229c65587b31936bd7c6225f8" }
 dependencies = [
     { name = "webdav4", extra = ["fsspec"] },
 ]
