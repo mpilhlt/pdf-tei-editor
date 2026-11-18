@@ -66,6 +66,10 @@ class PdfViewerPlugin extends Plugin {
   #zoomInfoWidget;
   /** @type {import('../modules/panels/widgets/status-switch.js').StatusSwitch|null} */
   #autoSearchSwitch = null;
+  /** @type {StatusText|null} */
+  #statusMessageWidget = null;
+  /** @type {ReturnType<typeof setTimeout>|null} */
+  #statusMessageTimer = null;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the PDFJSViewer API.
@@ -76,7 +80,7 @@ class PdfViewerPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#pdfViewer;
-    const pluginMethods = new Set(['isAutoSearchEnabled']);
+    const pluginMethods = new Set(['isAutoSearchEnabled', 'showStatusMessage']);
     return /** @type {PDFJSViewer} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -94,6 +98,33 @@ class PdfViewerPlugin extends Plugin {
    */
   isAutoSearchEnabled() {
     return /** @type {any} */ (this.#autoSearchSwitch)?.checked ?? false;
+  }
+
+  /**
+   * Shows a transient message in the statusbar, next to the Autosearch switch.
+   * A new message replaces the current one and restarts the timeout.
+   * @param {string} text - The message
+   * @param {{variant?: 'default'|'warning'|'error'|'success', timeout?: number}} [options]
+   *   `timeout` is the time in milliseconds after which the message is removed (default: 5000)
+   */
+  showStatusMessage(text, { variant = 'warning', timeout = 5000 } = {}) {
+    const statusBar = ui.pdfViewer.statusbar;
+    if (this.#statusMessageTimer) {
+      clearTimeout(this.#statusMessageTimer);
+    }
+    if (!this.#statusMessageWidget) {
+      this.#statusMessageWidget = PanelUtils.createText({ name: 'statusMessage' });
+      statusBar.add(this.#statusMessageWidget, 'left', 9);
+    }
+    this.#statusMessageWidget.text = text;
+    this.#statusMessageWidget.variant = variant;
+    this.#statusMessageTimer = setTimeout(() => {
+      this.#statusMessageTimer = null;
+      if (this.#statusMessageWidget) {
+        statusBar.removeById(this.#statusMessageWidget.id);
+        this.#statusMessageWidget = null;
+      }
+    }, timeout);
   }
 
   /** @param {ApplicationState} initialState */
