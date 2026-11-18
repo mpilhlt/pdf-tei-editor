@@ -499,7 +499,7 @@ In addition to collection-based access control, the system supports three modes 
 
 ```json
 {
-  "access-control.mode": "role-based",
+  "access-control.mode": "owner-based",
   "access-control.default-visibility": "collection",
   "access-control.default-editability": "owner"
 }
@@ -507,11 +507,11 @@ In addition to collection-based access control, the system supports three modes 
 
 **Mode values:**
 
-- `role-based` (default) - No document-level permissions, only role restrictions
-- `owner-based` - Documents editable only by their creator
+- `role-based` - No document-level permissions, only role restrictions
+- `owner-based` (default) - Documents editable only by their creator
 - `granular` - Database-backed per-document visibility and editability settings
 
-### Mode 1: Role-Based (Default)
+### Mode 1: Role-Based
 
 In role-based mode, document access is determined solely by user roles and file types:
 
@@ -521,11 +521,12 @@ In role-based mode, document access is determined solely by user roles and file 
 
 No document-level permission UI is shown. This mode is suitable for teams where role-based restrictions are sufficient.
 
-### Mode 2: Owner-Based
+### Mode 2: Owner-Based (Default)
 
 In owner-based mode, documents are editable only by their creator:
 
-- Documents are read-only for everyone except the owner
+- Documents are read-only for everyone except the owner and admins
+- Documents without an owner can be edited by reviewers
 - Reviewers can delete any document
 - To edit a non-owned document, users must create their own version
 

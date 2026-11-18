@@ -453,7 +453,7 @@ export class BackendPluginsPlugin extends Plugin {
           });
 
           if (!response.ok) {
-            throw new Error(`Export failed: ${response.statusText}`);
+            throw new Error(`Export failed: ${await this.#responseErrorMessage(response)}`);
           }
 
           const blob = await response.blob();
@@ -528,6 +528,24 @@ export class BackendPluginsPlugin extends Plugin {
   }
 
   /**
+   * Describe a failed download or export response, preferring the server's `detail` message
+   * over the status text, which is empty over HTTP/2.
+   * @param {Response} response - The non-OK response
+   * @returns {Promise<string>} Message for the user
+   */
+  async #responseErrorMessage(response) {
+    try {
+      const body = await response.json();
+      if (typeof body?.detail === 'string' && body.detail) {
+        return body.detail;
+      }
+    } catch {
+      // Not a JSON body, fall back to the status
+    }
+    return `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+  }
+
+  /**
    * Trigger a file download from a URL
    * @param {BackendPlugin} plugin
    * @param {string} downloadUrl - URL to download from
@@ -547,7 +565,7 @@ export class BackendPluginsPlugin extends Plugin {
           this.#logger.info('Download cancelled by user');
           return;
         }
-        throw new Error(`Download failed: ${response.statusText}`);
+        throw new Error(await this.#responseErrorMessage(response));
       }
 
       const blob = await response.blob();

@@ -53,6 +53,7 @@ import {
   ApiKeysPlugin,
   XmlEditorPlugin,
   XmlAnnotationPlugin,
+  XpathNavigationPlugin,
   UnitReviewPlugin,
   UnitCommentsPlugin,
   MessagesPlugin,
@@ -94,6 +95,7 @@ const plugins = [
   LayoutPlugin,
   PdfViewerPlugin,
   XmlEditorPlugin,
+  XpathNavigationPlugin,  // node navigation in the XML editor statusbar — depends on XmlEditorPlugin
   XmlAnnotationPlugin,    // annotation mode — depends on XmlEditorPlugin
   UnitReviewPlugin,       // review marks in the XML editor gutter — depends on XmlEditorPlugin
   UnitCommentsPlugin,     // comments on elements, stored stand-off — depends on XmlEditorPlugin

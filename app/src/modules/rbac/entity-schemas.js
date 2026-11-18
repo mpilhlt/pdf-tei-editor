@@ -40,6 +40,9 @@
  * @property {string} label - Human-readable plural label
  * @property {string} singularLabel - Human-readable singular label
  * @property {string} idField - Name of the field used as unique identifier
+ * @property {boolean} [renamable] - Whether the id can be changed with the rename endpoint of the entity type
+ * @property {RegExp} [idPattern] - Allowed format of a new id (checked by the server too)
+ * @property {string} [renameHint] - What a rename changes, shown in the rename dialog
  * @property {EntityField[]} fields - Field definitions
  * @property {EntityRelationship[]} [relationships] - Relationship definitions
  * @property {string} [icon] - Icon name for UI display
@@ -57,6 +60,9 @@ const entitySchemas = {
     label: 'Users',
     singularLabel: 'User',
     idField: 'username',
+    renamable: true,
+    idPattern: /^[A-Za-z0-9._-]+$/,
+    renameHint: 'The username is replaced in projects, collection owners, document owners, sessions, access tokens, API keys, bookmarks and messages. The user stays logged in. TEI documents keep the old username.',
     icon: 'person',
     fields: [
       {
@@ -127,6 +133,9 @@ const entitySchemas = {
     label: 'Projects',
     singularLabel: 'Project',
     idField: 'id',
+    renamable: true,
+    idPattern: /^[A-Za-z0-9_-]+$/,
+    renameHint: 'The project keeps its members, collections and config overrides. The "rbac.default-project" setting is updated if it names this project.',
     icon: 'folder2-open',
     fields: [
       {
@@ -248,6 +257,9 @@ const entitySchemas = {
     label: 'Collections',
     singularLabel: 'Collection',
     idField: 'id',
+    renamable: true,
+    idPattern: /^[A-Za-z0-9_-]+$/,
+    renameHint: 'The collection id is replaced in projects, groups and all documents of the collection.',
     icon: 'folder',
     fields: [
       {

@@ -96,7 +96,7 @@
   ],
   "annotation.lifecycle.role.reviewer.description": "Lifecycle states that reviewers are allowed to set",
   "annotation.lifecycle.role.reviewer.type": "array",
-  "access-control.mode": "role-based",
+  "access-control.mode": "owner-based",
   "access-control.mode.description": "Access control mode (role-based uses roles, owner-based restricts to file owner)",
   "access-control.mode.type": "string",
   "access-control.mode.values": ["role-based", "owner-based", "granular"],

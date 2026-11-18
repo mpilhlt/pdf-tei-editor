@@ -375,7 +375,7 @@ async def save_file(
             # Get PDF stable_id
             pdf_file = file_repo.get_pdf_for_document(doc_id)
             pdf_stable_id = pdf_file.stable_id if pdf_file else ""
-            logger_inst.info(f"DEBUG: Emitting document.save event for {existing_file.stable_id}")
+            logger_inst.debug(f"Emitting document.save event for {existing_file.stable_id}")
             await get_event_bus().emit("document.save",
                 file_id=existing_file.stable_id,
                 doc_id=doc_id,
@@ -389,7 +389,6 @@ async def save_file(
                 variant=existing_file.variant,
                 base_url=base_url
             )
-            logger_inst.info("DEBUG: Event emitted")
 
         # Save to storage (hash might change if content changed)
             xml_bytes = xml_string.encode('utf-8')

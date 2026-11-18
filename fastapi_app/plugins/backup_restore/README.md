@@ -126,37 +126,33 @@ It runs from the application directory (`node fastapi_app/plugins/backup_restore
 
 ### Set up the backup bot user
 
-Use a dedicated user for the job, with the `backup` role and nothing else. Do not use a personal or an admin account: a bot account with the minimum role limits the damage if its password leaks, and can be disabled without affecting people.
+Use a dedicated user for the job, with the `backup` role and nothing else. Do not use a personal or an admin account: a bot account with the minimum role limits the damage if its token leaks, and can be disabled without affecting people.
 
 #### With the command line
 
-Run this as an administrator (the credentials in your `.env`, see `bin/manage-remote.js --help`):
+Run this as an administrator (with your access token in `.env`, see `bin/manage-remote.js --help`):
 
 ```bash
-# Generate a long random password and store it in a file only the cron user can read
-sudo install -d -m 0750 -o backup /etc/pdf-tei-editor
-openssl rand -base64 32 | sudo -u backup tee /etc/pdf-tei-editor/backup.pw > /dev/null
-sudo chmod 0400 /etc/pdf-tei-editor/backup.pw
-
-# Create the user with only the backup role
+# Create the user with only the backup role and a long random password that nobody needs to know
 node bin/manage-remote.js user add backup-bot \
   --fullname "Backup bot" \
-  --password "$(sudo cat /etc/pdf-tei-editor/backup.pw)" \
+  --password "$(openssl rand -base64 32)" \
   --roles backup
 ```
 
-The password is briefly visible in the process list during the second command; run it on a machine you trust, or create the user in the web interface instead.
+The password is briefly visible in the process list; run it on a machine you trust, or create the user in the web interface instead.
 
 #### With the web interface
 
-Open the user management as an administrator, create a user `backup-bot`, set a long random password and give it the role `backup` only (not `user`, `admin` or any other role). Save the password into the password file as above.
+Open the user management as an administrator, create a user `backup-bot`, set a long random password and give it the role `backup` only (not `user`, `admin` or any other role). The script does not need the password.
 
 #### Create an access token for the bot
 
-The script should log in with a [personal access token](../../../docs/user-manual/access-tokens.md) rather than the password: a token can be revoked without touching the account and expires on its own. As an administrator, open **user menu > Access Tokens**, create a token for `backup-bot` and save it to a file only the cron user can read:
+The script logs in with a [personal access token](../../../docs/user-manual/access-tokens.md): a token can be revoked without touching the account and expires on its own. As an administrator, open **user menu > Access Tokens**, create a token for `backup-bot` and save it to a file only the cron user can read:
 
 ```bash
 # Paste the token, then press Enter and Ctrl-D (keeps it out of the shell history)
+sudo install -d -m 0750 -o backup /etc/pdf-tei-editor
 sudo -u backup sh -c 'umask 077; cat > /etc/pdf-tei-editor/backup.token'
 ```
 
@@ -170,7 +166,7 @@ node fastapi_app/plugins/backup_restore/bin/backup-download.js --dest-dir /var/b
   --token-file /etc/pdf-tei-editor/backup.token --dry-run
 ```
 
-`--dry-run` prints what would happen without contacting the server. Run it without `--dry-run` once by hand to check the login and the download. A wrong, revoked or expired token, a wrong password or a missing role gives exit code 2. Without a token, pass `--user backup-bot --password-file /etc/pdf-tei-editor/backup.pw` instead of `--token-file`.
+`--dry-run` prints what would happen without contacting the server. Run it without `--dry-run` once by hand to check the login and the download. A wrong, revoked or expired token or a missing role gives exit code 2.
 
 ### Schedule it
 
@@ -190,18 +186,16 @@ API_BASE_URL=https://editor.example.org
 API_TOKEN=pte_...
 ```
 
-Make the `.env` file readable only by the cron user. Without a token, set `API_USER=backup-bot` and pass the password with `--password-file`; `API_PASSWORD` in an `.env` file also works but is easier to leak.
+Make the `.env` file readable only by the cron user.
 
 ### Options
 
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `--dest-dir <dir>` | required | Target directory, created with mode 0700 if missing |
-| `--env <path>` | `./.env` | `.env` file with `API_BASE_URL` and `API_TOKEN` (or `API_USER`, `API_PASSWORD`) |
+| `--env <path>` | `./.env` | `.env` file with `API_BASE_URL` and `API_TOKEN` |
 | `--base-url <url>` | `API_BASE_URL` or `http://localhost:8000` | Server URL |
-| `--token-file <path>` | `API_TOKEN` | File containing a personal access token; used instead of username and password |
-| `--user <name>` | `API_USER` | Username |
-| `--password-file <path>` | `API_PASSWORD` | File containing the password |
+| `--token-file <path>` | `API_TOKEN` | File containing a personal access token |
 | `--prefix <str>` | `pdf-tei-editor` | File name prefix. Use different prefixes for several instances in one directory. |
 | `--keep-last <n>` | 7 | Always keep the newest n backups |
 | `--keep-days <n>` | 30 | Delete backups older than n days, but never below `--keep-last` |

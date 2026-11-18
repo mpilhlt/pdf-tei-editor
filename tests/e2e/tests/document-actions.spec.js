@@ -827,6 +827,9 @@ test.describe('Document Actions', () => {
         const ui = /** @type {any} */(window).ui;
         ui.saveDocumentDialog.options.saveToNewCopySection.saveToNewCopy.checked = true;
         ui.saveDocumentDialog.options.saveToNewCopySection.copyLabel.value = 'Version to delete';
+        // The dialog pre-checks "gold" for a gold document. Deleting a gold copy would leave the
+        // document without a gold, and later specs would load another user's version.
+        ui.saveDocumentDialog.options.saveAsGoldSection.saveAsGold.checked = false;
         ui.saveDocumentDialog.changeDesc.value = 'To be deleted';
       });
       await page.waitForTimeout(500);

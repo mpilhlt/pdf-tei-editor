@@ -7,6 +7,7 @@ Implements:
 - POST /api/v1/users - Create a new user (admin only)
 - PUT /api/v1/users/{username} - Update user (admin only)
 - DELETE /api/v1/users/{username} - Delete user (admin only)
+- POST /api/v1/users/{username}/rename - Rename user (admin only)
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,7 +23,12 @@ from ..lib.permissions.user_utils import (
 from ..lib.utils.data_utils import load_entity_data, save_entity_data
 from ..lib.utils.config_utils import get_config
 from ..lib.utils.project_utils import add_member_to_project
-from ..lib.core.dependencies import get_current_user
+from ..lib.core.dependencies import get_current_user, get_file_repository, get_session_manager
+from ..lib.core.sessions import SessionManager
+from ..lib.repository.file_repository import FileRepository
+from ..lib.models.models_rename import RenameRequest, RenameResponse
+from ..lib.utils.rename_utils import RenameError, get_existing_permissions_db, rename_user
+from ..lib.sse.event_bus import get_event_bus
 from ..lib.utils.logging_utils import get_logger
 from ..config import get_settings
 
@@ -396,3 +402,34 @@ def delete_user_endpoint(
     except Exception as e:
         logger.error(f"Error deleting user: {e}")
         raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
+
+
+@router.post("/{username}/rename", response_model=RenameResponse)
+def rename_user_endpoint(
+    username: str,
+    body: RenameRequest,
+    current_user: dict = Depends(require_admin),
+    file_repo: FileRepository = Depends(get_file_repository),
+    session_manager: SessionManager = Depends(get_session_manager),
+) -> RenameResponse:
+    """
+    Rename a user and replace the username in all application data stores.
+
+    Requires admin role. Sessions move to the new username, so the user stays logged in. TEI
+    documents are not changed. Emits the `user.renamed` event (`old_id`, `new_id`).
+
+    Returns:
+        The number of changed records per data store
+    """
+    settings = get_settings()
+    try:
+        changes = rename_user(
+            settings.db_dir, username, body.new_id, file_repo, session_manager,
+            get_existing_permissions_db(settings.db_dir),
+        )
+    except RenameError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+    logger.info(f"User '{username}' renamed to '{body.new_id}' by admin '{current_user.get('username')}': {changes}")
+    get_event_bus().emit_from_thread("user.renamed", old_id=username, new_id=body.new_id)
+    return RenameResponse(old_id=username, new_id=body.new_id, changes=changes)

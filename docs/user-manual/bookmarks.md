@@ -9,7 +9,7 @@ Bookmarks let you return to places in a document's text, for example entries you
 3. A small field asks for the title. It proposes the start of the element's text; type to replace it.
 4. Press `Enter` to save, or `Esc` to cancel.
 
-![The context menu of the XML editor on a bibl element, with the entries "Bookmark…" and "Comment…" at the top](../images/bookmarks-context-menu.png)
+![The context menu of the XML editor, with the entries "Bookmark…" and "Comment…" at the top](../images/bookmarks-context-menu.png)
 
 *The entry **Bookmark…** in the context menu of the XML editor.*
 

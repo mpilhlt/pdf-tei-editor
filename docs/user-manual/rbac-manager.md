@@ -13,7 +13,7 @@ See [User Management](./user-management.md) for background on the authentication
 The dialog is split into two panels:
 
 - **Left panel** — list of all entities of the currently selected type, with a search input and an **Add** button to create a new entry.
-- **Right panel** — the detail form for the selected entity, with **Save** and **Delete** buttons. Additional read-only or relationship sections appear below the form depending on the entity type.
+- **Right panel** — the detail form for the selected entity, with **Save** and **Delete** buttons (and **Rename** for users, projects and collections, see [Renaming IDs](#renaming-ids)). Additional read-only or relationship sections appear below the form depending on the entity type.
 
 Five tabs across the top switch between entity types: **Users**, **Projects**, **Groups**, **Roles**, and **Collections**.
 
@@ -35,7 +35,7 @@ A user can see and open documents only in collections that belong to a project t
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| Username | Yes | Unique login name; cannot be changed after creation |
+| Username | Yes | Unique login name (letters, numbers, `.`, `-`, `_`); change it with **Rename** |
 | Password | Yes (on create) | Stored as a hash; leave blank when editing to keep the existing password |
 | Email | No | Used for notifications if configured |
 | Display name | No | Shown in revision history and the UI |
@@ -56,7 +56,7 @@ Projects are the primary access-control containers. Each project lists the users
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| ID | Yes | URL-safe identifier (letters, numbers, `-`, `_`); cannot be changed after creation |
+| ID | Yes | URL-safe identifier (letters, numbers, `-`, `_`); change it with **Rename** |
 | Name | Yes | Human-readable display name |
 | Description | No | Optional free-text note |
 | Archived | No | Hides the project and its collections from the Collections dropdown and the Collections & Files drawer. Collections that also belong to a non-archived project stay visible. Access rights are unchanged; uncheck to restore the project. |
@@ -75,7 +75,7 @@ Collections are named buckets of documents.
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| ID | Yes | URL-safe identifier; used as the storage directory name — choose carefully, it cannot be changed |
+| ID | Yes | URL-safe identifier (letters, numbers, `-`, `_`); change it with **Rename** |
 | Name | Yes | Display label shown in dropdowns throughout the UI |
 | Description | No | Optional free-text note |
 
@@ -107,6 +107,26 @@ Roles carry permission strings that control what users can do. See [User Managem
 | Permissions | No | Multiselect of permission strings; `*` grants full access |
 
 The built-in roles (`admin`, `reviewer`, `annotator`) cannot be deleted. Roles are assigned to users on the Users tab.
+
+---
+
+## Renaming IDs
+
+The IDs of users, projects and collections can be changed after creation. Select the entry and click **Rename** in the header of the detail form, enter the new ID and confirm. The new ID must not be in use by another entry of the same type.
+
+![The Rename dialog for the collection batch-2 over the Collections tab, with a note on what the rename changes, the field New ID and the buttons Cancel and Rename](../images/rbac-manager-rename.png)
+
+*Renaming a collection.*
+
+The ID is replaced everywhere the application refers to it:
+
+| Renamed | Updated references |
+| --- | --- |
+| User | Project members, collection owners, document creators and owners, sessions, personal access tokens, stored API keys, bookmarks and messages. The user stays logged in, and existing access tokens keep working with the new username. |
+| Project | The `rbac.default-project` setting, if it names the project. Members, collections and config overrides belong to the project and are kept. |
+| Collection | The collection lists of projects and groups, and the collections of all documents in it, including deleted ones. Synchronized documents are marked as modified so the change reaches the sync target. |
+
+TEI documents are not changed by a rename: the annotator entries in their header (`respStmt`, `@who`), comment authors and `@mentions` keep the username that was current when they were written. The full name stored with the annotator is still shown.
 
 ---
 

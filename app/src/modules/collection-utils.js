@@ -74,3 +74,40 @@ export function getArchivedCollectionIds(projects) {
       .filter(colId => !activeIds.has(colId))
   )
 }
+
+/**
+ * Compares two collection display names for sorting: case-insensitive, with embedded
+ * numbers compared by value ("Batch 2" before "Batch 10").
+ * @param {string} a - First name
+ * @param {string} b - Second name
+ * @returns {number}
+ */
+export function compareCollectionNames(a, b) {
+  return (a || '').localeCompare(b || '', undefined, { numeric: true, sensitivity: 'base' })
+}
+
+/**
+ * Sorts collections by display name (see {@link compareCollectionNames}), falling back to the id.
+ * @param {CollectionData[]} collections - Collections
+ * @returns {CollectionData[]} A new, sorted array
+ */
+export function sortCollections(collections) {
+  return [...(collections || [])].sort((a, b) =>
+    compareCollectionNames(a.name || a.id, b.name || b.id) || compareCollectionNames(a.id, b.id))
+}
+
+/**
+ * Returns the projects with their collection ids in the display order of the collections
+ * (see {@link sortCollections}). Ids of unknown collections keep their order at the end.
+ * @param {ProjectInfo[]} projects - Projects
+ * @param {CollectionData[]} collections - All known collections
+ * @returns {ProjectInfo[]} New project objects with sorted `collections`
+ */
+export function sortProjectCollections(projects, collections) {
+  const position = new Map(sortCollections(collections).map((c, i) => [c.id, i]))
+  const rank = (/** @type {string} */ id) => position.get(id) ?? Number.MAX_SAFE_INTEGER
+  return (projects || []).map(p => ({
+    ...p,
+    collections: [...(p.collections || [])].sort((a, b) => rank(a) - rank(b))
+  }))
+}

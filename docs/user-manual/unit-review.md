@@ -24,7 +24,7 @@ Only users with the *reviewer* or *admin* role can set marks; everyone else sees
 
 A review unit is an element below `<text>`. Which elements are units depends on the document variant: for GROBID reference data, each `<bibl>`; for segmentation data, each section (`<front>`, `<body>`, `<listBibl>`, …). For other documents the editor steps down from `<text>` while there is only one non-empty child element (so `<front/><body/><back><listBibl>…` leads to the `<bibl>`s) and takes the children of the first element with several. The path used is recorded in the document the first time a mark is set, so the units stay the same for all reviewers.
 
-When several units share a line, the strip shows the line in amber if their states differ. Pretty-print the document (TEI Wizard) to put each unit on its own line.
+When several units share a line, the strip shows the line striped in amber if their states differ. Pretty-print the document (TEI Wizard) to put each unit on its own line.
 
 ## Marking units
 
@@ -71,9 +71,9 @@ Marks are part of the document: they are saved with it, can be undone with `Ctrl
 | --- | --- |
 | Green | OK |
 | Red | Not OK |
-| Dotted red/green | Disputed: as many OK as not-OK votes, needs another reviewer |
+| Amber | Disputed: as many OK as not-OK votes, needs another reviewer |
 | Grey dashes | The unit was edited after it was reviewed and needs a new review |
-| Amber | Several units with different states share the line |
+| Striped amber | Several units with different states share the line |
 | None | Not reviewed yet |
 
 ## Combining the marks of several reviewers

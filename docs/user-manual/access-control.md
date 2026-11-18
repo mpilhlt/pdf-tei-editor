@@ -57,26 +57,25 @@ Reviewers and administrators are not affected by this safeguard and can always e
 
 Your administrator configures one of three access control modes:
 
-### Role-Based Mode (Default)
-
-In this mode, access is determined by your role and the file type:
-
-- **Gold standard files**: Only reviewers can edit
-- **Version files**: Annotators and reviewers can edit
-- **Viewing**: Everyone with collection access can view all documents
-
-This is the simplest mode and works well for most teams.
-
 ### Owner-Based Mode
 
-In this mode, documents can only be edited by their creator (owner):
+This is the default mode. Documents can only be edited by their creator (owner), in addition to the role restrictions (only reviewers can edit gold standard files, annotators and reviewers can edit version files):
 
 - You can edit documents you created
 - You can view documents created by others, but they are read-only
 - To modify someone else's document, create your own version
+- Documents without an owner (for example imported files) can be edited by reviewers
 
 When you open a document owned by someone else, you'll see a notification:
 > "This document is owned by [username]. Create your own version to edit."
+
+### Role-Based Mode
+
+In this mode, access is determined by your role and the file type only:
+
+- **Gold standard files**: Only reviewers can edit
+- **Version files**: Annotators and reviewers can edit, regardless of who owns them
+- **Viewing**: Everyone with collection access can view all documents
 
 ### Granular Mode
 
@@ -154,7 +153,7 @@ Legacy documents without an owner can only be deleted by reviewers and admins.
 
 ## For Administrators
 
-To change the access control mode, modify the "access-control.mode" config setting.
+The access control mode is set by the "access-control.mode" config setting (`owner-based`, `role-based` or `granular`, default `owner-based`). The `ACCESS_CONTROL_MODE` environment variable overrides it.
 
 ## For Developers
 

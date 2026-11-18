@@ -123,7 +123,7 @@ class AccessControlPlugin extends Plugin {
     } catch (error) {
       this.getDependency('logger').error(`Failed to fetch access control mode: ${error}`)
       this.#accessControlConfig = {
-        mode: 'role-based',
+        mode: 'owner-based',
         default_visibility: 'collection',
         default_editability: 'owner'
       }
@@ -149,8 +149,8 @@ class AccessControlPlugin extends Plugin {
 
     if (!this.#accessControlConfig) {
       // start() has not loaded the access control mode yet. Computing permissions now would
-      // treat the document as role-based and cache that result, so owner-based or granular
-      // checks would never run for it (#654). start() computes them once the mode is known.
+      // apply the fallback mode and cache that result, so the checks of the configured mode
+      // would never run for it (#654). start() computes them once the mode is known.
       this.getDependency('logger').debug(`Access control: mode not loaded yet, deferring ${state.xml}`)
       this.#hideAccessControlWidgets()
       return
@@ -235,7 +235,7 @@ class AccessControlPlugin extends Plugin {
    * @returns {boolean}
    */
   canEditDocument(user) {
-    const mode = this.#accessControlConfig?.mode || 'role-based'
+    const mode = this.#accessControlConfig?.mode || 'owner-based'
     const fileId = this.state?.xml || undefined
 
     if (fileId && isFrozenFile(fileId)) return false
@@ -247,7 +247,11 @@ class AccessControlPlugin extends Plugin {
     }
 
     if (mode === 'role-based') return true
-    if (mode === 'owner-based') return this.#currentPermissions.owner === user?.username
+    if (mode === 'owner-based') {
+      // Like the backend: reviewers manage documents without an owner (e.g. imported files)
+      const { owner } = this.#currentPermissions
+      return owner ? owner === user?.username : userHasReviewerRole(user)
+    }
     if (mode === 'granular') return canEditDocumentWithPermissions(user, this.#currentPermissions, fileId)
 
     return true
@@ -267,7 +271,7 @@ class AccessControlPlugin extends Plugin {
    * @returns {AccessControlMode}
    */
   getMode() {
-    return this.#accessControlConfig?.mode || 'role-based'
+    return this.#accessControlConfig?.mode || 'owner-based'
   }
 
   /**
@@ -391,13 +395,13 @@ class AccessControlPlugin extends Plugin {
    * @returns {boolean}
    */
   #isOwnershipInfoAvailable(fileId) {
-    const mode = this.#accessControlConfig?.mode || 'role-based'
+    const mode = this.#accessControlConfig?.mode || 'owner-based'
     if (mode !== 'owner-based') return true
     return getFileDataById(fileId) !== null
   }
 
   async #computeDocumentPermissions() {
-    const mode = this.#accessControlConfig?.mode || 'role-based'
+    const mode = this.#accessControlConfig?.mode || 'owner-based'
     const fileData = getFileDataById(this.state?.xml)
     const currentUser = this.getDependency('authentication').getUser()
     const owner = fileData?.item?.created_by || null
@@ -446,7 +450,7 @@ class AccessControlPlugin extends Plugin {
    * @param {string} editability
    */
   async #updateDocumentPermissions(visibility, editability) {
-    const mode = this.#accessControlConfig?.mode || 'role-based'
+    const mode = this.#accessControlConfig?.mode || 'owner-based'
     if (mode !== 'granular') throw new Error('Permission modification only available in granular mode')
     if (!this.state?.xml) throw new Error('No document loaded')
 
@@ -465,7 +469,7 @@ class AccessControlPlugin extends Plugin {
   }
 
   #updateAccessControlUI() {
-    const mode = this.#accessControlConfig?.mode || 'role-based'
+    const mode = this.#accessControlConfig?.mode || 'owner-based'
     if (mode === 'granular' && this.#currentPermissions.can_modify) {
       this.#showPermissionSwitches()
       this.#updateSwitchStates()
@@ -524,7 +528,8 @@ class AccessControlPlugin extends Plugin {
     const currentUser = this.getDependency('authentication').getUser()
     const owner = this.#currentPermissions.owner
     const isOwner = owner && owner === currentUser?.username
-    if (!isOwner) {
+    // reviewers can edit documents without an owner
+    if (!isOwner && (owner || !userHasReviewerRole(currentUser))) {
       if (owner) {
         notify(
           `This document is owned by ${owner}. Use "Save Revision → Save to a new personal copy" to work on your own copy.`,
@@ -554,7 +559,7 @@ class AccessControlPlugin extends Plugin {
       this.getDependency('xmleditor').setReadOnlyContext('Read-only')
       return
     }
-    const mode = this.#accessControlConfig?.mode || 'role-based'
+    const mode = this.#accessControlConfig?.mode || 'owner-based'
     const { owner } = this.#currentPermissions
     const currentUser = this.getDependency('authentication').getUser()
     let contextText = 'Read-only'

@@ -61,6 +61,7 @@ import './modules/panels/index.js';
  * @import {messagesDialogPart} from './templates/messages-dialog.types.js'
  * @import {bookmarksDialogPart} from './templates/bookmarks-dialog.types.js'
  * @import {accessTokensDialogPart} from './templates/access-tokens-dialog.types.js'
+ * @import {xpathNavigationDialogPart} from './templates/xpath-navigation-dialog.types.js'
  * @import {pdfViewerPart} from './plugins/pdfviewer.js'
  * @import {xmlEditorPart} from './plugins/xmleditor.js'
  * @import {toolbarPart} from './plugins/toolbar.js'
@@ -108,6 +109,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, messagesDialogPart>} [messagesDialog] - Messages dialog (added by messages plugin)
  * @property {UIPart<SlDialog, bookmarksDialogPart>} [bookmarksDialog] - Bookmarks dialog (added by bookmarks plugin)
  * @property {UIPart<SlDialog, accessTokensDialogPart>} [accessTokensDialog] - Access tokens dialog (added by access-tokens plugin)
+ * @property {UIPart<SlDialog, xpathNavigationDialogPart>} [xpathNavigationDialog] - Navigation XPaths dialog (added by xpath-navigation plugin)
  * @property {UIPart<SlDialog, configEditorDialogPart>} [configEditorDialog] - Config editor dialog (added by config-editor plugin)
  * @property {UIPart<SlDialog, documentRulesEditorDialogPart>} [documentRulesEditorDialog] - Document rules resource editor dialog (added by document-rules plugin)
  * @property {UIPart<SlDialog, documentRulesUpdateDialogPart>} [documentRulesUpdateDialog] - "Update machine rules from guide" sub-dialog of the document rules editor (added by document-rules plugin)

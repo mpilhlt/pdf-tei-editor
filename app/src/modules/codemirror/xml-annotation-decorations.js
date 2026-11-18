@@ -34,7 +34,8 @@ export function resolveLabel(tagDef, element) {
 /**
  * A badge widget rendered in place of an OpenTag (or the SelfClosingTag of an
  * empty element) for a known annotation element.
- * Dispatches `ann-badge-click` custom event with { tag, from } when clicked.
+ * Dispatches `ann-badge-click` custom event with { tag, from } when clicked, unless
+ * the badge is read-only (a display-only element such as `<text>`).
  * The popup handler resolves the XML DOM element from `from` at click-time.
  */
 class BadgeWidget extends WidgetType {
@@ -44,23 +45,28 @@ class BadgeWidget extends WidgetType {
    * @param {string} tag
    * @param {number} from Document position of the open tag start
    * @param {boolean} [empty] Whether the badge stands for a self-closing element (drawn as an outline)
+   * @param {boolean} [readOnly] Whether the badge stands for a display-only element (not clickable)
    */
-  constructor(label, color, tag, from, empty = false) {
+  constructor(label, color, tag, from, empty = false, readOnly = false) {
     super();
     this.label = label;
     this.color = color;
     this.tag = tag;
     this.from = from;
     this.empty = empty;
+    this.readOnly = readOnly;
   }
 
   toDOM() {
     const span = document.createElement('span');
-    span.className = this.empty ? 'ann-badge ann-badge--empty' : 'ann-badge';
+    span.className = 'ann-badge'
+      + (this.empty ? ' ann-badge--empty' : '')
+      + (this.readOnly ? ' ann-badge--readonly' : '');
     span.style.setProperty('--ann-color', this.color);
     span.dataset.tag = this.tag;
     span.dataset.from = String(this.from);
     span.textContent = this.label;
+    if (this.readOnly) return span;
     span.addEventListener('click', (e) => {
       e.stopPropagation();
       span.dispatchEvent(new CustomEvent('ann-badge-click', {
@@ -78,7 +84,8 @@ class BadgeWidget extends WidgetType {
       other.color === this.color &&
       other.tag === this.tag &&
       other.from === this.from &&
-      other.empty === this.empty;
+      other.empty === this.empty &&
+      other.readOnly === this.readOnly;
   }
 
   ignoreEvent() { return false; }
@@ -154,6 +161,11 @@ function readAttributes(openTagNode, state) {
  *   - Content  → Decoration.mark class ann-outer (depth=1) or ann-inner (depth≥2)
  *   - CloseTag → Decoration.replace → zero-width hidden widget
  *
+ * For each display-only annotation element (`readOnly`, e.g. <text>):
+ *   - OpenTag  → Decoration.replace → non-clickable BadgeWidget
+ *   - CloseTag → Decoration.replace → zero-width hidden widget
+ *   - no content mark, and no nesting level: its child annotation elements get depth 1
+ *
  * For each self-closing annotation element (e.g. <gap/>):
  *   - SelfClosingTag → Decoration.replace → outlined BadgeWidget (no content)
  *
@@ -165,7 +177,7 @@ function readAttributes(openTagNode, state) {
  * the atomic ranges are sorted by `from` before being added to a RangeSetBuilder.
  *
  * @param {import('@codemirror/state').EditorState} state
- * @param {Map<string, {tag: string, label: string, color: string, attributes: any[], variants?: Array<{attrs: Record<string,string>, description?: string|null}>|null, bareAllowed?: boolean, childTags?: string[]|null}>} tagMap
+ * @param {Map<string, {tag: string, label: string, color: string, attributes: any[], variants?: Array<{attrs: Record<string,string>, description?: string|null}>|null, bareAllowed?: boolean, childTags?: string[]|null, readOnly?: boolean}>} tagMap
  * @returns {{ decos: import('@codemirror/view').DecorationSet, atomic: import('@codemirror/state').RangeSet<TagMarker> }}
  */
 function buildAll(state, tagMap) {
@@ -212,16 +224,22 @@ function buildAll(state, tagMap) {
           const closeTag = node.node.lastChild;
           const hasCloseTag = closeTag && (closeTag.name === 'CloseTag' || closeTag.name === 'MismatchedCloseTag');
 
-          const depth = stack.length + 1;
-          stack.push({ from: node.from, to: node.to, def, depth });
-
           // Badge for the OpenTag
           const label = badgeLabel(def, elemAttrs);
           pendingDecos.push({
             from: firstChild.from,
             to: firstChild.to,
-            dec: Decoration.replace({ widget: new BadgeWidget(label, def.color, tagName, firstChild.from) })
+            dec: Decoration.replace({ widget: new BadgeWidget(label, def.color, tagName, firstChild.from, false, !!def.readOnly) })
           });
+
+          // Display-only element: hide the close tag, but neither color the content nor count as a nesting level
+          if (def.readOnly) {
+            if (hasCloseTag) pendingDecos.push({ from: closeTag.from, to: closeTag.to, dec: hiddenWidget });
+            return;
+          }
+
+          const depth = stack.length + 1;
+          stack.push({ from: node.from, to: node.to, def, depth });
 
           // Content mark (between OpenTag.to and CloseTag.from)
           if (hasCloseTag) {
@@ -260,7 +278,7 @@ function buildAll(state, tagMap) {
           pendingDecos.push({
             from: firstChild.from,
             to: firstChild.to,
-            dec: Decoration.replace({ widget: new BadgeWidget(badgeLabel(def, elemAttrs), def.color, tagName, firstChild.from, true) })
+            dec: Decoration.replace({ widget: new BadgeWidget(badgeLabel(def, elemAttrs), def.color, tagName, firstChild.from, true, !!def.readOnly) })
           });
         }
       }
@@ -329,7 +347,7 @@ export function createNavigationField() {
  * Returns a StateField (decorations + atomic ranges built in one tree walk) and the
  * EditorView.atomicRanges facet that makes non-annotated XML tags uncrossable by cursor motion.
  *
- * @param {Array<{tag: string, label: string, color: string, attributes: any[], variants?: Array<{attrs: Record<string,string>, description?: string|null}>|null, bareAllowed?: boolean}>} tagDefs
+ * @param {Array<{tag: string, label: string, color: string, attributes: any[], variants?: Array<{attrs: Record<string,string>, description?: string|null}>|null, bareAllowed?: boolean, readOnly?: boolean}>} tagDefs
  * @returns {import('@codemirror/state').Extension[]}
  */
 export function createAnnotationField(tagDefs) {
@@ -374,6 +392,11 @@ export const annotationTheme = EditorView.baseTheme({
     background: 'transparent',
     color: 'inherit',
     boxShadow: 'inset 0 0 0 1.5px var(--ann-color)',
+  },
+  // Display-only elements (<text>): a badge that is not clickable
+  '.ann-badge--readonly': {
+    cursor: 'default',
+    opacity: '0.75',
   },
   '.ann-outer': {
     background: 'color-mix(in srgb, var(--ann-color) 18%, transparent)',

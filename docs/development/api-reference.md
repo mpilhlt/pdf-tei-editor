@@ -367,11 +367,8 @@ A session created from a token ends when the token is revoked or expires, or aft
 All CLI scripts and external tools that access the HTTP API should support these environment variables (from `.env` file):
 
 ```bash
-# API credentials: a personal access token (preferred) ...
+# Personal access token (see docs/user-manual/access-tokens.md)
 API_TOKEN=pte_...
-# ... or username and password (used if API_TOKEN is not set)
-API_USER=admin
-API_PASSWORD=admin
 
 # API base URL (default: http://localhost:8000)
 API_BASE_URL=http://localhost:8000
@@ -389,7 +386,7 @@ EOF
 # Run CLI script (will read credentials from .env)
 node bin/batch-extract.js /path/to/pdfs --collection my_collection --extractor mock-extractor
 
-# Or override via CLI parameters (--user/--password work instead of --token)
+# Or override via CLI parameters
 node bin/batch-extract.js /path/to/pdfs \
   --token pte_... \
   --base-url http://localhost:8000 \
@@ -399,8 +396,8 @@ node bin/batch-extract.js /path/to/pdfs \
 
 **CLI scripts should:**
 - Accept optional `--env <path>` parameter (default: `./.env`)
-- Support `--token`, `--user`, `--password`, `--base-url` CLI parameters that override env vars
-- Log in with the shared helper in `bin/lib/api-auth.js`: a token at `/api/v1/auth/token-login`, otherwise the plain text password at `/api/v1/auth/login`
+- Support `--token` and `--base-url` CLI parameters that override env vars
+- Log in with the shared helper in `bin/lib/api-auth.js`, which exchanges the token for a session at `/api/v1/auth/token-login`; CLI scripts do not support username/password login
 - Make authenticated requests with `X-Session-ID` header
 
 **Example implementations:**
