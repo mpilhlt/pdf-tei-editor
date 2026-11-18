@@ -266,6 +266,23 @@ class UnitReviewPlugin extends Plugin {
     this.#refresh()
   }
 
+  /**
+   * Loads the line layout of a newly selected document that is reviewed by page; the editor may
+   * have loaded it before the document's id and variant reached the state.
+   * @param {string|null} xml
+   */
+  async onXmlChange(xml) {
+    if (xml) await this.#loadLayout()
+  }
+
+  /**
+   * See {@link UnitReviewPlugin#onXmlChange}.
+   * @param {string|null} variant
+   */
+  async onVariantChange(variant) {
+    if (variant) await this.#loadLayout()
+  }
+
   // ── Public API ──────────────────────────────────────────────────────
 
   /**
@@ -564,6 +581,8 @@ class UnitReviewPlugin extends Plugin {
     const variantPath = this.#variantPaths[variant] ?? DEFAULT_UNIT_PATH
     // a zone document is always reviewed by page; marks stored with another unit path are ignored
     this.#unitPath = variantPath === PAGES_UNIT_PATH ? PAGES_UNIT_PATH : data.unitPath ?? variantPath
+    // the variant is known only once the document is parsed, which may be after it was loaded
+    if (this.#unitPath === PAGES_UNIT_PATH && this.state?.xml && this.#layout?.stableId !== this.state.xml) this.#loadLayout()
     const linePages = this.#layout?.stableId === this.state?.xml ? this.#layout?.linePages ?? null : null
     let scan
     try {
