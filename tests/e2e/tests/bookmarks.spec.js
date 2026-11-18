@@ -3,7 +3,8 @@
  *
  * As an annotator, bookmarks a <bibl> from the editor's context menu (the entry is disabled in
  * the teiHeader), opens the Bookmarks dialog from the user menu, renames the bookmark, opens it
- * (which selects the element, also after a unit was inserted before it), checks the gutter marker, checks that another
+ * (which selects the element, also after a unit was inserted before it, and shows its gutter marker
+ * when opened from another document), checks the gutter marker, checks that another
  * user does not see it, deletes it, and checks that deleting the document deletes its bookmarks.
  *
  * @testCovers app/src/plugins/bookmarks.js
@@ -129,6 +130,7 @@ test.describe('Bookmarks', () => {
       await navigateAndLogin(page, 'testannotator', 'annotatorpass');
       const loadResult = await selectFirstDocuments(page);
       expect(loadResult.success).toBe(true);
+      const otherId = await page.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().xml);
       const stableId = await loadBookmarkDocument(page);
 
       // not available in the teiHeader
@@ -208,6 +210,17 @@ test.describe('Bookmarks', () => {
       await page.getByTestId('bookmark-gutter-marker').click();
       await waitForTestMessage(consoleLogs, 'BOOKMARK_GUTTER_CLICKED');
       expect(await selectedText(page)).toBe('<bibl>Beta 2002</bibl>');
+
+      // opening the bookmark from another document shows its gutter marker (#823)
+      await page.evaluate((otherId) => (/** @type {any} */ (window)).app.getDependency('services').load({ xml: otherId }), otherId);
+      await expect(page.getByTestId('bookmark-gutter-marker')).toHaveCount(0);
+      consoleLogs.splice(0, consoleLogs.length, ...consoleLogs.filter(log => log.message !== 'BOOKMARK_OPENED'));
+      await openBookmarksDialog(page);
+      await dialog.getByTestId('bookmark-row').filter({ hasText: 'Beta entry' }).click();
+      const reopened = await waitForTestMessage(consoleLogs, 'BOOKMARK_OPENED');
+      expect(reopened.value.found).toBe(true);
+      await expect(page.getByTestId('bookmark-gutter-marker')).toHaveCount(1);
+      await expect(page.getByTestId('bookmark-gutter-marker')).toHaveAttribute('title', 'Bookmark: Beta entry');
 
       // private: another user does not see it
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().dispatch({ selection: { anchor: 0 } }));
