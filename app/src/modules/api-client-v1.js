@@ -417,7 +417,23 @@
  * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  * @property {Object<string, any>=} annotationTags - Annotation tag definitions keyed by variant_id
  * @property {Object<string, any>=} annotationTagsCutoff - Per-variant count of top-level menu items; tags beyond this go in 'More...' submenu
- * @property {Object<string, string>=} reviewUnits - Per-variant path of the review units below TEI/text for unit review mode, keyed by variant_id
+ * @property {Object<string, string>=} reviewUnits - Per-variant path of the review units below TEI/text for unit review mode, keyed by variant_id; `pages` for the page units of zone documents
+ * @property {Object<string, Array<ZoneLabelDef>>=} zoneLabels - Per-variant zone labels of zone documents (the children of `<text>` partition the text), keyed by variant_id
+ */
+
+/**
+ * @typedef {Object} ZoneLabelDef
+ * @property {string} code - Short code shown to models and in the unit review, e.g. `note:headnote`
+ * @property {string} element - Element name of the zone, e.g. `note`
+ * @property {Object<string, string>=} attributes - Attributes of the zone element, e.g. `{place: 'headnote'}`
+ */
+
+/**
+ * @typedef {Object} LineLayoutResponse
+ * @property {'ok'|'missing'|'unsupported'} status - ok: the layout is in `pages` and `hints`; missing: the variant has a layout provider, but it has no layout for this document; unsupported: no layout provider for the variant
+ * @property {Array<number>} pages - Page index (0-based) of every line of `<text>`
+ * @property {Array<Array<string>>} hints - Layout hints of every line (e.g. top, repeated, bold)
+ * @property {string|null=} message - Why there is no layout (status missing)
  */
 
 /**
@@ -2970,6 +2986,18 @@ export class ApiClientV1 {
    */
   async filesGetMetadata(stable_id) {
     const endpoint = `/files/${stable_id}/metadata`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * The page and layout hints of every line of the document's `<text>`, from the layout provider
+   * of its variant.
+   *
+   * @param {string} stable_id
+   * @returns {Promise<LineLayoutResponse>}
+   */
+  async filesGetLayout(stable_id) {
+    const endpoint = `/files/${stable_id}/layout`
     return this.callApi(endpoint);
   }
 

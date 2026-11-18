@@ -53,6 +53,8 @@ from .standoff_reader import (
     resp_persons,
 )
 from .store import MessageKind, MessageReason, MessageStore, Occurrence
+from fastapi_app.lib.tei.layout import PAGES_UNIT_PATH, get_line_layout, get_zone_labels
+from fastapi_app.lib.tei.zone_lines import ZoneDocumentError, read_zone_document, pages_of
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +126,35 @@ def _file_time(file: FileMetadata) -> str:
     return file.updated_at.isoformat()
 
 
+def _unit_order_and_excerpts(root: etree._Element, file: FileMetadata, unit_path: str | None) -> tuple[dict[str, int], dict[str, str]]:  # type: ignore[name-defined]
+    """The position and an excerpt of every review unit, by fingerprint; page units of zone documents from their layout."""
+    if unit_path != PAGES_UNIT_PATH:
+        try:
+            units = find_units(root, unit_path)
+        except ValueError:
+            units = []
+        return {u.fingerprint: i for i, u in enumerate(units)}, {u.fingerprint: element_excerpt(u.element) for u in units}
+    labels = get_zone_labels(file.variant)
+    if labels is None:
+        return {}, {}
+    xml = etree.tostring(root, encoding="unicode")
+    layout = get_line_layout(xml, file.doc_id, file.variant)
+    if layout is None:
+        return {}, {}
+    try:
+        doc = read_zone_document(xml, labels)
+    except ZoneDocumentError:
+        return {}, {}
+    order: dict[str, int] = {}
+    excerpts: dict[str, str] = {}
+    for page in pages_of(doc, layout.pages):
+        order[page.fingerprint] = page.index
+        text = " ".join(doc.lines[i].text for i in page.lines)
+        text = f"Page {page.number}: {text}"
+        excerpts[page.fingerprint] = text if len(text) <= 120 else text[:119].rstrip() + "…"
+    return order, excerpts
+
+
 def _overridden_by_final_ok(reviewers: list[Reviewer], reviewer: Reviewer, fingerprint: str) -> bool:
     """Whether another person's final OK on the unit decides it (`final` review mode)."""
     for other in reviewers:
@@ -181,12 +212,7 @@ def extract_occurrences(
     # ── review marks
     review = read_review_data(find_standoff_list(root, REVIEW_LIST_TYPE))
     if review.reviewers:
-        try:
-            units = find_units(root, review.unit_path)
-        except ValueError:
-            units = []
-        order = {u.fingerprint: i for i, u in enumerate(units)}
-        excerpts = {u.fingerprint: element_excerpt(u.element) for u in units}
+        order, excerpts = _unit_order_and_excerpts(root, file, review.unit_path)
         reviewers = list(review.reviewers.values())
         for reviewer in reviewers:
             not_ok = [

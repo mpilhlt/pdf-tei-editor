@@ -1,0 +1,13 @@
+{
+  "labels": [
+    {"code": "titlePage", "element": "titlePage"},
+    {"code": "front", "element": "front"},
+    {"code": "body", "element": "body"},
+    {"code": "listBibl", "element": "listBibl"},
+    {"code": "page", "element": "page"},
+    {"code": "note:headnote", "element": "note", "attributes": {"place": "headnote"}},
+    {"code": "note:footnote", "element": "note", "attributes": {"place": "footnote"}},
+    {"code": "div:toc", "element": "div", "attributes": {"type": "toc"}}
+  ],
+  "pages": [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3]
+}
