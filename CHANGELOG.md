@@ -2,6 +2,30 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.88.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.87.0...v0.88.0) (2026-11-18)
+
+
+### Bug Fixes
+
+* **collections:** sort collections by name and reload menus via rename/relabel extension points ([a878406](https://github.com/mpilhlt/pdf-tei-editor/commit/a8784063ecbf01007919881df51ae9ae506548c8))
+* **files:** log the document.save event at debug level ([c186344](https://github.com/mpilhlt/pdf-tei-editor/commit/c18634456fc7bf8372c3b174e2ae7be9bcfa5b1d)), closes [#366](https://github.com/mpilhlt/pdf-tei-editor/issues/366)
+* **plugins:** show the server's message when a plugin download fails ([8926e13](https://github.com/mpilhlt/pdf-tei-editor/commit/8926e130e08b6afae4fa6b59bf553512eb58c0ac)), closes [pte-plugins#54](https://github.com/pte-plugins/issues/54) [#504](https://github.com/mpilhlt/pdf-tei-editor/issues/504)
+* **unit-review:** show disputed units in amber instead of dotted red/green ([03d8145](https://github.com/mpilhlt/pdf-tei-editor/commit/03d8145668f16d42c9ee36006c0cbac7773bf8ae)), closes [#794](https://github.com/mpilhlt/pdf-tei-editor/issues/794)
+* **xpath-navigation:** keep the dropdown expression when the cursor moves ([756c3ba](https://github.com/mpilhlt/pdf-tei-editor/commit/756c3bac09e3585bb3878b6e065f4127e940ce9a))
+* **xpath-navigation:** restore default export lost in merge ([5d99a5f](https://github.com/mpilhlt/pdf-tei-editor/commit/5d99a5f882f6009477a7f6cd3bd541a1a2835d86))
+
+
+### Features
+
+* **access-control:** make owner-based mode the default ([ef6ac2e](https://github.com/mpilhlt/pdf-tei-editor/commit/ef6ac2e01acd605b13564f297d1cf694e10e7f72)), closes [#796](https://github.com/mpilhlt/pdf-tei-editor/issues/796)
+* **cli:** log command line clients in with an access token only ([29e9088](https://github.com/mpilhlt/pdf-tei-editor/commit/29e90880a9ea3edcf69877031f120a1d5f6a35ff))
+* **rbac:** rename the ids of users, projects and collections ([052484f](https://github.com/mpilhlt/pdf-tei-editor/commit/052484ff29f10b704210d681c316ee42ddf747a6)), closes [#801](https://github.com/mpilhlt/pdf-tei-editor/issues/801)
+* **xml-annotation:** display-only chips in visual mode ([6dc14dc](https://github.com/mpilhlt/pdf-tei-editor/commit/6dc14dc19dd1b4338af2b6e9cb0d239c2d3c01fe)), closes [#813](https://github.com/mpilhlt/pdf-tei-editor/issues/813)
+* **xmleditor:** move markup commands up in the context menu, mark Shift variants, hide History ([3a32645](https://github.com/mpilhlt/pdf-tei-editor/commit/3a326451c1dcf54c281bcc7e26d90b099adb6b27))
+* **xmleditor:** split elements in the visual mode and in a new line with Shift ([5582a4b](https://github.com/mpilhlt/pdf-tei-editor/commit/5582a4b04448cc3fff56bcf04a1b8284859d1a14))
+* **xmleditor:** split the element at the cursor from the context menu ([734e572](https://github.com/mpilhlt/pdf-tei-editor/commit/734e572b94f8cd2931da9a4171aafc0357d4ec6a)), closes [#802](https://github.com/mpilhlt/pdf-tei-editor/issues/802)
+* **xpath-navigation:** own plugin with editable navigation XPaths ([509c2da](https://github.com/mpilhlt/pdf-tei-editor/commit/509c2dafec1b9450a1368039599a86c556e2d84c)), closes [#803](https://github.com/mpilhlt/pdf-tei-editor/issues/803)
+
 # [0.87.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.86.1...v0.87.0) (2026-11-16)
 
 
