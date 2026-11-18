@@ -177,6 +177,14 @@ PTE_PLUGIN_EXTRAS=default,kisski node scripts/deploy/container.js build
 
 The plugin versions are pinned in `uv.lock`, so an image always contains the plugin versions of its release.
 
+### OCR Languages
+
+Text recognition (the core OCRmyPDF plugin) uses Tesseract. The build argument `TESSERACT_LANGS` lists the Tesseract language models to install, as suffixes of the Debian packages `tesseract-ocr-<lang>`. The default is `eng deu fra ita spa por nld lat grc ell rus pol ces`:
+
+```bash
+docker build --build-arg TESSERACT_LANGS="eng deu fra tur" -t pdf-tei-editor .
+```
+
 ### External Plugins
 
 Plugins maintained outside this repository are added by mounting their directory into the container and listing it in `FASTAPI_PLUGIN_PATHS`:

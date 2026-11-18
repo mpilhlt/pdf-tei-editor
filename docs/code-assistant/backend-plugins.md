@@ -161,6 +161,35 @@ api_key = require_user_secret(options.get("username"), "anthropic")
 - `unregister_secret_service(id)` removes a service that no longer exists (e.g. a deleted endpoint of the inference-endpoints plugin) from the API Keys dialog; stored keys are kept.
 - Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
 
+## OCR Engines
+
+Plugins provide text recognition by registering an `OcrEngine` (`fastapi_app/lib/ocr/base.py`) with the `OcrEngineRegistry` in `initialize()` and unregistering it in `cleanup()`. The core plugin `fastapi_app/plugins/ocrmypdf/` (OCRmyPDF/Tesseract) is the reference implementation.
+
+```python
+from fastapi_app.lib.ocr import OcrEngine, OcrEngineRegistry
+
+class MyEngine(OcrEngine):
+    id = "my-ocr"
+    name = "My OCR"
+    description = "..."
+
+    def get_options(self):  # parameters shown in the OCR dialog, apart from the languages
+        return {"mode": {"type": "string", "label": "Mode", "options": ["fast", "best"], "default": "fast"}}
+
+    def is_available(self): ...
+    def get_languages(self): ...  # normalized codes, e.g. ["de", "en", "zh-Hans"]
+    def recognize(self, input_path, output_path, languages, options): ...  # runs in a worker thread
+
+# in initialize():
+OcrEngineRegistry.get_instance().register(MyEngine())
+```
+
+- Languages are normalized BCP 47 tags as used in the teiHeader (`de`, `grc`, `zh-Hans`, `de-Latf`). Map engine codes with `normalize_ocr_language()` and `to_iso639_3()` from `fastapi_app/lib/ocr/languages.py`.
+- `recognize()` must write a PDF with the same page geometry, since annotation coordinates refer to it. Raise `ValueError` for invalid parameter combinations (HTTP 400); other exceptions become HTTP 500.
+- Option types are `string` (a select box with `options`), `boolean` and `integer`. The router validates the values against `get_options()` before calling `recognize()`.
+- API (`fastapi_app/routers/ocr.py`): `GET /api/v1/ocr/engines`, `GET /api/v1/ocr/text-quality/{stable_id}` (text layer assessment, `fastapi_app/lib/ocr/text_quality.py`), `POST /api/v1/ocr` (replaces the PDF content, keeps the `stable_id`, records the run in `file_metadata.ocr`). OCR runs are serialized.
+- Frontend: the `ocr` plugin (`app/src/plugins/ocr.js`) wraps the API and the options dialog; the generic language chooser is `app/src/modules/language-chooser.js`.
+
 ## Annotation Tags (Visual Mode)
 
 The XML editor offers its visual annotation mode for a variant only when an extractor declares chips for it in `get_info()` under `annotationTags[variant_id]`. Generate them from the variant's RelaxNG schema with `generate_annotation_tags()` instead of writing them by hand:

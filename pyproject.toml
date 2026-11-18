@@ -22,6 +22,7 @@ dependencies = [
     "xmlschema>=4.3.2",
     "pypdf>=6.16.1",
     "py3langid>=0.4.0",
+    "ocrmypdf>=17.14.2",
 ]
 
 [project.optional-dependencies]

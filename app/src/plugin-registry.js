@@ -34,6 +34,7 @@ export { default as LayoutPlugin } from './plugins/layout.js';
 export { default as LoggerPlugin } from './plugins/logger.js';
 export { default as MessagesPlugin } from './plugins/messages.js';
 export { default as MoveFilesPlugin } from './plugins/move-files.js';
+export { default as OcrPlugin } from './plugins/ocr.js';
 export { default as PdfViewerPlugin } from './plugins/pdfviewer.js';
 export { default as PluginAdminPlugin } from './plugins/plugin-admin.js';
 export { default as ProgressPlugin } from './plugins/progress.js';
@@ -84,6 +85,7 @@ export { default as XslViewerPlugin } from './plugins/xsl-viewer.js';
  *   logger: import('./plugins/logger.js').default,
  *   messages: import('./plugins/messages.js').default,
  *   "move-files": import('./plugins/move-files.js').default,
+ *   ocr: import('./plugins/ocr.js').default,
  *   pdfviewer: import('./plugins/pdfviewer.js').default,
  *   "plugin-admin": import('./plugins/plugin-admin.js').default,
  *   progress: import('./plugins/progress.js').default,

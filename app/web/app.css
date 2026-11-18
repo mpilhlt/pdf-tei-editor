@@ -331,6 +331,46 @@ status-bar {
   gap: 10px;
 }
 
+/* A dialog opened from another dialog: without this, the dialog created first (lower in the
+   DOM order) would be shown behind the other one, since both use the same z-index */
+sl-dialog.dialog-stacked {
+  --sl-z-index-dialog: 850;
+}
+
+/* Text recognition section of the extraction dialog */
+.dialog-checkbox-section .text-quality {
+  margin-left: calc(var(--sl-toggle-size-small) + var(--sl-spacing-x-small));
+}
+
+.text-quality:empty {
+  display: none;
+}
+
+.text-quality[data-status="missing"] sl-icon {
+  color: var(--sl-color-danger-600);
+}
+
+.text-quality[data-status="poor"] sl-icon {
+  color: var(--sl-color-warning-600);
+}
+
+.text-quality[data-status="good"] sl-icon {
+  color: var(--sl-color-success-600);
+}
+
+.text-quality ul {
+  margin: 2px 0 0;
+  padding-left: 1.2em;
+}
+
+.ocr-engine-row {
+  align-items: flex-end;
+}
+
+.ocr-engine-row sl-select {
+  flex: 1;
+}
+
 sl-select::part(display-input) {
   caret-color: transparent !important;
   font-size: inherit;
