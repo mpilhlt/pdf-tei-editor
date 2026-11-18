@@ -6,6 +6,8 @@
  * rejected, adds an expression without a label, navigates with it, renames it and deletes it.
  * Checks that an expression with a wildcard and a predicate stays selected in the dropdown when it
  * replaces another one, and that the index follows the cursor among the nodes it selects.
+ * Checks that in focus mode, the up/down arrow keys move the focus to the previous/next node, and
+ * that in the visual annotation mode, they always go to the previous/next node like ‹ ›.
  *
  * @testCovers app/src/plugins/xpath-navigation.js
  * @testCovers app/src/templates/xpath-navigation-dialog.html
@@ -241,6 +243,133 @@ test.describe('XPath navigation', () => {
       });
       await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[3]`, selected: CHILDREN, counter: '(3/3)' });
     } finally {
+      await page.evaluate(async (variant) => {
+        try {
+          await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, { entries: [] });
+        } catch { /* nothing to clean up */ }
+      }, VARIANT).catch(() => {});
+      await releaseAllLocks(page).catch(() => {});
+      stopErrorMonitoring();
+    }
+  });
+
+  test('in focus mode, the arrow keys move the focus to the previous/next node', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const BIBL = '//tei:listBibl/tei:bibl';
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.evaluate(async ({ variant, bibl }) => {
+        await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, {
+          entries: [{ value: bibl, label: 'bibl' }]
+        });
+      }, { variant: VARIANT, bibl: BIBL });
+      await loadNavigationDocument(page, TEXT.replace('Beta 2002', 'Beta\n        2002'));
+      await page.reload();
+      await expect.poll(() => dropdownTexts(page)).toContain(BIBL);
+      await clickDropdownEntry(page, 'bibl');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[1]`, selected: BIBL, counter: '(1/3)' });
+      await expect.poll(() => page.evaluate(() =>
+        (/** @type {any} */ (window)).app.getDependency('xmleditor').isFocusMode())).toBe(true);
+
+      // in the editor text, the cursor moves line by line within the focused node, and from its
+      // first/last line to the previous/next node, which is centered
+      const cursorLine = () => page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        return view.state.doc.lineAt(view.state.selection.main.head).text.trim();
+      });
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().focus());
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      expect(await cursorLine()).toBe('<bibl>Beta');
+      await page.keyboard.press('ArrowDown');
+      await page.waitForTimeout(500);
+      expect((await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      expect(await cursorLine()).toBe('2002</bibl>');
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      expect(await cursorLine()).toBe('<bibl>Gamma 2003</bibl>');
+      await page.keyboard.press('ArrowUp');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+
+      // outside the editor text, e.g. after clicking a navigation button
+      await page.locator('[name="nextNodeBtn"]').click();
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      await page.keyboard.press('ArrowUp');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await page.keyboard.press('ArrowUp');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[1]`);
+      // no wrapping around at the first node
+      await page.keyboard.press('ArrowUp');
+      await page.waitForTimeout(500);
+      expect((await navigationState(page)).xpath).toBe(`${BIBL}[1]`);
+    } finally {
+      await page.evaluate(async (variant) => {
+        try {
+          await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, { entries: [] });
+        } catch { /* nothing to clean up */ }
+      }, VARIANT).catch(() => {});
+      await releaseAllLocks(page).catch(() => {});
+      stopErrorMonitoring();
+    }
+  });
+
+  test('in the visual mode, the arrow keys go to the previous/next node like the buttons', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const BIBL = '//tei:listBibl/tei:bibl';
+
+    // the visual mode needs annotation tags for the variant
+    await page.route('**/api/v1/extract/list', async route => {
+      const response = await route.fetch();
+      const extractors = await response.json();
+      const extractor = Array.isArray(extractors) && extractors.find(e => e.variants?.includes(VARIANT));
+      if (!extractor) return route.fulfill({ response });
+      extractor.annotationTags = { ...extractor.annotationTags, [VARIANT]: [{ tag: 'bibl', label: 'Bibl', color: '#cc6600' }] };
+      await route.fulfill({ response, json: extractors });
+    });
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.evaluate(async ({ variant, bibl }) => {
+        await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, {
+          entries: [{ value: bibl, label: 'bibl' }]
+        });
+      }, { variant: VARIANT, bibl: BIBL });
+      await loadNavigationDocument(page, TEXT.replace('Beta 2002', 'Beta\n        2002'));
+      await page.reload();
+      await expect.poll(() => dropdownTexts(page)).toContain(BIBL);
+      await clickDropdownEntry(page, 'bibl');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[1]`, selected: BIBL, counter: '(1/3)' });
+
+      // without focus mode, too
+      await page.locator('[name="focusToggle"]').click();
+      await expect.poll(() => page.evaluate(() =>
+        (/** @type {any} */ (window)).app.getDependency('xmleditor').isFocusMode())).toBe(false);
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation').dispatchStateChange({ view: 'annotation' }));
+      await page.waitForFunction(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').isReadOnly());
+
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().focus());
+      // the multi-line <bibl> is skipped in one step, the cursor does not move within it
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      // wraps around like ›
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[1]`);
+      await page.keyboard.press('ArrowUp');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      await page.keyboard.press('ArrowUp');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+    } finally {
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation')?.dispatchStateChange({ view: null })).catch(() => {});
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xpath-navigation')?.uiStorage.remove('focusMode')).catch(() => {});
       await page.evaluate(async (variant) => {
         try {
           await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, { entries: [] });
