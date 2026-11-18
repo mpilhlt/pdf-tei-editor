@@ -1,0 +1,11 @@
+<sl-dialog name="ocrOptionsDialog" label="Text recognition options" class="dialog-stacked">
+  <div class="dialog-column">
+    <p name="engineDescription"></p>
+    <sl-select name="languages" label="Languages of the document" size="small" multiple clearable max-options-visible="4" help-text="Select all languages that occur in the document. Fewer languages give faster and better results."></sl-select>
+    <div name="engineOptions" class="dialog-column">
+      <!-- Engine-specific options are inserted here -->
+    </div>
+  </div>
+  <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
+  <sl-button slot="footer" name="submit" variant="primary">OK</sl-button>
+</sl-dialog>

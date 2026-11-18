@@ -73,6 +73,28 @@ def detect_language(text: str) -> Optional[str]:
     return str(lang)
 
 
+def classify_language(text: str) -> Optional[tuple[str, float]]:
+    """
+    Classify the language of a text sample without applying the confidence threshold.
+
+    Args:
+        text: Text to classify
+
+    Returns:
+        Tuple of ISO 639-1 language code and normalized probability (0-1), or None if the
+        text is too short or classification fails
+    """
+    sample = re.sub(r"\s+", " ", text or "").strip()[:MAX_TEXT_LENGTH]
+    if sum(1 for c in sample if c.isalpha()) < MIN_TEXT_LENGTH:
+        return None
+    try:
+        lang, confidence = _get_identifier().classify(sample)
+    except Exception as e:
+        logger.warning(f"Language classification failed: {e}")
+        return None
+    return str(lang), float(confidence)
+
+
 def extract_pdf_text(pdf_path: str, max_pages: int = 5) -> str:
     """
     Extract the text layer of the first pages of a PDF.

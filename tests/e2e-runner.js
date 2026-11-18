@@ -166,7 +166,8 @@ class PlaywrightRunner {
 
     // Check if any source files are newer than the build
     try {
-      const srcFiles = execSync(`find "${srcDir}" -type f -name "*.js"`, { encoding: 'utf-8' })
+      // templates (*.html) are bundled as well
+      const srcFiles = execSync(`find "${srcDir}" -type f \\( -name "*.js" -o -name "*.html" \\)`, { encoding: 'utf-8' })
         .split('\n')
         .filter(f => f.trim());
 

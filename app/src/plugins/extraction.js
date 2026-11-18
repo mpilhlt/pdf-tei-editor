@@ -7,6 +7,8 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { extractionActionsPart } from '../templates/extraction-buttons.types.js'
  * @import { extractionOptionsPart } from '../templates/extraction-dialog.types.js'
+ * @import { OcrRunOptions, OcrSettings } from './ocr.js'
+ * @import { OcrEngineInfo, TextQualityReport } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -85,6 +87,7 @@ import { getFileDataById } from '../modules/file-data-utils.js'
  * @property {string|null} [variant_id]
  * @property {string} [extractor]
  * @property {Record<string, any>} [dynamicOptions] - Additional extractor-specific options
+ * @property {OcrRunOptions} [ocr] - If set, text recognition is applied to the PDF before extraction (not sent to the extractor)
  */
 
 // Register templates at module level
@@ -94,7 +97,7 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html')
 class ExtractionPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'extraction', deps: ['services', 'file-selection', 'logger', 'dialog', 'api-keys'] })
+    super(context, { name: 'extraction', deps: ['services', 'file-selection', 'logger', 'dialog', 'api-keys', 'ocr'] })
   }
 
   static extensionPoints = [ep.toolbar.contentItems];
@@ -226,7 +229,7 @@ class ExtractionPlugin extends Plugin {
       }
 
       testLog('EXTRACTION_OPTIONS_DIALOG_STARTING', { enhancedOptions })
-      const options = await this.#promptForExtractionOptions(enhancedOptions)
+      const { ocr, ...options } = await this.#promptForExtractionOptions(enhancedOptions)
 
       const spinnerMessage = 'Extracting, please wait'
       ui.spinner.show(spinnerMessage)
@@ -236,8 +239,9 @@ class ExtractionPlugin extends Plugin {
         const selectedExtractor = extractorList.find(e => e.id === options.extractor)
         const needsXmlContent = selectedExtractor && selectedExtractor.input.includes('xml')
 
+        const extractsFromXml = Boolean(needsXmlContent && state.xml)
         let file_id
-        if (needsXmlContent && state.xml) {
+        if (extractsFromXml) {
           file_id = state.xml
         } else {
           file_id = options.filename || state.pdf
@@ -245,6 +249,12 @@ class ExtractionPlugin extends Plugin {
 
         if (!file_id) {
           throw new Error('No source file available for extraction')
+        }
+
+        if (ocr && !extractsFromXml) {
+          ui.spinner.show('Applying text recognition, this may take a while')
+          await this.getDependency('ocr').recognize(file_id, ocr)
+          ui.spinner.show(spinnerMessage)
         }
 
         result = await this.getDependency('api-keys').withKeyPrompt(
@@ -377,13 +387,31 @@ class ExtractionPlugin extends Plugin {
       availableExtractors = []
     }
 
+    /**
+     * Whether the extractor will read the PDF, using the same rule as {@link ExtractionPlugin#extractFromPDF}
+     * for choosing the source file
+     * @param {ExtractorInfo|undefined} extractor
+     * @returns {boolean}
+     */
+    const extractsFromPdf = extractor => !extractor ||
+      (extractor.input.includes('pdf') && !(extractor.input.includes('xml') && state?.xml))
+
+    const xmlDoc = (() => {
+      try { return this.#xmlEditor.getXmlTree() } catch { return null }
+    })()
+    // The open document only describes the PDF if no new PDF was uploaded
+    const ocrSection = this.#setupOcrSection(
+      options.filename || state?.pdf || null,
+      options.filename ? [] : getDocumentLanguages(xmlDoc)
+    )
+
     const updateDynamicOptions = () => {
       const selectedExtractorId = String(modelSelectBox.value)
+      const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId)
+      const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes('xml')
+      ocrSection.update(extractsFromPdf(selectedExtractor))
       if (!selectedExtractorId) return
 
-      const selectedExtractor = availableExtractors.find(e => e.id === selectedExtractorId)
-
-      const isXmlExtractor = selectedExtractor && selectedExtractor.input.includes('xml')
       const doiEl = /** @type {HTMLElement} */(dialogUi.doi)
       const collectionEl = /** @type {HTMLElement} */(collectionSelectBox.parentElement)
       doiEl.style.display = isXmlExtractor ? 'none' : ''
@@ -552,6 +580,7 @@ class ExtractionPlugin extends Plugin {
       if (result === false) {
         dialogUi.hide()
         modelSelectBox.removeEventListener('sl-change', updateDynamicOptions)
+        ocrSection.dispose()
         throw new UserAbortException('User cancelled the dialog')
       }
 
@@ -605,11 +634,169 @@ class ExtractionPlugin extends Plugin {
         formData.doi = null
       }
 
+      const ocr = extractsFromPdf(selectedExtractor) ? ocrSection.getRunOptions() : null
       dialogUi.hide()
       modelSelectBox.removeEventListener('sl-change', updateDynamicOptions)
-      return Object.assign(options, formData)
+      ocrSection.dispose()
+      Object.assign(options, formData)
+      if (ocr) {
+        options.ocr = ocr
+      } else {
+        delete options.ocr
+      }
+      testLog('EXTRACTION_OPTIONS_SUBMITTED', { extractor: formData.extractor, ocr })
+      return options
     }
   }
+
+  /**
+   * Set up the text recognition section of the extraction dialog: checks the text layer of
+   * the PDF, fills the engine list and wires the "Configure OCR options" button.
+   *
+   * If the PDF has no text layer, the checkbox is checked and cannot be unchecked; if the text
+   * layer is of poor quality, it is checked but can be unchecked.
+   *
+   * @param {string|null} pdfStableId - stable_id of the PDF, null if there is none
+   * @param {string[]} languageHints - Languages declared in the current document, used as default OCR languages
+   * @returns {{update: (visible: boolean) => void, getRunOptions: () => OcrRunOptions|null, dispose: () => void}}
+   */
+  #setupOcrSection(pdfStableId, languageHints) {
+    const section = this.#dialogUi.ocrSection
+    const ocrPlugin = this.getDependency('ocr')
+    const logger = this.getDependency('logger')
+    const controller = new AbortController()
+    const signal = controller.signal
+
+    /** @type {OcrEngineInfo[]} */
+    let engines = []
+    /** @type {TextQualityReport|null} */
+    let quality = null
+    let userToggled = false
+    let wanted = false
+    /** @type {{engine: string, settings: OcrSettings}|null} settings chosen in the OCR dialog for this extraction */
+    let chosen = null
+
+    section.style.display = 'none'
+    section.applyOcr.checked = false
+    section.applyOcr.disabled = true
+    section.ocrEngine.innerHTML = ''
+    renderTextQuality(section.textQuality, null, pdfStableId ? 'Checking the text layer…' : '')
+
+    const hints = () => [...languageHints, quality?.language]
+    const selectedEngine = () => engines.find(e => e.id === String(section.ocrEngine.value)) ?? null
+    /** @param {OcrEngineInfo} engine */
+    const settingsFor = engine => chosen?.engine === engine.id ? chosen.settings : ocrPlugin.getSettings(engine, hints())
+
+    const render = () => {
+      section.style.display = wanted && engines.length ? '' : 'none'
+      const missing = quality?.status === 'missing'
+      section.applyOcr.disabled = missing
+      if (missing) {
+        section.applyOcr.checked = true
+      } else if (!userToggled && quality) {
+        section.applyOcr.checked = quality.status === 'poor'
+      }
+    }
+
+    if (pdfStableId) {
+      ocrPlugin.getEngines()
+        .then(list => {
+          if (signal.aborted) return
+          engines = list
+          for (const engine of engines) {
+            section.ocrEngine.append(Object.assign(new SlOption(), { value: engine.id, textContent: engine.name }))
+          }
+          const preferred = ocrPlugin.getPreferredEngine(engines)
+          requestAnimationFrame(() => { section.ocrEngine.value = preferred ?? '' })
+          render()
+        })
+        .catch(error => logger.warn('Could not load OCR engines: ' + String(error)))
+
+      ocrPlugin.getTextQuality(pdfStableId)
+        .then(report => {
+          if (signal.aborted) return
+          quality = report
+          renderTextQuality(section.textQuality, report)
+          render()
+        })
+        .catch(error => {
+          if (signal.aborted) return
+          renderTextQuality(section.textQuality, null, 'Could not check the text layer: ' + String(error))
+          section.applyOcr.disabled = false
+        })
+    }
+
+    section.applyOcr.addEventListener('sl-change', () => { userToggled = true }, { signal })
+    section.ocrEngine.addEventListener('sl-change', () => {
+      const engine = selectedEngine()
+      if (engine) ocrPlugin.setPreferredEngine(engine.id)
+    }, { signal })
+    section.configureOcr.addEventListener('click', async () => {
+      const engine = selectedEngine()
+      if (!engine) return
+      try {
+        const settings = await ocrPlugin.configure(engine, settingsFor(engine))
+        if (settings) chosen = { engine: engine.id, settings }
+      } catch (error) {
+        this.getDependency('dialog').error(String(error))
+      }
+    }, { signal })
+
+    return {
+      update: visible => { wanted = visible && Boolean(pdfStableId); render() },
+      getRunOptions: () => {
+        const engine = selectedEngine()
+        if (!engine || !wanted || !section.applyOcr.checked) return null
+        return { engine: engine.id, ...settingsFor(engine) }
+      },
+      dispose: () => controller.abort()
+    }
+  }
+}
+
+/**
+ * Show the result of the text layer check in the extraction dialog.
+ * @param {HTMLElement} container
+ * @param {TextQualityReport|null} report
+ * @param {string} [message] - Text to show instead of a report
+ */
+function renderTextQuality(container, report, message = '') {
+  container.innerHTML = ''
+  container.dataset.status = report?.status ?? ''
+  if (!report) {
+    container.textContent = message
+    return
+  }
+  const icons = { missing: 'exclamation-octagon', poor: 'exclamation-triangle', good: 'check-circle' }
+  const icon = Object.assign(document.createElement('sl-icon'), { name: icons[report.status] })
+  const summary = document.createElement('span')
+  summary.textContent = report.summary
+  container.append(icon, ' ', summary)
+  const details = [...report.reasons]
+  if (report.ocr_applied) {
+    const date = new Date(report.ocr_applied.applied_at).toLocaleString()
+    details.push(`Text recognition was applied on ${date} (${report.ocr_applied.engine}, ${report.ocr_applied.languages.join(', ')}).`)
+  }
+  if (details.length) {
+    const list = document.createElement('ul')
+    for (const detail of details) {
+      list.append(Object.assign(document.createElement('li'), { textContent: detail }))
+    }
+    container.append(list)
+  }
+}
+
+/**
+ * Return the languages declared in profileDesc/langUsage of a TEI document. `xml:lang` is
+ * ignored, since GROBID declares "en" regardless of the document language.
+ * @param {Document|null} xmlDoc
+ * @returns {string[]}
+ */
+function getDocumentLanguages(xmlDoc) {
+  if (!xmlDoc) return []
+  return Array.from(xmlDoc.getElementsByTagNameNS('http://www.tei-c.org/ns/1.0', 'language'))
+    .map(el => el.getAttribute('ident'))
+    .filter(ident => ident && ident !== 'und')
 }
 
 /**

@@ -35,6 +35,24 @@ Choose the extractor, which in most cases will be "Grobid" or "Llamore". This wi
 
 Then, click on "Extract", this starts the extraction and produces a first version of the "gold" file, which refers to the "gold standard" dataset with the corrected and reviewed annotation data.
 
+#### Text recognition (OCR)
+
+Extractors read the text layer of the PDF. Scanned PDFs have no text layer, and older scans often have one of poor quality. Below the extractor options, the dialog shows the result of a check of the text layer and the option "Apply text recognition before extraction":
+
+- If the PDF has no text layer, the option is checked and cannot be unchecked.
+- If the text layer is of poor quality (garbled characters, many implausible words, text that does not read as natural language, scanned pages without text), the option is checked, with the problems listed below it. You can uncheck it.
+- If the text layer looks fine, the option is unchecked.
+
+Choose the text recognition engine and click "Configure OCR options" to choose the languages of the document and the engine parameters. By default, the language declared in the document or the language detected in the text layer is used. The parameters are remembered for the next extraction.
+
+The OCRmyPDF engine has these parameters:
+
+- **Mode**: "auto" chooses from the state of the text layer: "skip" recognizes only pages without text, "redo" replaces an existing OCR text layer and keeps digital text, "force" turns all pages into images and recognizes them again, which is needed if the digital text is garbled.
+- **Straighten skewed pages**: rotates crooked scans by small angles before recognition.
+- **Fix page orientation**: turns pages that are upside down or sideways. This changes the page orientation, so coordinates in existing annotations may no longer match.
+
+Text recognition replaces the stored PDF with the result. The PDF keeps its identifier, so the existing TEI documents stay linked to it, and the improved text layer is also used by the PDF viewer, for example by Autosearch. The original PDF is not kept. Text recognition can take a minute or more for long documents.
+
 ### 2. Versions, corrections and revisions
 
 (Annotator role)

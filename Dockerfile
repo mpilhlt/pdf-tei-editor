@@ -10,6 +10,9 @@ FROM python:${PYTHON_VERSION}-slim AS base
 
 # Re-declare ARG variables for this stage
 ARG NODE_VERSION=24.21.0
+# Tesseract language models for text recognition (OCRmyPDF plugin), as Debian package suffixes
+# (tesseract-ocr-<lang>). Example: --build-arg TESSERACT_LANGS="eng deu fra"
+ARG TESSERACT_LANGS="eng deu fra ita spa por nld lat grc ell rus pol ces"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -22,6 +25,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     poppler-utils \
+    tesseract-ocr \
+    $(for lang in ${TESSERACT_LANGS}; do echo "tesseract-ocr-${lang}"; done) \
     # Clean up package cache
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean

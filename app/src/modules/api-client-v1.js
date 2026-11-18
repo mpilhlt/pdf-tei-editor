@@ -403,6 +403,71 @@
  */
 
 /**
+ * @typedef {string|boolean|number} OcrOptionValue
+ */
+
+/**
+ * @typedef {Object} OcrOptionInfo
+ * @property {'string'|'boolean'|'integer'} type - Value type; a 'string' option with 'options' is a choice
+ * @property {string|null=} label - Field label
+ * @property {string|null=} description - Help text
+ * @property {Array<string>|null=} options - Allowed values of a 'string' option
+ * @property {OcrOptionValue|null=} default - Default value
+ */
+
+/**
+ * @typedef {Object} OcrEngineInfo
+ * @property {string} id - Unique identifier of the engine
+ * @property {string} name - Human-readable name
+ * @property {string} description - Short description
+ * @property {Array<string>} languages - Supported languages as normalized BCP 47 codes
+ * @property {Array<string>} default_languages - Languages used when none are given
+ * @property {Object<string, OcrOptionInfo>} options - Parameters apart from the languages
+ */
+
+/**
+ * @typedef {Object} OcrRequest
+ * @property {string} stable_id - stable_id of the PDF
+ * @property {string} engine - Id of the OCR engine
+ * @property {Array<string>=} languages - Languages of the document as BCP 47 codes; the engine default if empty
+ * @property {Object<string, OcrOptionValue>=} options - Engine parameters
+ */
+
+/**
+ * @typedef {Object} OcrRecord
+ * @property {string} engine - Id of the engine that was used
+ * @property {Array<string>} languages - Languages that were used
+ * @property {string} applied_at - ISO timestamp
+ * @property {string} applied_by - Username
+ */
+
+/**
+ * @typedef {Object} TextQualityReport
+ * @property {'missing'|'poor'|'good'} status - 'missing': no usable text layer, 'poor': text layer of bad quality, 'good': no problems found
+ * @property {string} summary - One-sentence description of the result
+ * @property {Array<string>} reasons - Problems that were found
+ * @property {number} page_count - Number of pages in the PDF
+ * @property {number} pages_analyzed - Number of pages that were analyzed
+ * @property {number} pages_without_text - Analyzed pages without a text layer
+ * @property {number} image_only_pages - Analyzed pages that contain images but no text
+ * @property {number} ocr_layer_pages - Analyzed pages with invisible text (an existing OCR layer)
+ * @property {number} char_count - Number of non-whitespace characters found
+ * @property {number} garbled_char_ratio - Share of garbled characters
+ * @property {number|null=} plausible_word_ratio - Share of tokens that look like words or numbers
+ * @property {string|null=} language - Language detected in the text layer
+ * @property {number|null=} language_confidence - Confidence of the language detection (0-1)
+ * @property {OcrRecord|null=} ocr_applied - Record of a previous OCR run by this application
+ */
+
+/**
+ * @typedef {Object} OcrResponse
+ * @property {string} stable_id - stable_id of the PDF (unchanged)
+ * @property {boolean} changed - Whether the PDF content changed
+ * @property {string|null=} message - Message of the engine, if any
+ * @property {TextQualityReport} quality - Text layer quality after OCR
+ */
+
+/**
  * @typedef {Object} ExtractorInfo
  * @property {string} id - Unique identifier for the extractor
  * @property {string} name - Human-readable name of the extractor
@@ -2142,6 +2207,39 @@ export class ApiClientV1 {
    */
   async extract(requestBody) {
     const endpoint = `/extract`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * List the available OCR engines with their languages and parameters.
+   *
+   * @returns {Promise<Array<OcrEngineInfo>>}
+   */
+  async ocrEngines() {
+    const endpoint = `/ocr/engines`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Assess the quality of the text layer of a PDF: whether it is missing or of poor quality,
+   * and the language detected in it.
+   *
+   * @param {string} stableId - stable_id of the PDF
+   * @returns {Promise<TextQualityReport>}
+   */
+  async ocrTextQuality(stableId) {
+    const endpoint = `/ocr/text-quality/${encodeURIComponent(stableId)}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Apply OCR to a PDF and replace the stored PDF with the result. The stable_id stays the same.
+   *
+   * @param {OcrRequest} requestBody
+   * @returns {Promise<OcrResponse>}
+   */
+  async ocr(requestBody) {
+    const endpoint = `/ocr`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

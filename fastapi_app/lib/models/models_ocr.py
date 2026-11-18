@@ -1,0 +1,73 @@
+"""
+Pydantic models for the OCR API.
+"""
+
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field
+
+from fastapi_app.lib.ocr.base import OcrOptionValue
+
+
+class OcrOptionInfo(BaseModel):
+    """Description of an OCR engine parameter."""
+
+    type: Literal["string", "boolean", "integer"] = Field(..., description="Value type; a 'string' option with 'options' is a choice")
+    label: Optional[str] = Field(None, description="Field label")
+    description: Optional[str] = Field(None, description="Help text")
+    options: Optional[list[str]] = Field(None, description="Allowed values of a 'string' option")
+    default: Optional[OcrOptionValue] = Field(None, description="Default value")
+
+
+class OcrEngineInfo(BaseModel):
+    """Information about an available OCR engine."""
+
+    id: str = Field(..., description="Unique identifier of the engine")
+    name: str = Field(..., description="Human-readable name")
+    description: str = Field("", description="Short description")
+    languages: list[str] = Field(default_factory=list, description="Supported languages as normalized BCP 47 codes")
+    default_languages: list[str] = Field(default_factory=list, description="Languages used when none are given")
+    options: dict[str, OcrOptionInfo] = Field(default_factory=dict, description="Parameters apart from the languages")
+
+
+class OcrRequest(BaseModel):
+    """Request to apply OCR to a PDF."""
+
+    stable_id: str = Field(..., min_length=1, description="stable_id of the PDF")
+    engine: str = Field(..., min_length=1, description="Id of the OCR engine")
+    languages: list[str] = Field(default_factory=list, description="Languages of the document as BCP 47 codes; the engine default if empty")
+    options: dict[str, OcrOptionValue] = Field(default_factory=dict, description="Engine parameters")
+
+
+class OcrResponse(BaseModel):
+    """Result of an OCR run."""
+
+    stable_id: str = Field(..., description="stable_id of the PDF (unchanged)")
+    changed: bool = Field(..., description="Whether the PDF content changed")
+    message: Optional[str] = Field(None, description="Message of the engine, if any")
+    quality: "TextQualityReport" = Field(..., description="Text layer quality after OCR")
+
+
+TextQualityStatus = Literal["missing", "poor", "good"]
+
+
+class TextQualityReport(BaseModel):
+    """Assessment of the text layer of a PDF."""
+
+    status: TextQualityStatus = Field(..., description="'missing': no usable text layer, 'poor': text layer of bad quality, 'good': no problems found")
+    summary: str = Field(..., description="One-sentence description of the result")
+    reasons: list[str] = Field(default_factory=list, description="Problems that were found")
+    page_count: int = Field(0, description="Number of pages in the PDF")
+    pages_analyzed: int = Field(0, description="Number of pages that were analyzed")
+    pages_without_text: int = Field(0, description="Analyzed pages without a text layer")
+    image_only_pages: int = Field(0, description="Analyzed pages that contain images but no text")
+    ocr_layer_pages: int = Field(0, description="Analyzed pages with invisible text (an existing OCR layer)")
+    char_count: int = Field(0, description="Number of non-whitespace characters found")
+    garbled_char_ratio: float = Field(0.0, description="Share of characters that are replacement, control, private-use or unmapped glyph characters")
+    plausible_word_ratio: Optional[float] = Field(None, description="Share of tokens that look like words or numbers")
+    language: Optional[str] = Field(None, description="Language detected in the text layer")
+    language_confidence: Optional[float] = Field(None, description="Confidence of the language detection (0-1)")
+    ocr_applied: Optional[dict[str, str | list[str]]] = Field(default=None, description="Record of a previous OCR run by this application")
+
+
+OcrResponse.model_rebuild()
