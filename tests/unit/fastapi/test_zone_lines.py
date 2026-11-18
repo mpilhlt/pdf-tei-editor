@@ -25,6 +25,7 @@ from fastapi_app.lib.tei.zone_lines import (
     changes_between,
     check_changes,
     format_listing,
+    page_windows,
     pages_of,
     parse_answer,
     parse_line_answer,
@@ -113,6 +114,16 @@ class TestReading(unittest.TestCase):
         doc = ZoneDocument(DEMO.read_text(encoding="utf-8"), LABELS)
         self.assertGreater(len(doc.lines), 200)
         self.assertEqual(doc.lines[0].text, "Urheberrecht")
+
+
+class TestWindows(unittest.TestCase):
+    def test_page_windows(self):
+        doc = ZoneDocument(SAMPLE, LABELS)
+        pages = pages_of(doc, LAYOUT["pages"])
+        self.assertEqual([[p.index for p in w] for w in page_windows(doc, pages, max_pages=2)], [[0, 1], [2, 3]])
+        self.assertEqual([[p.index for p in w] for w in page_windows(doc, pages)], [[0, 1, 2, 3]])
+        self.assertEqual([[p.index for p in w] for w in page_windows(doc, pages, max_chars=10)], [[0], [1], [2], [3]])
+        self.assertEqual([[p.index for p in w] for w in page_windows(doc, pages, max_chars=400)], [[0, 1], [2, 3]])
 
 
 class TestListingAndAnswers(unittest.TestCase):

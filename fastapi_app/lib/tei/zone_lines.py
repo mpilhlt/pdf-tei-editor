@@ -421,6 +421,39 @@ def pages_of(doc: ZoneDocument, line_pages: Sequence[int], pieces: Sequence[Sequ
     return pages
 
 
+# ── Processing windows ───────────────────────────────────────────────
+
+
+def page_windows(
+    doc: ZoneDocument,
+    pages: Sequence[Page],
+    max_pages: int | None = None,
+    max_chars: int | None = None,
+    hints: Sequence[Sequence[str]] | None = None,
+) -> list[list[Page]]:
+    """
+    Groups consecutive whole pages into the windows sent to a model in one request: at most
+    `max_pages` pages, or at most `max_chars` characters of their listing (a page longer than that
+    forms a window of its own). Without either limit, all pages are one window.
+    """
+    if max_pages is None and max_chars is None:
+        return [list(pages)] if pages else []
+    width = line_id_width(len(doc.lines))
+    windows: list[list[Page]] = []
+    current: list[Page] = []
+    size = 0
+    for page in pages:
+        length = sum(len(format_line(doc, i, width, hints[i] if hints and i < len(hints) else ())) + 1 for i in page.lines)
+        if current and ((max_pages is not None and len(current) >= max_pages) or (max_chars is not None and size + length > max_chars)):
+            windows.append(current)
+            current, size = [], 0
+        current.append(page)
+        size += length
+    if current:
+        windows.append(current)
+    return windows
+
+
 # ── Listing ──────────────────────────────────────────────────────────
 
 
