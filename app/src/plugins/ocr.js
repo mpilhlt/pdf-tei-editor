@@ -31,6 +31,7 @@ await registerTemplate('ocr-dialog', 'ocr-dialog.html')
  * @property {string} engine - Id of the OCR engine
  * @property {string[]} languages - Normalized language codes
  * @property {Record<string, OcrOptionValue>} options - Engine parameters
+ * @property {boolean} [rebuild] - The user explicitly asked to recreate the text layer, so a digital text layer is replaced even if it looks fine
  */
 
 class OcrPlugin extends Plugin {
@@ -90,11 +91,13 @@ class OcrPlugin extends Plugin {
   /**
    * Assess the text layer of a PDF.
    * @param {string} stableId - stable_id of the PDF
+   * @param {{layout?: boolean}} [check] - `layout`: also compare the text layer with the words
+   *   recognized on sample page images, which finds misplaced or fragmented text (takes a few seconds)
    * @returns {Promise<TextQualityReport>}
    */
-  async getTextQuality(stableId) {
-    const report = await this.#client.apiClient.ocrTextQuality(stableId)
-    testLog('OCR_TEXT_QUALITY', { stableId, status: report.status })
+  async getTextQuality(stableId, { layout = false } = {}) {
+    const report = await this.#client.apiClient.ocrTextQuality(stableId, layout)
+    testLog('OCR_TEXT_QUALITY', { stableId, status: report.status, layout, layoutChecked: Boolean(report.layout_checked) })
     return report
   }
 
@@ -214,9 +217,10 @@ class OcrPlugin extends Plugin {
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
-      options: run.options
+      options: run.options,
+      rebuild: Boolean(run.rebuild)
     })
-    testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status })
+    testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
     return result
   }
 }

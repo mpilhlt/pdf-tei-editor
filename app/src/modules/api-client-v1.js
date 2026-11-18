@@ -431,6 +431,11 @@
  * @property {string} engine - Id of the OCR engine
  * @property {Array<string>=} languages - Languages of the document as BCP 47 codes; the engine default if empty
  * @property {Object<string, OcrOptionValue>=} options - Engine parameters
+ * @property {boolean=} rebuild - The user explicitly asked to recreate the text layer: a digital text layer is replaced even if it looks fine
+ */
+
+/**
+ * @typedef {'skip'|'redo'|'force'|'vectorize'} OcrMethod
  */
 
 /**
@@ -439,6 +444,8 @@
  * @property {Array<string>} languages - Languages that were used
  * @property {string} applied_at - ISO timestamp
  * @property {string} applied_by - Username
+ * @property {OcrMethod=} method - How the text layer was created, if the engine reports it
+ * @property {string=} fallback_reason - Why the engine fell back from the preferred method
  */
 
 /**
@@ -456,6 +463,10 @@
  * @property {number|null=} plausible_word_ratio - Share of tokens that look like words or numbers
  * @property {string|null=} language - Language detected in the text layer
  * @property {number|null=} language_confidence - Confidence of the language detection (0-1)
+ * @property {boolean=} layout_checked - Whether the text layer was compared with the words recognized on sample page images
+ * @property {number|null=} layout_text_match - Share of recognized words that match the text layer (0-1)
+ * @property {number|null=} layout_position_match - Share of matching words at the same place in the text layer (0-1)
+ * @property {number|null=} layout_order_agreement - Share of matching words in the same order in the text layer (0-1)
  * @property {OcrRecord|null=} ocr_applied - Record of a previous OCR run by this application
  */
 
@@ -464,6 +475,8 @@
  * @property {string} stable_id - stable_id of the PDF (unchanged)
  * @property {boolean} changed - Whether the PDF content changed
  * @property {string|null=} message - Message of the engine, if any
+ * @property {OcrMethod|null=} method - How the text layer was created, if the engine reports it
+ * @property {string|null=} fallback_reason - Why the engine fell back from the preferred method
  * @property {TextQualityReport} quality - Text layer quality after OCR
  */
 
@@ -2241,11 +2254,12 @@ export class ApiClientV1 {
    * and the language detected in it.
    *
    * @param {string} stableId - stable_id of the PDF
+   * @param {boolean} [layout=false] - Also compare the text layer with the words an OCR engine recognizes on sample pages (takes a few seconds)
    * @returns {Promise<TextQualityReport>}
    */
-  async ocrTextQuality(stableId) {
+  async ocrTextQuality(stableId, layout = false) {
     const endpoint = `/ocr/text-quality/${encodeURIComponent(stableId)}`
-    return this.callApi(endpoint);
+    return this.callApi(endpoint, 'GET', layout ? { layout: true } : {});
   }
 
   /**

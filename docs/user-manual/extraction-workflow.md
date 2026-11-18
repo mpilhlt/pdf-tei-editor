@@ -37,18 +37,25 @@ Then, click on "Extract", this starts the extraction and produces a first versio
 
 #### Text recognition (OCR)
 
-Extractors read the text layer of the PDF. Scanned PDFs have no text layer, and older scans often have one of poor quality. Below the extractor options, the dialog shows the result of a check of the text layer and the option "Apply text recognition before extraction":
+Extractors read the text layer of the PDF. Scanned PDFs have no text layer, and older scans often have one of poor quality. Digital PDFs can have a broken text layer too: the characters can be garbled, or the text can be stored at other places or in another order than it is shown on the page. Below the extractor options, the dialog shows the result of a check of the text layer and the option "Apply text recognition before extraction":
 
 - If the PDF has no text layer, the option is checked and cannot be unchecked.
-- If the text layer is of poor quality (garbled characters, many implausible words, text that does not read as natural language, scanned pages without text), the option is checked, with the problems listed below it. You can uncheck it.
-- If the text layer looks fine, the option is unchecked.
+- If the text layer is of poor quality, the option is checked, with the problems listed below it. You can uncheck it. Problems are garbled characters, many implausible words, text that does not read as natural language, scanned pages without text, and text that does not match the page (see below).
+- If the text layer looks fine, the option is unchecked. If you check it anyway, the text layer is replaced, since the check cannot find all problems.
+
+The check runs in two steps. The first looks at the characters of the text layer and takes a moment. If it finds no problem, the text recognition engine reads up to three sample pages and compares the words it finds with the text layer: whether they are the same words, at the same places and in the same order. This takes a few more seconds; the dialog shows "Comparing the text layer with the page images…" meanwhile.
 
 Choose the text recognition engine and click "Configure OCR options" to choose the languages of the document and the engine parameters. By default, the language declared in the document or the language detected in the text layer is used. The parameters are remembered for the next extraction.
 
 The OCRmyPDF engine has these parameters:
 
-- **Mode**: "auto" chooses from the state of the text layer: "skip" recognizes only pages without text, "redo" replaces an existing OCR text layer and keeps digital text, "force" turns all pages into images and recognizes them again, which is needed if the digital text is garbled.
-- **Straighten skewed pages**: rotates crooked scans by small angles before recognition.
+- **Mode**: "auto" chooses from the state of the text layer:
+  - "skip" recognizes only pages without text
+  - "redo" replaces an existing OCR text layer
+  - "vectorize" replaces a digital text layer and keeps the pages as they are: the text is converted to vector outlines, which look the same but contain no text, and the pages are recognized again. This is used for broken digital text layers, PDFs with some scanned pages, and when you ask for text recognition although the text layer looks fine.
+  - "force" turns all pages into images and recognizes them again.
+- **Rasterize if needed**: if "vectorize" is not possible, turn the pages into images instead ("force"). This happens if the PDF is encrypted, if the conversion would change how the pages look, or makes the file too large. The pages then lose their vector graphics, and the file is usually much larger. A message tells you when this happened, and the text layer check of the PDF mentions it later. Uncheck the option to get an error instead.
+- **Straighten skewed pages**: rotates crooked scans by small angles before recognition. It is not applied when the pages are kept as vector graphics.
 - **Fix page orientation**: turns pages that are upside down or sideways. This changes the page orientation, so coordinates in existing annotations may no longer match.
 
 Text recognition replaces the stored PDF with the result. The PDF keeps its identifier, so the existing TEI documents stay linked to it, and the improved text layer is also used by the PDF viewer, for example by Autosearch. The original PDF is not kept. Text recognition can take a minute or more for long documents.
