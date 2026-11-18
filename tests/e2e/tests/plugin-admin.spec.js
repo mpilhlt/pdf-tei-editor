@@ -197,6 +197,85 @@ test.describe('Plugin manager', () => {
     }
   });
 
+  // Mocked like the test above: one installed plugin has a newer release
+  test('admin is told about plugin updates on login and upgrades all installed plugins', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {any[]} */
+    const installRequests = [];
+    let upgraded = false;
+
+    try {
+      await page.route('**/api/v1/plugins/admin', async route => {
+        const response = await route.fetch();
+        const json = await response.json();
+        await route.fulfill({ response, json: { ...json, install_enabled: true } });
+      });
+      await page.route('**/api/v1/plugins/admin/available*', route => route.fulfill({
+        json: {
+          fetched_at: Date.now() / 1000,
+          errors: {},
+          trusted_owners: ['mpilhlt'],
+          trusted_only: false,
+          plugins: [
+            {
+              id: 'demo-plugin', repository: 'mpilhlt/pte-plugins', description: 'An installed plugin with an update', index_version: '1.1.0',
+              latest_version: '1.1.0', latest_tag: 'demo-plugin-v1.1.0', versions: ['1.1.0', '1.0.0'],
+              installed_version: upgraded ? '1.1.0' : '1.0.0', installed_source: 'site', requires: [], unmet_requirements: [],
+              trusted: true, compatible: true, incompatible_reason: null, installable: true, update_available: !upgraded
+            },
+            {
+              id: 'current-plugin', repository: 'mpilhlt/pte-plugins', description: 'An installed plugin without an update', index_version: '2.0.0',
+              latest_version: '2.0.0', latest_tag: 'current-plugin-v2.0.0', versions: ['2.0.0'], installed_version: '2.0.0',
+              installed_source: 'site', requires: [], unmet_requirements: [], trusted: true, compatible: true, incompatible_reason: null,
+              installable: true, update_available: false
+            }
+          ]
+        }
+      }));
+      await page.route('**/api/v1/plugins/admin/install', async route => {
+        installRequests.push(route.request().postDataJSON());
+        upgraded = true;
+        await route.fulfill({ json: { plugin: 'demo-plugin', version: '1.1.0', action: 'upgrade', restart_required: true, generation: 1 } });
+      });
+
+      await navigateAndLogin(page, TEST_ADMIN.username, TEST_ADMIN.password);
+
+      // The update check after login shows a toast that opens the "Available" tab
+      const updateAlert = page.locator('sl-alert[name="pluginUpdateAlert"]');
+      await expect(updateAlert).toContainText('demo-plugin (v1.0.0 → v1.1.0)');
+      await expect(updateAlert).not.toContainText('current-plugin');
+      await page.waitForTimeout(500);
+      await updateAlert.locator('sl-button[name="openBtn"]').click();
+      await expect(page.locator('sl-dialog[name="pluginAdminDialog"]')).toHaveAttribute('open', '');
+      await expect(page.locator('sl-tab-panel[name="available"]')).toHaveAttribute('active', '');
+
+      const upgradeAllBtn = page.locator('sl-button[name="upgradeAllBtn"]');
+      await expect(upgradeAllBtn).toBeVisible();
+      await page.waitForTimeout(500);
+      await upgradeAllBtn.click();
+      const confirm = page.locator('sl-dialog[name="pluginAdminConfirmDialog"]');
+      await expect(confirm).toHaveAttribute('open', '');
+      await expect(confirm).toContainText('demo-plugin v1.0.0 → v1.1.0');
+      const okBtn = confirm.locator('sl-button[name="okBtn"]');
+      await expect(okBtn).not.toHaveAttribute('disabled', '');
+      await page.waitForTimeout(500);
+      await okBtn.click();
+
+      await expect.poll(() => installRequests.length).toBe(1);
+      expect(installRequests[0]).toMatchObject({ repository: 'mpilhlt/pte-plugins', id: 'demo-plugin', version: '1.1.0' });
+      await expect(page.locator('sl-alert', { hasText: 'Upgraded demo-plugin v1.1.0' })).toHaveCount(1);
+      await expect(upgradeAllBtn).toBeHidden();
+    } finally {
+      stopErrorMonitoring();
+      try {
+        await performLogout(page);
+      } catch {
+        // ignore logout errors
+      }
+    }
+  });
+
   test('non-admin does not see the Manage Plugins menu item', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
