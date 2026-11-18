@@ -336,7 +336,7 @@ Click any colored badge in the annotation view to open an attribute popup:
 - Attributes with a fixed list of values (e.g. `level` on `<title>`) appear as dropdown selects.
 - Free-form attributes (e.g. `when` on `<date>`) appear as text inputs.
 
-Changes are applied to the underlying XML as you make them. Click outside the popup or press **Escape** to dismiss it.
+Changes are applied to the underlying XML as you make them. Click outside the popup or press **Escape** to dismiss it. Clicking a badge does not move the cursor or select its element; to select an element, click its text.
 
 ### Changing a tag
 

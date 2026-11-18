@@ -35,7 +35,8 @@ export function resolveLabel(tagDef, element) {
  * A badge widget rendered in place of an OpenTag (or the SelfClosingTag of an
  * empty element) for a known annotation element.
  * Dispatches `ann-badge-click` custom event with { tag, from } when clicked, unless
- * the badge is read-only (a display-only element such as `<text>`).
+ * the badge is read-only (a display-only element such as `<text>`). Pressing a clickable
+ * badge leaves the editor selection unchanged.
  * The popup handler resolves the XML DOM element from `from` at click-time.
  */
 class BadgeWidget extends WidgetType {
@@ -67,6 +68,9 @@ class BadgeWidget extends WidgetType {
     span.dataset.from = String(this.from);
     span.textContent = this.label;
     if (this.readOnly) return span;
+    // A press on a badge must not move the cursor: that would change the selected
+    // element (the `xpath` state), scroll it to the center and leave the click to land elsewhere (#834).
+    span.addEventListener('mousedown', (e) => e.preventDefault());
     span.addEventListener('click', (e) => {
       e.stopPropagation();
       span.dispatchEvent(new CustomEvent('ann-badge-click', {
@@ -88,7 +92,15 @@ class BadgeWidget extends WidgetType {
       other.readOnly === this.readOnly;
   }
 
-  ignoreEvent() { return false; }
+  /**
+   * Keeps CodeMirror from handling a mouse press on a clickable badge, so that it does
+   * not place the cursor there. Read-only badges behave like text.
+   * @param {Event} event
+   * @returns {boolean}
+   */
+  ignoreEvent(event) {
+    return !this.readOnly && event.type === 'mousedown';
+  }
 }
 
 /** Zero-width widget that hides a CloseTag. Shared across all instances. */
