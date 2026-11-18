@@ -178,6 +178,16 @@ class BookmarksPlugin extends Plugin {
     })
   }
 
+  /**
+   * Loads the bookmarks of the document that became the open one. `state.xml` is only set after
+   * the editor has loaded the document (it is null during the load), so the load in the
+   * `editorAfterLoad` handler does not know the document yet.
+   * @param {ApplicationState['xml']} _xml
+   */
+  async onXmlChange(_xml) {
+    await this.#loadDocumentBookmarks()
+  }
+
   /** @param {ApplicationState['user']} user */
   async onUserChange(user) {
     if (!user) {
