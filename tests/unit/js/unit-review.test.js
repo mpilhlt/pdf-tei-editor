@@ -4,6 +4,7 @@
  * Unit tests for the unit review core module and its SHA-256 helper.
  * @testCovers app/src/modules/unit-review.js
  * @testCovers app/src/modules/sha256.js
+ * @testCovers app/src/modules/zone-lines.js
  */
 
 import { describe, it } from 'node:test';
@@ -15,8 +16,9 @@ import { xml } from '@codemirror/lang-xml';
 import { sha256Hex } from '../../../app/src/modules/sha256.js';
 import {
   parseUnitPath, findUnits, readReviewData, serializeReviewData, combineReviews, setMark,
-  reconcileReviewData, removeUnitReviews, parseSummary, emptyReviewData, renumberMarks, LIST_TYPE
+  reconcileReviewData, removeUnitReviews, parseSummary, emptyReviewData, renumberMarks, LIST_TYPE, PAGES_UNIT_PATH
 } from '../../../app/src/modules/unit-review.js';
+import { readFileSync } from 'node:fs';
 
 const REFS = `<TEI xmlns="http://www.tei-c.org/ns/1.0">
   <teiHeader/>
@@ -254,5 +256,34 @@ describe('renumberMarks', () => {
     renumberMarks(data, new Map([['dup', 'dup.2']]), new Map());
     assert.ok(!data.reviewers.get('a')?.marks.has('dup'));
     assert.strictEqual(data.reviewers.get('a')?.marks.get('dup.2')?.state, 'not-ok');
+  });
+});
+
+describe('page units of zone documents', () => {
+  const fixtures = new URL('../fixtures/zone-lines/', import.meta.url);
+  const sample = readFileSync(new URL('segmentation-sample.tei.xml', fixtures), 'utf-8');
+  const layout = JSON.parse(readFileSync(new URL('segmentation-sample.layout.json', fixtures), 'utf-8'));
+  const expected = JSON.parse(readFileSync(new URL('segmentation-sample.expected.json', fixtures), 'utf-8'));
+
+  it('finds one unit per page of the layout', () => {
+    const scan = findUnits(makeState(sample), PAGES_UNIT_PATH, undefined, { labels: layout.labels, linePages: layout.pages });
+    assert.strictEqual(scan.path, PAGES_UNIT_PATH);
+    assert.deepStrictEqual(scan.units.map(u => u.fingerprint), expected.pages.map((/** @type {{fingerprint: string}} */ p) => p.fingerprint));
+    assert.deepStrictEqual(scan.units.map(u => u.label), ['Page 1', 'Page 2', 'Page 3', 'Page 4']);
+    assert.ok(scan.units.every(u => u.name === 'page'));
+  });
+
+  it('a relabeled zone changes only the fingerprint of its page', () => {
+    const zone = { labels: layout.labels, linePages: layout.pages };
+    const before = findUnits(makeState(sample), PAGES_UNIT_PATH, undefined, zone).units;
+    const edited = sample.replace('<body>The second page continues the body <lb/>with more text <lb/></body>', '<listBibl>The second page continues the body <lb/>with more text <lb/></listBibl>');
+    const after = findUnits(makeState(edited), PAGES_UNIT_PATH, undefined, zone).units;
+    assert.deepStrictEqual(after.map((u, i) => u.fingerprint === before[i]?.fingerprint), [true, true, false, true]);
+  });
+
+  it('has no units without a layout', () => {
+    const scan = findUnits(makeState(sample), PAGES_UNIT_PATH, undefined, { labels: layout.labels, linePages: null });
+    assert.strictEqual(scan.units.length, 0);
+    assert.strictEqual(scan.layoutMissing, true);
   });
 });

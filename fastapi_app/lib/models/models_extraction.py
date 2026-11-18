@@ -91,6 +91,13 @@ class AnnotationTagDef(BaseModel):
     )
 
 
+class ZoneLabelDef(BaseModel):
+    """A zone label of a zone document: its short code and the element it stands for."""
+    code: str = Field(..., description="Short code shown to models and in the unit review, e.g. 'note:headnote'")
+    element: str = Field(..., description="Element name of the zone, e.g. 'note'")
+    attributes: Dict[str, str] = Field(default_factory=dict, description="Attributes of the zone element, e.g. {'place': 'headnote'}")
+
+
 class ExtractorInfo(BaseModel):
     """Information about an available extractor."""
     id: str = Field(
@@ -147,7 +154,11 @@ class ExtractorInfo(BaseModel):
     )
     reviewUnits: Dict[str, str] = Field(
         default_factory=dict,
-        description="Per-variant path of the review units below TEI/text for unit review mode (e.g. './/listBibl/bibl'), keyed by variant_id; 'auto' or a missing entry uses the automatic heuristic"
+        description="Per-variant path of the review units below TEI/text for unit review mode (e.g. './/listBibl/bibl'), keyed by variant_id; 'auto' or a missing entry uses the automatic heuristic, 'pages' the pages of a zone document (see zoneLabels)"
+    )
+    zoneLabels: Dict[str, List[ZoneLabelDef]] = Field(
+        default_factory=dict,
+        description="Per-variant zone labels of zone documents, whose <text> children are zones that partition the text (see fastapi_app/lib/tei/zone_lines.py), keyed by variant_id"
     )
 
 

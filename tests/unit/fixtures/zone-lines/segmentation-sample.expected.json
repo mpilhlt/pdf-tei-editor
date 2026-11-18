@@ -1,0 +1,196 @@
+{
+  "lines": [
+    {
+      "pieces": [
+        [
+          "titlePage",
+          "Journal of Samples"
+        ]
+      ],
+      "emptyLabel": "titlePage"
+    },
+    {
+      "pieces": [
+        [
+          "titlePage",
+          "Cover page & notes"
+        ]
+      ],
+      "emptyLabel": "titlePage"
+    },
+    {
+      "pieces": [
+        [
+          "front",
+          "A Sample Article"
+        ]
+      ],
+      "emptyLabel": "front"
+    },
+    {
+      "pieces": [
+        [
+          "front",
+          "Jane Doe and John Roe"
+        ]
+      ],
+      "emptyLabel": "front"
+    },
+    {
+      "pieces": [
+        [
+          "front",
+          "Abstract. This is \"the\" abstract,"
+        ]
+      ],
+      "emptyLabel": "front"
+    },
+    {
+      "pieces": [
+        [
+          "front",
+          "continued here."
+        ]
+      ],
+      "emptyLabel": "front"
+    },
+    {
+      "pieces": [
+        [
+          "body",
+          "1 Introduction"
+        ]
+      ],
+      "emptyLabel": "body"
+    },
+    {
+      "pieces": [
+        [
+          "body",
+          "The body starts on the first page"
+        ]
+      ],
+      "emptyLabel": "body"
+    },
+    {
+      "pieces": [
+        [
+          "body",
+          "and goes on."
+        ]
+      ],
+      "emptyLabel": "body"
+    },
+    {
+      "pieces": [
+        [
+          "note:footnote",
+          "1 A footnote with a reference."
+        ]
+      ],
+      "emptyLabel": "note:footnote"
+    },
+    {
+      "pieces": [
+        [
+          "page",
+          "2"
+        ],
+        [
+          "note:headnote",
+          "Doe and Roe, A Sample Article"
+        ]
+      ],
+      "emptyLabel": "note:headnote"
+    },
+    {
+      "pieces": [
+        [
+          "body",
+          "The second page continues the body"
+        ]
+      ],
+      "emptyLabel": "body"
+    },
+    {
+      "pieces": [
+        [
+          "body",
+          "with more text"
+        ]
+      ],
+      "emptyLabel": "body"
+    },
+    {
+      "pieces": [
+        [
+          "listBibl",
+          "Smith, J. (2020). A book."
+        ]
+      ],
+      "emptyLabel": "listBibl"
+    },
+    {
+      "pieces": [
+        [
+          "listBibl",
+          "Miller, K. (2021). Another book."
+        ]
+      ],
+      "emptyLabel": "listBibl"
+    },
+    {
+      "pieces": [
+        [
+          "-",
+          "stray text outside"
+        ]
+      ],
+      "emptyLabel": "-"
+    },
+    {
+      "pieces": [
+        [
+          "note:headnote",
+          "Doe and Roe, A Sample Article"
+        ]
+      ],
+      "emptyLabel": "note:headnote"
+    },
+    {
+      "pieces": [
+        [
+          "body",
+          "Third page."
+        ]
+      ],
+      "emptyLabel": "body"
+    }
+  ],
+  "pages": [
+    {
+      "number": 1,
+      "firstLine": 0,
+      "endLine": 2,
+      "fingerprint": "27f27136"
+    },
+    {
+      "number": 2,
+      "firstLine": 2,
+      "endLine": 10,
+      "fingerprint": "23d2f357"
+    },
+    {
+      "number": 3,
+      "firstLine": 10,
+      "endLine": 16,
+      "fingerprint": "17a87822"
+    },
+    {
+      "number": 4,
+      "firstLine": 16,
+      "endLine": 18,
+      "fingerprint": "372eb2c1"
+    }
+  ]
+}

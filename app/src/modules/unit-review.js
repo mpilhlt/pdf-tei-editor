@@ -10,12 +10,18 @@
  * This module has no dependency on the application: it works on a CodeMirror `EditorState`
  * (with the XML language) and on DOM elements, so it can be unit-tested in node.
  *
+ * Zone documents (whose `<text>` children are zones that partition the text, such as GROBID's
+ * segmentation training data) are reviewed by page instead (unit path `pages`): the units are text
+ * ranges, one per page of the document's line layout, see {@link findUnits} and `zone-lines.js`.
+ *
  * @import { EditorState } from '@codemirror/state'
  * @import { SyntaxNode } from '@lezer/common'
+ * @import { ZoneLabel } from './zone-lines.js'
  */
 
 import { syntaxTree, ensureSyntaxTree } from '@codemirror/language';
 import { sha256Hex } from './sha256.js';
+import { readZoneLines, pagesOf } from './zone-lines.js';
 
 /** Value of `listAnnotation/@type` */
 export const LIST_TYPE = 'unit-review';
@@ -25,6 +31,9 @@ export const FP_ALGORITHM = 'fp-sha256-8-v1';
 
 /** Unit path used when the variant does not define one */
 export const DEFAULT_UNIT_PATH = 'auto';
+
+/** Unit path of the page units of zone documents */
+export const PAGES_UNIT_PATH = 'pages';
 
 /**
  * @typedef {'ok'|'not-ok'} MarkState
@@ -60,9 +69,17 @@ export const DEFAULT_UNIT_PATH = 'auto';
  * A review unit found in the document
  * @typedef {object} Unit
  * @property {string} fingerprint - 8 hex characters, plus `.n` for the n-th unit with identical content
- * @property {number} from - Start offset of the element
- * @property {number} to - End offset of the element
- * @property {string} name - Element name
+ * @property {number} from - Start offset of the element (of a page: of its first character)
+ * @property {number} to - End offset of the element (of a page: after its last character or `<lb/>`)
+ * @property {string} name - Element name; `page` for the units of the `pages` scheme
+ * @property {string} [label] - Display name of a unit that is not an element, e.g. `Page 3`
+ */
+
+/**
+ * What {@link findUnits} needs for the `pages` scheme
+ * @typedef {object} ZoneLayout
+ * @property {ZoneLabel[]} labels - The variant's zone labels
+ * @property {number[]|null} linePages - Page index of every line from the document's layout; null if it has none
  */
 
 /**
@@ -72,6 +89,7 @@ export const DEFAULT_UNIT_PATH = 'auto';
  * @property {{from: number, to: number}[]} looseText - Non-whitespace text under `<text>` outside any unit
  * @property {boolean} complete - False if the syntax tree did not cover the whole document
  * @property {string|null} path - The unit path that was applied; for the automatic default the path it resolved to (e.g. `./listBibl/*`)
+ * @property {boolean} [layoutMissing] - The `pages` scheme found no layout for the document, so it has no units
  */
 
 /**
@@ -298,13 +316,34 @@ export function fingerprintOf(canonical) {
 }
 
 /**
+ * Finds the page units of a zone document: text ranges, one per page of its line layout. The
+ * fingerprint of a page is computed from its pieces (zone labels and text), see `zone-lines.js`.
+ * @param {string} text - The document
+ * @param {ZoneLayout|undefined} zone
+ * @returns {UnitScan}
+ * @throws {Error} The document's `<text>` cannot be read as zones
+ */
+export function findPageUnits(text, zone) {
+  /** @type {UnitScan} */
+  const scan = { units: [], looseText: [], complete: true, path: PAGES_UNIT_PATH };
+  if (!zone?.linePages) return { ...scan, layoutMissing: true };
+  const lines = readZoneLines(text, zone.labels);
+  scan.units = pagesOf(lines, zone.linePages).map(page => ({
+    fingerprint: page.fingerprint, from: page.from, to: page.to, name: 'page', label: `Page ${page.number}`
+  }));
+  return scan;
+}
+
+/**
  * Finds the review units of a document.
  * @param {EditorState} state - An editor state with the XML language
- * @param {string|null} unitPath - See {@link parseUnitPath}; null or `auto` for the default
+ * @param {string|null} unitPath - See {@link parseUnitPath}; null or `auto` for the default, `pages` for the pages of a zone document
  * @param {Map<string, string>} [cache] - Fingerprint cache by raw element text, reused across calls
+ * @param {ZoneLayout} [zone] - Zone labels and layout, for the `pages` scheme
  * @returns {UnitScan}
  */
-export function findUnits(state, unitPath, cache) {
+export function findUnits(state, unitPath, cache, zone) {
+  if (unitPath === PAGES_UNIT_PATH) return findPageUnits(state.doc.toString(), zone);
   const tree = ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state);
   const complete = tree.length >= state.doc.length;
   /** @param {number} from @param {number} to */
