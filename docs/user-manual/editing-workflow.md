@@ -158,6 +158,7 @@ The magnifier button (**Focus**) next to the navigation controls, available whil
 - The focused node gets extra space above and below it.
 - Line wrapping is turned on when focus mode is switched on. You can turn it off again with the **Wrap** switch; this does not change your saved wrapping preference.
 - Moving the cursor into another node (for example by clicking) moves the focus to that node.
+- The **↑** and **↓** arrow keys move the focus to the previous or next node and center it. Within a node that spans several lines, they move the cursor line by line first; from the first or last line of the node they move on to the neighbouring node. This also works when the keyboard focus is not in the editor text, for example after clicking **‹** or **›**.
 
 Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Focus mode is on by default; whether you turned it on or off is remembered in your browser, so the choice is kept after reloading the page. Turning navigation off disables the focus toggle without changing this setting; focus mode applies again when navigation is turned back on.
 

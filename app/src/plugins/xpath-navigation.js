@@ -19,10 +19,14 @@
  * @import { UserData } from './authentication.js'
  * @import { NavigationXpathItem } from '../modules/api-client-v1.js'
  * @import { xpathNavigationDialogPart } from '../templates/xpath-navigation-dialog.types.js'
+ * @import { EditorView } from '@codemirror/view'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import { updateUi } from '../ui.js'
+import ui, { updateUi } from '../ui.js'
+import { keymap } from '@codemirror/view'
+import { Prec } from '@codemirror/state'
+import { focusRangeField } from '../modules/codemirror/focus-mode.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { parseXPath } from '../modules/utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
@@ -170,6 +174,12 @@ class XpathNavigationPlugin extends Plugin {
     })
     // Esc leaves focus mode (the XML editor plugin leaves the visual diff mode only when focus mode is off)
     document.addEventListener('keydown', (evt) => this.#onEscapeKey(evt))
+    // In focus mode, the up/down arrow keys move the focus to the previous/next node
+    this.#xmlEditor.createExtensionSlot(Prec.high(keymap.of([
+      { key: 'ArrowUp', run: view => this.#onEditorArrowKey(view, -1) },
+      { key: 'ArrowDown', run: view => this.#onEditorArrowKey(view, +1) }
+    ])))
+    document.addEventListener('keydown', (evt) => this.#onDocumentArrowKey(evt))
 
     // selection => xpath state. setTimeout keeps the state change out of an active state-update propagation
     // cycle (e.g. when selectByXpath triggers CodeMirror's synchronous update).
@@ -423,18 +433,31 @@ class XpathNavigationPlugin extends Plugin {
    * Navigate to previous/next node
    * @param {ApplicationState|null} state
    * @param {number} delta
+   * @param {{wrap?: boolean}} [options] - `wrap`: go from the last node to the first and vice versa
    */
-  async #changeNodeIndex(state, delta) {
-    if (!state?.xpath) return
+  async #changeNodeIndex(state, delta, options) {
+    const xpath = this.#adjacentXpath(state, delta, options)
+    if (xpath) await this.dispatchStateChange({ xpath })
+  }
+
+  /**
+   * Returns the xpath of the node `delta` positions from the current one, or null if there is none
+   * @param {ApplicationState|null} state
+   * @param {number} delta
+   * @param {{wrap?: boolean}} [options] - `wrap`: go from the last node to the first and vice versa
+   * @returns {string|null}
+   */
+  #adjacentXpath(state, delta, { wrap = true } = {}) {
+    if (!state?.xpath) return null
     let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath)
     const normativeXpath = pathBeforePredicates + nonIndexPredicates
     const size = this.#xmlEditor.countDomNodesByXpath(normativeXpath)
-    if (size < 2) return
+    if (size < 2) return null
     if (index === null) index = 1
     index += delta
-    if (index < 1) index = size
-    if (index > size) index = 1
-    await this.dispatchStateChange({ xpath: normativeXpath + `[${index}]` })
+    if (index < 1) index = wrap ? size : 0
+    if (index > size) index = wrap ? 1 : 0
+    return index ? normativeXpath + `[${index}]` : null
   }
 
   /** Called when the user clicks on the counter to enter the node index */
@@ -505,6 +528,53 @@ class XpathNavigationPlugin extends Plugin {
     if (this.#xmlEditor.isFocusMode()) {
       this.#setFocusMode(false)
     }
+  }
+
+  /**
+   * In focus mode, moves the focus to the previous/next node when the up/down arrow key would move
+   * the cursor out of the focused node (or the cursor is outside of it). Inside the node, the cursor
+   * moves line by line as usual. At the first and last node, the key moves the cursor.
+   * @param {EditorView} view
+   * @param {number} delta - -1 for up, +1 for down
+   * @returns {boolean} Whether the key was handled
+   */
+  #onEditorArrowKey(view, delta) {
+    if (!this.#xmlEditor.isFocusMode()) return false
+    const range = view.state.field(focusRangeField, false)
+    if (!range) return false
+    const selection = view.state.selection.main
+    const target = view.moveVertically(selection, delta > 0)
+    const insideBefore = selection.head >= range.from && selection.head <= range.to
+    const insideAfter = target.head >= range.from && target.head <= range.to
+    if (insideBefore && insideAfter && target.head !== selection.head) return false
+    const xpath = this.#adjacentXpath(this.state, delta, { wrap: false })
+    if (!xpath) return false
+    this.dispatchStateChange({ xpath })
+    return true
+  }
+
+  /**
+   * In focus mode, moves the focus to the previous/next node with the up/down arrow keys while the
+   * keyboard focus is not in the editor text, e.g. after clicking ‹ › or when the editor is read-only.
+   * Only applies to keys pressed on the page itself or in the XML editor's toolbars and statusbar,
+   * not in form fields, overlays or other panels such as the PDF viewer.
+   * @param {KeyboardEvent} evt
+   */
+  #onDocumentArrowKey(evt) {
+    if (evt.key !== 'ArrowUp' && evt.key !== 'ArrowDown') return
+    if (evt.defaultPrevented || evt.altKey || evt.ctrlKey || evt.metaKey || evt.shiftKey) return
+    if (!this.#xmlEditor.isFocusMode()) return
+    const target = evt.target
+    if (!(target instanceof HTMLElement)) return
+    // keys in the editor text are handled by the keymap (see #onEditorArrowKey)
+    if (this.#xmlEditor.getView().dom.contains(target)) return
+    if (target !== document.body && !ui.xmlEditor.contains(target)) return
+    const inField = evt.composedPath().some(el => el instanceof HTMLElement && (el.isContentEditable
+      || ['INPUT', 'TEXTAREA', 'SELECT', 'SL-INPUT', 'SL-TEXTAREA', 'SL-SELECT', 'SL-DROPDOWN', 'SL-MENU',
+        'SL-DIALOG', 'SL-DRAWER'].includes(el.tagName)))
+    if (inField) return
+    evt.preventDefault()
+    this.#changeNodeIndex(this.state, evt.key === 'ArrowUp' ? -1 : +1, { wrap: false })
   }
 
   //
