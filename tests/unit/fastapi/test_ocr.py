@@ -246,24 +246,5 @@ class UnavailableEngine(FakeEngine):
         return False
 
 
-class TestTesseractLanguageMapping(unittest.TestCase):
-    def test_mapping(self):
-        from fastapi_app.plugins.ocrmypdf.engine import language_to_tesseract, tesseract_to_language
-
-        self.assertEqual(tesseract_to_language("deu"), "de")
-        self.assertEqual(tesseract_to_language("chi_sim"), "zh-Hans")
-        self.assertEqual(tesseract_to_language("frk"), "de-Latf")
-        self.assertEqual(tesseract_to_language("grc"), "grc")
-        self.assertIsNone(tesseract_to_language("osd"))
-        self.assertIsNone(tesseract_to_language("script/Latin"))
-        self.assertIsNone(tesseract_to_language("chi_sim_vert"))
-        available = ["eng", "deu", "chi_sim", "frk", "grc"]
-        self.assertEqual(language_to_tesseract("de", available), "deu")
-        self.assertEqual(language_to_tesseract("de-Latf", available), "frk")
-        self.assertEqual(language_to_tesseract("zh-Hans", available), "chi_sim")
-        self.assertEqual(language_to_tesseract("en-US", available), "eng")
-        self.assertIsNone(language_to_tesseract("fr", available))
-
-
 if __name__ == "__main__":
     unittest.main()

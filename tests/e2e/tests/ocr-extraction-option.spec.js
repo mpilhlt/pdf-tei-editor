@@ -9,7 +9,6 @@
  * @testCovers app/src/plugins/extraction.js
  * @testCovers app/src/modules/language-chooser.js
  * @testCovers fastapi_app/routers/ocr.py
- * @testCovers fastapi_app/plugins/ocrmypdf/engine.py
  */
 
 /** @import { namedElementsTree } from '../../../app/src/ui.js' */
