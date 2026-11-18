@@ -54,7 +54,15 @@ The **Available** tab lists the plugins of the plugin repositories: [mpilhlt/pte
 
 ### Upgrading and removing
 
-**Upgrade to v…** in the **Available** tab installs a newer release, also of plugins that were installed with the editor. **Remove** in the **Installed** tab disables a plugin installed in the plugin manager and deletes its files at the next restart. Installing it again before the restart replaces the files that are still there.
+**Upgrade to v…** in the **Available** tab installs a newer release, also of plugins that were installed with the editor. **Upgrade installed** next to **Refresh** is shown when installed plugins have newer releases; it lists them with their versions for confirmation and upgrades them one after the other (if one of them comes from an unverified repository, you type `upgrade` to confirm). When an administrator logs in, the editor checks the plugin repositories for updates of installed plugins and, if there are any, shows a message listing them with an **Open plugin manager** button that opens the **Available** tab. **Remove** in the **Installed** tab disables a plugin installed in the plugin manager and deletes its files at the next restart. Installing it again before the restart replaces the files that are still there.
+
+![A message in the top right corner saying that two plugin updates are available, listing the plugins with their installed and new versions, with an Open plugin manager button](../images/plugin-update-alert.png)
+
+*The message shown to administrators when installed plugins have newer releases.*
+
+![The Available tab of the Plugins dialog with an Upgrade installed button next to Refresh, and two plugins marked Update available with Upgrade buttons](../images/plugin-manager-updates.png)
+
+*The Available tab with updates of two installed plugins.*
 
 Python code that is already loaded cannot be replaced in a running server. After an upgrade or removal of a plugin that is in use, the plugin shows **Restart pending** and the dialog shows **Apply plugin changes**, which restarts the server processes one after the other. Requests are still answered during the restart, but jobs running in a restarting process (for example a batch extraction) are interrupted, and open pages reload once all processes run the new code. The button is offered when the server was started with `bin/start-prod` (as in the Docker image); otherwise restart the server.
 
