@@ -531,15 +531,34 @@ class XpathNavigationPlugin extends Plugin {
   }
 
   /**
-   * In focus mode, moves the focus to the previous/next node when the up/down arrow key would move
-   * the cursor out of the focused node (or the cursor is outside of it). Inside the node, the cursor
-   * moves line by line as usual. At the first and last node, the key moves the cursor.
+   * Whether the up/down arrow keys navigate between nodes: in focus mode, and in the visual annotation
+   * mode, where the cursor has no function. Both only while node navigation is on.
+   * @returns {boolean}
+   */
+  #arrowKeysNavigate() {
+    return this.#navigationActive && (this.#xmlEditor.isFocusMode() || this.#isVisualMode())
+  }
+
+  /** @returns {boolean} Whether the visual annotation mode is on */
+  #isVisualMode() {
+    return this.state?.view === 'annotation'
+  }
+
+  /**
+   * Handles the up/down arrow keys in the editor text. In the visual annotation mode, they always go to
+   * the previous/next node, like ‹ ›. In the XML mode with focus mode on, they move the cursor within
+   * the focused node as usual, and go to the previous/next node when the cursor would leave it (or is
+   * outside of it), without wrapping around at the first and last node.
    * @param {EditorView} view
    * @param {number} delta - -1 for up, +1 for down
    * @returns {boolean} Whether the key was handled
    */
   #onEditorArrowKey(view, delta) {
-    if (!this.#xmlEditor.isFocusMode()) return false
+    if (!this.#arrowKeysNavigate()) return false
+    if (this.#isVisualMode()) {
+      this.#navigateByArrowKey(delta)
+      return true
+    }
     const range = view.state.field(focusRangeField, false)
     if (!range) return false
     const selection = view.state.selection.main
@@ -547,15 +566,12 @@ class XpathNavigationPlugin extends Plugin {
     const insideBefore = selection.head >= range.from && selection.head <= range.to
     const insideAfter = target.head >= range.from && target.head <= range.to
     if (insideBefore && insideAfter && target.head !== selection.head) return false
-    const xpath = this.#adjacentXpath(this.state, delta, { wrap: false })
-    if (!xpath) return false
-    this.dispatchStateChange({ xpath })
-    return true
+    return this.#navigateByArrowKey(delta)
   }
 
   /**
-   * In focus mode, moves the focus to the previous/next node with the up/down arrow keys while the
-   * keyboard focus is not in the editor text, e.g. after clicking ‹ › or when the editor is read-only.
+   * Goes to the previous/next node with the up/down arrow keys while the keyboard focus is not in the
+   * editor text, e.g. after clicking ‹ ›. See {@link #onEditorArrowKey} for when the keys navigate.
    * Only applies to keys pressed on the page itself or in the XML editor's toolbars and statusbar,
    * not in form fields, overlays or other panels such as the PDF viewer.
    * @param {KeyboardEvent} evt
@@ -563,7 +579,7 @@ class XpathNavigationPlugin extends Plugin {
   #onDocumentArrowKey(evt) {
     if (evt.key !== 'ArrowUp' && evt.key !== 'ArrowDown') return
     if (evt.defaultPrevented || evt.altKey || evt.ctrlKey || evt.metaKey || evt.shiftKey) return
-    if (!this.#xmlEditor.isFocusMode()) return
+    if (!this.#arrowKeysNavigate()) return
     const target = evt.target
     if (!(target instanceof HTMLElement)) return
     // keys in the editor text are handled by the keymap (see #onEditorArrowKey)
@@ -574,7 +590,28 @@ class XpathNavigationPlugin extends Plugin {
         'SL-DIALOG', 'SL-DRAWER'].includes(el.tagName)))
     if (inField) return
     evt.preventDefault()
-    this.#changeNodeIndex(this.state, evt.key === 'ArrowUp' ? -1 : +1, { wrap: false })
+    this.#navigateByArrowKey(evt.key === 'ArrowUp' ? -1 : +1)
+  }
+
+  /**
+   * Goes to the previous/next node for an arrow key. In the visual mode, this wraps around at the first
+   * and last node like ‹ ›, in the XML mode it does not. In focus mode, the node is focused right away,
+   * before the `xpath` state change reaches the other plugins, so that the editor responds at once.
+   * @param {number} delta - -1 for up, +1 for down
+   * @returns {boolean} Whether there is a node to go to
+   */
+  #navigateByArrowKey(delta) {
+    const xpath = this.#adjacentXpath(this.state, delta, { wrap: this.#isVisualMode() })
+    if (!xpath) return false
+    if (this.#xmlEditor.isFocusMode()) {
+      try {
+        this.#xmlEditor.focusByXpath(xpath)
+      } catch (error) {
+        this.#logger.warn(`Could not focus node: ${String(error)}`)
+      }
+    }
+    this.dispatchStateChange({ xpath })
+    return true
   }
 
   //
