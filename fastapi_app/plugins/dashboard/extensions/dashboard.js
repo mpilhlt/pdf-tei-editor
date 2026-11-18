@@ -1,7 +1,7 @@
 /**
  * @file Frontend Extension: Dashboard
  * Shows a two-column dashboard in a dialog after login (once per login session, not when the
- * page was opened with a link to a backend plugin view, not on page
+ * page was opened with a link to a backend plugin view or to a document, not on page
  * reloads). Other plugins contribute boxes through the `dashboard.contributions` extension
  * point; the dashboard is only shown if at least one box is contributed. An info button in
  * the toolbar, after the file drawer button, reopens it.
@@ -182,7 +182,9 @@ export function isValidContribution(item) {
 export default class DashboardExtension extends FrontendExtensionPlugin {
   constructor(/** @type {PluginContext} */ context) {
     super(context, { name: 'dashboard', deps: ['config'] });
-    this.#openedWithPluginLink = new URLSearchParams(window.location.hash.slice(1)).has('plugin');
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    this.#openedWithPluginLink = hashParams.has('plugin');
+    this.#openedWithDocumentLink = hashParams.has('pdf') || hashParams.has('xml');
   }
 
   static extensionPoints = ['toolbar.contentItems'];
@@ -208,6 +210,13 @@ export default class DashboardExtension extends FrontendExtensionPlugin {
    * backend-plugins removes the parameter from the URL hash.
    */
   #openedWithPluginLink = false;
+
+  /**
+   * Whether the page was opened with a link to a document (`#pdf=...` and/or `#xml=...`),
+   * which is meant to show that document directly. Read on construction, before the restored
+   * state is written to the URL hash.
+   */
+  #openedWithDocumentLink = false;
 
   /**
    * @param {Object} state - Initial application state
@@ -282,9 +291,12 @@ export default class DashboardExtension extends FrontendExtensionPlugin {
     if (!sessionId || this.uiStorage.get('shownForSession') === sessionId) {
       return;
     }
-    if (this.#openedWithPluginLink) {
-      // the linked plugin view is shown instead; don't show the dashboard on reloads either
+    if (this.#openedWithPluginLink || this.#openedWithDocumentLink) {
+      // the linked plugin view or document is shown instead; don't show the dashboard on reloads
+      // either. The link only applies to the login it was opened with, not to later logins.
       this.uiStorage.set('shownForSession', sessionId);
+      this.#openedWithPluginLink = false;
+      this.#openedWithDocumentLink = false;
       return;
     }
     const showOnLogin = await this.getDependency('config').get('plugin.dashboard.show-on-login', true);
