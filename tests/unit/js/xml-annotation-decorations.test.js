@@ -21,6 +21,7 @@ global.requestAnimationFrame = dom.window.requestAnimationFrame;
 global.cancelAnimationFrame = dom.window.cancelAnimationFrame;
 global.XMLSerializer = dom.window.XMLSerializer;
 global.DOMParser = dom.window.DOMParser;
+global.CustomEvent = dom.window.CustomEvent;
 if (!global.window.getSelection) {
   global.window.getSelection = () => ({
     rangeCount: 0, addRange() {}, removeAllRanges() {},
@@ -260,5 +261,57 @@ describe('createAnnotationField with incremental parsing', () => {
     const after = countBadges();
     assert.ok(after >= count, `expected ${count}+ badges after full parse, got ${after} (before: ${before})`);
     view.destroy();
+  });
+});
+
+describe('BadgeWidget mouse press (#834)', () => {
+  const tagDefs = [
+    { tag: 'text', label: 'text', color: '#89dceb', attributes: [], readOnly: true },
+    { tag: 'bibl', label: 'bibl', color: '#89dceb', attributes: [] },
+  ];
+  const extensions = createAnnotationField(tagDefs);
+  const annotationField = extensions[0];
+
+  /** @param {string} doc */
+  function badges(doc) {
+    const parent = document.getElementById('editor');
+    parent.innerHTML = '';
+    const view = new EditorView({
+      state: EditorState.create({ doc, extensions: [xml(), extensions] }),
+      parent
+    });
+    const widgets = [];
+    view.state.field(annotationField).decos.between(0, doc.length, (f, t, value) => {
+      if (value.spec.widget) widgets.push(value.spec.widget);
+    });
+    return { view, widgets };
+  }
+
+  it('keeps the editor from handling a press on a clickable badge', () => {
+    const { widgets } = badges('<text><bibl>Smith 1987</bibl></text>');
+    const bibl = widgets.find(w => w.tag === 'bibl');
+    const text = widgets.find(w => w.tag === 'text');
+    assert.strictEqual(bibl.ignoreEvent(new window.MouseEvent('mousedown')), true);
+    assert.strictEqual(bibl.ignoreEvent(new window.MouseEvent('click')), false);
+    assert.strictEqual(text.ignoreEvent(new window.MouseEvent('mousedown')), false,
+      'a read-only badge behaves like text');
+  });
+
+  it('prevents the default of a press on a clickable badge and leaves the selection alone', () => {
+    const doc = '<text><bibl>Smith 1987</bibl></text>';
+    const { view } = badges(doc);
+    const cursor = doc.indexOf('1987');
+    view.dispatch({ selection: { anchor: cursor } });
+    const dom = /** @type {HTMLElement} */ (view.dom.querySelector('.ann-badge[data-tag="bibl"]'));
+    assert.ok(dom, 'the <bibl> badge is rendered');
+    const press = new window.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 });
+    dom.dispatchEvent(press);
+    assert.ok(press.defaultPrevented, 'the press does not place the caret');
+    assert.strictEqual(view.state.selection.main.head, cursor, 'the selection is unchanged');
+
+    let clicked = false;
+    dom.addEventListener('ann-badge-click', () => { clicked = true; });
+    dom.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    assert.ok(clicked, 'the click still opens the popup');
   });
 });

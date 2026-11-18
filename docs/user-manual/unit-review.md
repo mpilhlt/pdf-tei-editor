@@ -22,9 +22,25 @@ Only users with the *reviewer* or *admin* role can set marks; everyone else sees
 
 ## Review units
 
-A review unit is an element below `<text>`. Which elements are units depends on the document variant: for GROBID reference data, each `<bibl>`; for segmentation data, each section (`<front>`, `<body>`, `<listBibl>`, …). For other documents the editor steps down from `<text>` while there is only one non-empty child element (so `<front/><body/><back><listBibl>…` leads to the `<bibl>`s) and takes the children of the first element with several. The path used is recorded in the document the first time a mark is set, so the units stay the same for all reviewers.
+A review unit is an element below `<text>`. Which elements are units depends on the document variant: for GROBID reference data, each `<bibl>`; for segmentation data, each page (see below). For other documents the editor steps down from `<text>` while there is only one non-empty child element (so `<front/><body/><back><listBibl>…` leads to the `<bibl>`s) and takes the children of the first element with several. The path used is recorded in the document the first time a mark is set, so the units stay the same for all reviewers.
 
 When several units share a line, the strip shows the line striped in amber if their states differ. Pretty-print the document (TEI Wizard) to put each unit on its own line.
+
+### Pages of segmentation documents
+
+In a segmentation document (`grobid.training.segmentation`), the elements below `<text>` are zones such as `<front>`, `<body>`, `<listBibl>`, `<note place="headnote">` or `<page>`, which divide the text of the whole document between them. Correcting the document means moving text from one zone to another, so the zones cannot be review units. Instead, each page of the PDF is a unit. Where the pages begin is taken from the layout information that GROBID writes with the extraction, so the page breaks do not depend on the zones: moving a running head into a `<note place="headnote">` does not move a page. A page is a range of lines (a line ends with `<lb/>`), so a page often begins inside an editor line; that line is then striped in amber when the two pages have different states. The tooltip of the strip names the page by its number.
+
+![The XML editor in review mode on a segmentation document: a red strip next to the second page, which is marked not OK, and an amber striped strip next to the line in which the third page begins](../images/unit-review-pages.png)
+
+*A segmentation document reviewed by page: the second page is marked not OK, and the third page, which is marked OK, begins inside the `<listBibl>` line.*
+
+A correction changes only the page it is on: that page's marks become marks of an edited unit (see [Edited units](#edited-units)), the marks of the other pages stay as they are.
+
+The layout information is kept by the GROBID plugin for every extraction. If it is missing, for example for a document extracted before the plugin kept it, the document has no units: the progress bar shows a warning, and hovering over it tells you that a fresh extraction of the document provides the layout. The LLM plugins are not available for such a document either.
+
+![The progress bar with a warning icon and its tooltip: "No pages to review: The layout information of this document is missing. A fresh extraction of the document provides it."](../images/unit-review-pages-missing-layout.png)
+
+*A segmentation document without layout information cannot be reviewed by page.*
 
 ## Marking units
 
@@ -86,6 +102,8 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 ## LLM reviewer
 
 When review mode is on and you run **Review document annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
+
+In segmentation documents, the model is given whole pages, two at a time, as numbered lines with the zone of each line and hints on its layout (position on the page, font size, whether it repeats on other pages), and it answers which lines belong to another zone. Each answer is turned into a suggestion that moves the zone tags around the lines concerned, and the reviewed pages are marked. **LLM Review** in focus mode on a zone reviews the pages the zone lies on.
 
 The model's suggestions are listed in the diagnostics drawer, most of them with a fix. If you are a reviewer (or an admin) and apply such a fix, from the diagnostics drawer (**Apply fix** or **Apply**) or with **Propose fix** in the comparison view, you agree with the model: if the unit was marked not OK, it is marked OK in your name and the model's mark is removed, instead of the unit being listed as *Changed after a not-OK review*. A unit with other suggestions of the model that you have not applied keeps its marks. Fixes applied by annotators still need the reviewer to check the unit again.
 
@@ -179,7 +197,7 @@ When a revision is saved with the status *approved* and the document's review ha
 
 The `<standOff>` element holds no human-readable data (besides the review marks, it can hold [unit comments](unit-comments.md)). It is folded when a document is loaded, when it is created, and whenever the TEI header is folded; you can unfold it temporarily. Only admins can edit it by hand; the marks are changed through review mode.
 
-The marks are stored in the document in `TEI/standOff/listAnnotation[@type="unit-review"]`, with one `<annotation motivation="assessing">` per reviewer. Units are identified by a short fingerprint of their content, so `<text>` itself is not changed. The `<note type="summary">` of the list holds the counts shown in the progress meter.
+The marks are stored in the document in `TEI/standOff/listAnnotation[@type="unit-review"]`, with one `<annotation motivation="assessing">` per reviewer. Units are identified by a short fingerprint of their content, so `<text>` itself is not changed. The fingerprint of a page is computed from the text of its lines and their zones. The `<note type="unit-xpath">` holds the unit path, or `pages` for documents reviewed by page. The `<note type="summary">` of the list holds the counts shown in the progress meter.
 
 ```xml
 <standOff>
