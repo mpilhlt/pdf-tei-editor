@@ -21,7 +21,8 @@ import { testLog } from '../modules/test-log.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { NavXmlEditor, XMLEditor } from '../modules/navigatable-xmleditor.js'
 import { setDiagnostics } from '@codemirror/lint'
-import { undo, redo, undoDepth, redoDepth } from '@codemirror/commands'
+import { undoDepth, redoDepth } from '@codemirror/commands'
+import { undoIgnoringCommandReadOnly, redoIgnoringCommandReadOnly } from '../modules/codemirror/command-read-only.js'
 import { detectXmlIndentation } from '../modules/codemirror/codemirror-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import FiledataPlugin from './filedata.js'
@@ -496,13 +497,14 @@ class XmlEditorPlugin extends Plugin {
     // Attach event listeners to undo/redo buttons (initially disabled; enabled by history depth)
     this.#undoBtn.disabled = true;
     this.#redoBtn.disabled = true;
+    // the visual annotation mode makes the editing commands read-only, but not undo and redo (#824)
     this.#undoBtn.addEventListener('widget-click', () => {
       const view = this.#xmlEditor.getView();
-      if (view) undo(view);
+      if (view) undoIgnoringCommandReadOnly(view);
     });
     this.#redoBtn.addEventListener('widget-click', () => {
       const view = this.#xmlEditor.getView();
-      if (view) redo(view);
+      if (view) redoIgnoringCommandReadOnly(view);
     });
 
     // Attach event listener to validate button

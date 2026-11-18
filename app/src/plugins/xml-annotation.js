@@ -21,7 +21,8 @@ import { findCmScrollContainer, getFirstVisibleCharacter, scrollCharacterToTop }
 import { relocatePartialAnnotationTags } from '../modules/codemirror/xml-annotation-ops.js'
 import { syntaxTree } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
-import { EditorSelection, EditorState } from '@codemirror/state'
+import { EditorSelection } from '@codemirror/state'
+import { commandReadOnly } from '../modules/codemirror/command-read-only.js'
 
 /**
  * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
@@ -112,9 +113,9 @@ class XmlAnnotationPlugin extends Plugin {
    * The CodeMirror extensions of annotation mode. Annotation mode makes the editor non-editable,
    * which removes `contenteditable` and with it the focusability of the content: the `tabindex`
    * keeps the content focusable, so that keyboard shortcuts (review marks, F7, search) still reach
-   * the editor. `EditorState.readOnly` then stops the built-in editing commands (Enter, Backspace,
-   * cut, paste) that would otherwise run on key presses; programmatic changes (annotation
-   * operations, review marks, comments) are not affected.
+   * the editor. {@link commandReadOnly} then stops the built-in editing commands (Enter, Backspace,
+   * cut, paste) that would otherwise run on key presses, but not undo and redo; programmatic
+   * changes (annotation operations, review marks, comments) are not affected.
    * @returns {Extension[]}
    */
   #annotationExtensions() {
@@ -123,7 +124,7 @@ class XmlAnnotationPlugin extends Plugin {
       annotationTheme,
       this.#navField,
       EditorView.contentAttributes.of({ tabindex: '0' }),
-      EditorState.readOnly.of(true),
+      commandReadOnly(),
       EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
     ]
   }
