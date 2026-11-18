@@ -5,6 +5,8 @@ engine registry and the OCR endpoints.
 @testCovers fastapi_app/lib/ocr/languages.py
 @testCovers fastapi_app/lib/ocr/registry.py
 @testCovers fastapi_app/lib/ocr/text_quality.py
+@testCovers fastapi_app/lib/ocr/layout_check.py
+@testCovers fastapi_app/lib/ocr/base.py
 @testCovers fastapi_app/lib/models/models_ocr.py
 @testCovers fastapi_app/routers/ocr.py
 """
@@ -24,8 +26,19 @@ from PIL import Image, ImageDraw
 from pypdf import PdfWriter
 
 from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
-from fastapi_app.lib.ocr.base import OcrEngine, OcrOption, OcrOptionValue
+import pypdfium2 as pdfium
+
+from fastapi_app.lib.models.models_ocr import TextQualityReport
+from fastapi_app.lib.ocr.base import OcrEngine, OcrOption, OcrOptionValue, OcrResult, OcrWord
 from fastapi_app.lib.ocr.languages import normalize_ocr_language, to_iso639_3
+from fastapi_app.lib.ocr.layout_check import (
+    LayoutCheckResult,
+    apply_layout_check,
+    check_text_layout,
+    compare_words,
+    extract_layer_words,
+    normalize_word,
+)
 from fastapi_app.lib.ocr.registry import OcrEngineRegistry
 from fastapi_app.lib.ocr.text_quality import _CID_RE, _is_plausible_token, analyze_text_layer
 from fastapi_app.routers import ocr as ocr_router
@@ -98,6 +111,92 @@ class TestTextQuality(unittest.TestCase):
         self.assertEqual(len(_CID_RE.findall("(cid:12)(cid:3) /C80/C117 normal")), 4)
 
 
+def word(text: str, left: float, top: float, width: float = 0.05, height: float = 0.01) -> OcrWord:
+    """Create a word box."""
+    return OcrWord(text=text, left=left, top=top, right=left + width, bottom=top + height)
+
+
+def page_words(page_index: int) -> list[OcrWord]:
+    """Return the words of the text layer of a page of TEXT_PDF."""
+    document = pdfium.PdfDocument(str(TEXT_PDF))
+    try:
+        return extract_layer_words(document[page_index])
+    finally:
+        document.close()
+
+
+def shifted(words: list[OcrWord], dy: float) -> list[OcrWord]:
+    """Move word boxes down by a fraction of the page height."""
+    return [OcrWord(w.text, w.left, w.top + dy, w.right, w.bottom + dy) for w in words]
+
+
+class TestLayoutCheck(unittest.TestCase):
+    def test_normalize_word(self):
+        self.assertEqual(normalize_word("Müller,"), "muller")
+        self.assertEqual(normalize_word("(e.g."), "eg")
+        self.assertEqual(normalize_word("—"), "")
+
+    def test_identical_words_match(self):
+        words = [word(f"word{i}", 0.1 + (i % 10) * 0.08, 0.1 + (i // 10) * 0.02) for i in range(40)]
+        comparison = compare_words(words, words)
+        self.assertEqual((comparison.common_words, comparison.positioned_words, comparison.ordered_words), (40, 40, 40))
+
+    def test_fragmented_words_do_not_match(self):
+        recognized = [word("recognition", 0.1, 0.1, 0.2), word("quality", 0.32, 0.1, 0.15)]
+        layer = [word("recog", 0.1, 0.1, 0.09), word("nition", 0.2, 0.1, 0.1), word("qua", 0.32, 0.1, 0.07), word("lity", 0.4, 0.1, 0.07)]
+        self.assertEqual(compare_words(layer, recognized).common_words, 0)
+
+    def test_misplaced_words_are_not_positioned(self):
+        recognized = [word(f"word{i}", 0.1, 0.1 + i * 0.02) for i in range(30)]
+        comparison = compare_words(shifted(recognized, 0.3), recognized)
+        self.assertEqual(comparison.common_words, 30)
+        self.assertEqual(comparison.positioned_words, 0)
+
+    def test_reordered_words(self):
+        recognized = [word(f"word{i}", 0.1, 0.1 + i * 0.02) for i in range(30)]
+        layer = recognized[15:] + recognized[:15]
+        comparison = compare_words(layer, recognized)
+        self.assertEqual(comparison.positioned_words, 30)
+        self.assertEqual(comparison.ordered_words, 15)
+
+    def test_extract_layer_words(self):
+        words = page_words(1)
+        self.assertGreater(len(words), 100)
+        self.assertEqual(words[0].text, "used")
+        for w in words:
+            self.assertTrue(0 <= w.left < w.right <= 1 and 0 <= w.top < w.bottom <= 1, w)
+
+    def test_check_text_layout_good(self):
+        result = check_text_layout(TEXT_PDF, lambda image: page_words(int(image.stem.split("-")[1])))
+        self.assertEqual(len(result.pages_checked), 3)
+        self.assertEqual((result.text_match, result.position_match, result.order_agreement), (1.0, 1.0, 1.0))
+        self.assertEqual(result.reasons, [])
+
+    def test_check_text_layout_misplaced(self):
+        result = check_text_layout(TEXT_PDF, lambda image: shifted(page_words(int(image.stem.split("-")[1])), 0.05))
+        self.assertEqual(result.text_match, 1.0)
+        self.assertLess(result.position_match or 0, 0.2)
+        self.assertEqual(len(result.reasons), 1)
+        self.assertIn("where they appear on the page", result.reasons[0])
+
+    def test_check_text_layout_mismatch(self):
+        result = check_text_layout(TEXT_PDF, lambda image: [word(f"other{i}", 0.1, 0.1 + i * 0.01) for i in range(40)])
+        self.assertEqual(result.text_match, 0.0)
+        self.assertIn("match the text layer", result.reasons[0])
+
+    def test_check_text_layout_without_comparable_pages(self):
+        self.assertEqual(check_text_layout(TEXT_PDF, lambda image: []).pages_checked, [])
+        self.assertEqual(check_text_layout(EMPTY_PDF, lambda image: []).pages_checked, [])
+
+    def test_apply_layout_check(self):
+        report = TextQualityReport(status="good", summary="fine")
+        apply_layout_check(report, LayoutCheckResult(pages_checked=[1], text_match=0.9, position_match=0.95, order_agreement=1.0))
+        self.assertEqual((report.status, report.layout_checked, report.layout_text_match), ("good", True, 0.9))
+        apply_layout_check(report, LayoutCheckResult(pages_checked=[1], text_match=0.9, position_match=0.1, order_agreement=1.0, reasons=["misplaced"]))
+        self.assertEqual((report.status, report.reasons), ("poor", ["misplaced"]))
+        self.assertIn("does not match the page", report.summary)
+
+
 class FakeEngine(OcrEngine):
     id = "fake"
     name = "Fake OCR"
@@ -105,6 +204,10 @@ class FakeEngine(OcrEngine):
 
     def __init__(self):
         self.calls: list[tuple[list[str], dict[str, OcrOptionValue]]] = []
+        self.rebuild_flags: list[bool] = []
+        self.result: Optional[str | OcrResult] = "done"
+        self.words: Optional[list[OcrWord]] = None
+        """Words returned by recognize_words(); word recognition is unsupported if None."""
 
     def get_options(self) -> dict[str, OcrOption]:
         return {
@@ -118,10 +221,24 @@ class FakeEngine(OcrEngine):
     def get_languages(self) -> list[str]:
         return ["de", "en", "zh-Hans"]
 
-    def recognize(self, input_path: Path, output_path: Path, languages: list[str], options: dict[str, OcrOptionValue]) -> Optional[str]:
+    def supports_word_recognition(self) -> bool:
+        return self.words is not None
+
+    def recognize_words(self, image_path: Path, languages: list[str]) -> list[OcrWord]:
+        return self.words or []
+
+    def recognize(
+        self,
+        input_path: Path,
+        output_path: Path,
+        languages: list[str],
+        options: dict[str, OcrOptionValue],
+        rebuild: bool = False,
+    ) -> Optional[str | OcrResult]:
         self.calls.append((languages, options))
+        self.rebuild_flags.append(rebuild)
         shutil.copy(TEXT_PDF, output_path)
-        return "done"
+        return self.result
 
 
 class FakeStorage:
@@ -156,9 +273,11 @@ class TestOcrRouter(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         make_image_only_pdf(self.tmp / "oldhash.pdf")
+        shutil.copy(TEXT_PDF, self.tmp / "texthash.pdf")
         self.pdf = SimpleNamespace(id="oldhash", stable_id="pdf1", file_type="pdf", file_metadata={"x": 1})
+        self.text_pdf = SimpleNamespace(id="texthash", stable_id="pdf2", file_type="pdf", file_metadata={})
         self.tei = SimpleNamespace(id="teihash", stable_id="tei1", file_type="tei", file_metadata={})
-        self.repo = FakeRepo({"pdf1": self.pdf, "tei1": self.tei})
+        self.repo = FakeRepo({"pdf1": self.pdf, "pdf2": self.text_pdf, "tei1": self.tei})
         self.storage = FakeStorage(self.tmp)
         self.engine = FakeEngine()
         OcrEngineRegistry.reset_instance()
@@ -213,6 +332,39 @@ class TestOcrRouter(unittest.TestCase):
         self.assertEqual(update["file_metadata"]["x"], 1)
         self.assertEqual(update["file_metadata"]["ocr"]["engine"], "fake")
         self.assertEqual(update["file_metadata"]["ocr"]["applied_by"], "alice")
+
+    def test_text_quality_layout_check(self):
+        # without an engine that recognizes words, the layout check is skipped
+        body = self.client.get("/ocr/text-quality/pdf2?layout=true").json()
+        self.assertEqual((body["status"], body["layout_checked"]), ("good", False))
+        # recognized words at other places than in the text layer
+        self.engine.words = shifted(page_words(2), 0.05)
+        body = self.client.get("/ocr/text-quality/pdf2?layout=true").json()
+        self.assertEqual((body["status"], body["layout_checked"]), ("poor", True))
+        self.assertLess(body["layout_position_match"], 0.5)
+        # without the parameter, only the character checks run
+        body = self.client.get("/ocr/text-quality/pdf2").json()
+        self.assertEqual((body["status"], body["layout_checked"]), ("good", False))
+        # a missing text layer is not compared
+        body = self.client.get("/ocr/text-quality/pdf1?layout=true").json()
+        self.assertEqual((body["status"], body["layout_checked"]), ("missing", False))
+
+    def test_apply_ocr_records_method_and_rebuild(self):
+        self.engine.result = OcrResult(message="rasterized", method="force", fallback_reason="Ghostscript is not installed")
+        response = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake", "rebuild": True})
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual((body["message"], body["method"], body["fallback_reason"]), ("rasterized", "force", "Ghostscript is not installed"))
+        self.assertEqual(body["quality"]["ocr_applied"]["method"], "force")
+        self.assertEqual(self.engine.rebuild_flags, [True])
+        record = self.repo.updates[0][1]["file_metadata"]["ocr"]
+        self.assertEqual((record["method"], record["fallback_reason"]), ("force", "Ghostscript is not installed"))
+        # engines that return a plain message record no method
+        self.engine.result = "done"
+        body = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"}).json()
+        self.assertEqual((body["message"], body["method"]), ("done", None))
+        self.assertNotIn("method", body["quality"]["ocr_applied"])
+        self.assertEqual(self.engine.rebuild_flags, [True, False])
 
     def test_apply_ocr_uses_default_languages(self):
         response = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"})

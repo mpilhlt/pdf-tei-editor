@@ -178,7 +178,13 @@ class MyEngine(OcrEngine):
 
     def is_available(self): ...
     def get_languages(self): ...  # normalized codes, e.g. ["de", "en", "zh-Hans"]
-    def recognize(self, input_path, output_path, languages, options): ...  # runs in a worker thread
+
+    # runs in a worker thread; returns a message or an OcrResult(message, method, fallback_reason)
+    def recognize(self, input_path, output_path, languages, options, rebuild=False): ...
+
+    # optional: words on a page image, used by the text layer check
+    def supports_word_recognition(self): return True
+    def recognize_words(self, image_path, languages): ...  # list[OcrWord], coordinates 0-1 from the top left
 
 # in initialize():
 OcrEngineRegistry.get_instance().register(MyEngine())
@@ -186,8 +192,10 @@ OcrEngineRegistry.get_instance().register(MyEngine())
 
 - Languages are normalized BCP 47 tags as used in the teiHeader (`de`, `grc`, `zh-Hans`, `de-Latf`). Map engine codes with `normalize_ocr_language()` and `to_iso639_3()` from `fastapi_app/lib/ocr/languages.py`.
 - `recognize()` must write a PDF with the same page geometry, since annotation coordinates refer to it. Raise `ValueError` for invalid parameter combinations (HTTP 400); other exceptions become HTTP 500.
+- `rebuild=True` means the user explicitly asked for text recognition. An engine that chooses its method automatically should then replace a digital text layer even if the check found no problem.
+- Returning an `OcrResult` with `method` (`skip`, `redo`, `force`, `vectorize`) and `fallback_reason` records them in `file_metadata.ocr`; the extraction dialog warns when pages were rasterized (`force` with a `fallback_reason`).
 - Option types are `string` (a select box with `options`), `boolean` and `integer`. The router validates the values against `get_options()` before calling `recognize()`.
-- API (`fastapi_app/routers/ocr.py`): `GET /api/v1/ocr/engines`, `GET /api/v1/ocr/text-quality/{stable_id}` (text layer assessment, `fastapi_app/lib/ocr/text_quality.py`), `POST /api/v1/ocr` (replaces the PDF content, keeps the `stable_id`, records the run in `file_metadata.ocr`). OCR runs are serialized.
+- API (`fastapi_app/routers/ocr.py`): `GET /api/v1/ocr/engines`, `GET /api/v1/ocr/text-quality/{stable_id}` (text layer assessment, `fastapi_app/lib/ocr/text_quality.py`; with `?layout=true` also the comparison with the words recognized on sample pages, `fastapi_app/lib/ocr/layout_check.py`, by the first engine that supports word recognition), `POST /api/v1/ocr` (replaces the PDF content, keeps the `stable_id`, records the run in `file_metadata.ocr`). OCR runs are serialized.
 - Frontend: the `ocr` plugin (`app/src/plugins/ocr.js`) wraps the API and the options dialog; the generic language chooser is `app/src/modules/language-chooser.js`.
 
 ## Annotation Tags (Visual Mode)

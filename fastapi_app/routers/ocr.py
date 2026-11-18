@@ -13,14 +13,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pypdf.errors import PdfReadError
 
 from ..lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
 from ..lib.models import FileMetadata, FileUpdate
 from ..lib.models.models_ocr import OcrEngineInfo, OcrOptionInfo, OcrRequest, OcrResponse, TextQualityReport
-from ..lib.ocr.base import OcrEngine, OcrOptionValue
+from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
 from ..lib.ocr.languages import normalize_ocr_language
+from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
 from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_quality import analyze_text_layer
 from ..lib.permissions.access_control import check_file_access
@@ -126,6 +127,37 @@ def _validate_languages(engine: OcrEngine, languages: list[str]) -> list[str]:
     return normalized
 
 
+def _word_recognition_engine() -> OcrEngine | None:
+    """Return the first available engine that can recognize words on page images."""
+    for engine in OcrEngineRegistry.get_instance().list_engines():
+        if engine.supports_word_recognition():
+            return engine
+    return None
+
+
+def _analyze(path: Path, layout: bool) -> TextQualityReport:
+    """
+    Analyze the text layer, and if requested and the character checks found no problems,
+    compare it with the words recognized on sample page images.
+    """
+    report = analyze_text_layer(path)
+    if not layout or report.status != "good":
+        return report
+    engine = _word_recognition_engine()
+    if engine is None:
+        logger.debug("No OCR engine supports word recognition, skipping the layout check")
+        return report
+    supported = engine.get_languages()
+    language = normalize_ocr_language(report.language) if report.language else None
+    languages = [language] if language in supported else engine.get_default_languages()
+    try:
+        result = check_text_layout(path, lambda image: engine.recognize_words(image, languages))
+    except Exception as e:
+        logger.warning(f"Layout check with {engine.id} failed: {e}")
+        return report
+    return apply_layout_check(report, result)
+
+
 @router.get("/engines", response_model=list[OcrEngineInfo])
 def list_ocr_engines(
     current_user: dict[str, Any] = Depends(require_authenticated_user),
@@ -137,6 +169,7 @@ def list_ocr_engines(
 @router.get("/text-quality/{stable_id}", response_model=TextQualityReport)
 async def get_text_quality(
     stable_id: str,
+    layout: bool = Query(False, description="Also compare the text layer with the words recognized on sample page images (takes a few seconds)"),
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
     current_user: dict[str, Any] = Depends(require_authenticated_user),
@@ -145,12 +178,14 @@ async def get_text_quality(
     Assess the quality of the text layer of a PDF.
 
     Reports whether the text layer is missing or of poor quality (garbled characters, implausible
-    words, text that does not read as natural language), and the language detected in it.
+    words, text that does not read as natural language), and the language detected in it. With
+    `layout=true`, a text layer without such problems is also compared with the words an OCR
+    engine recognizes on sample pages, which finds fragmented, misplaced or misordered text.
     """
     file = _get_pdf(repo, stable_id, current_user, "read")
     path = _pdf_path(storage, file)
     try:
-        report = await asyncio.to_thread(analyze_text_layer, path)
+        report = await asyncio.to_thread(_analyze, path, layout)
     except PdfReadError as e:
         raise HTTPException(status_code=422, detail=f"The PDF cannot be read: {e}")
     report.ocr_applied = file.file_metadata.get(OCR_METADATA_KEY)
@@ -167,8 +202,8 @@ async def apply_ocr(
     """
     Apply OCR to a PDF and replace the stored PDF with the result.
 
-    The stable_id of the PDF stays the same; its content hash changes. The OCR run is recorded
-    in the PDF's file metadata under "ocr".
+    The stable_id of the PDF stays the same; its content hash changes. The OCR run, including the
+    method the engine used, is recorded in the PDF's file metadata under "ocr".
     """
     file = _get_pdf(repo, request.stable_id, current_user, "edit")
     try:
@@ -185,7 +220,7 @@ async def apply_ocr(
         with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
             output_path = Path(tmp) / "output.pdf"
             try:
-                message = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options)
+                outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, request.rebuild)
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except Exception as e:
@@ -196,12 +231,17 @@ async def apply_ocr(
             content = output_path.read_bytes()
             quality = await asyncio.to_thread(analyze_text_layer, output_path)
 
+    result = outcome if isinstance(outcome, OcrResult) else OcrResult(message=outcome)
     record: dict[str, str | list[str]] = {
         "engine": engine.id,
         "languages": languages,
         "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "applied_by": str(current_user.get("username") or ""),
     }
+    if result.method:
+        record["method"] = result.method
+    if result.fallback_reason:
+        record["fallback_reason"] = result.fallback_reason
     new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
     changed = new_hash != file.id
     update = FileUpdate(file_size=len(content), file_metadata={**file.file_metadata, OCR_METADATA_KEY: record})
@@ -209,6 +249,13 @@ async def apply_ocr(
         # FileRepository moves the storage reference from the old to the new content hash
         update.id = new_hash
     repo.update_file(file.id, update)
-    logger.info(f"Applied OCR ({engine.id}, {languages}) to {file.stable_id}: {file.id[:8]} -> {new_hash[:8]}")
+    logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {new_hash[:8]}")
     quality.ocr_applied = record
-    return OcrResponse(stable_id=file.stable_id, changed=changed, message=message, quality=quality)
+    return OcrResponse(
+        stable_id=file.stable_id,
+        changed=changed,
+        message=result.message,
+        method=result.method,
+        fallback_reason=result.fallback_reason,
+        quality=quality,
+    )
