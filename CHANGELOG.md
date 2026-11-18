@@ -2,6 +2,16 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.88.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.88.0...v0.88.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **bookmarks:** show the gutter markers when a document is opened ([2f18072](https://github.com/mpilhlt/pdf-tei-editor/commit/2f18072223463e134fa18c1cc2208e5ffb7d92c9)), closes [#823](https://github.com/mpilhlt/pdf-tei-editor/issues/823)
+* **dashboard:** do not show the dashboard when opened with a document link ([e21f8ce](https://github.com/mpilhlt/pdf-tei-editor/commit/e21f8ce9cd64d8afe95b5066e1acb5931638fcac)), closes [#820](https://github.com/mpilhlt/pdf-tei-editor/issues/820)
+* **xml-annotation:** rebuild decorations when the parser extends the tree ([943dfe4](https://github.com/mpilhlt/pdf-tei-editor/commit/943dfe4bef905b689e2e836fccd9658fbd8b7508)), closes [#826](https://github.com/mpilhlt/pdf-tei-editor/issues/826)
+* **xml-annotation:** undo and redo in the visual annotation mode ([2fb8183](https://github.com/mpilhlt/pdf-tei-editor/commit/2fb81831c251c7c944fca66dae51b4f682b0c67f)), closes [#824](https://github.com/mpilhlt/pdf-tei-editor/issues/824)
+
 # [0.88.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.87.0...v0.88.0) (2026-11-18)
 
 
