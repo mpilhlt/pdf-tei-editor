@@ -359,7 +359,13 @@ export function createAnnotationField(tagDefs) {
 
   const field = StateField.define({
     create: (state) => buildAll(state, tagMap),
-    update: (both, tr) => tr.docChanged ? buildAll(tr.state, tagMap) : both,
+    // Also rebuild when only the syntax tree changed: after a large change (e.g. a retag or merge
+    // replacing a whole parent element via updateEditorFromNode), the parser stops at its time
+    // budget and finishes in later transactions without a doc change. Rebuilding only on
+    // docChanged would leave the not-yet-parsed part undecorated, i.e. shown as raw XML (#826).
+    update: (both, tr) => (tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState))
+      ? buildAll(tr.state, tagMap)
+      : both,
     provide: f => EditorView.decorations.from(f, b => b.decos)
   });
 

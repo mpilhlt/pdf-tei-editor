@@ -230,3 +230,35 @@ describe('createAnnotationField with display-only elements', () => {
     assert.ok(ranges.some(r => r.f === closeText && r.t === doc.length), '</text> is hidden');
   });
 });
+
+describe('createAnnotationField with incremental parsing', () => {
+  const tagDefs = [{ tag: 'bibl', label: 'BIBL', color: '#89dceb', attributes: [] }];
+
+  it('rebuilds decorations when the parser extends the syntax tree without a doc change (#826)', async () => {
+    const { forceParsing, syntaxTree } = await import('@codemirror/language');
+    const extensions = createAnnotationField(tagDefs);
+    const annotationField = extensions[0];
+    const count = 5000;
+    const doc = '<root>' + '<bibl>Smith 1987</bibl>\n'.repeat(count) + '</root>';
+    const parent = document.getElementById('editor');
+    parent.innerHTML = '';
+    // Start from an empty document and replace it in one transaction, as updateEditorFromNode
+    // does, so the parse after the change is cut off by the parser's time budget
+    const view = new EditorView({ state: EditorState.create({ doc: '', extensions: [xml(), extensions] }), parent });
+    view.dispatch({ changes: { from: 0, to: 0, insert: doc } });
+    const countBadges = () => {
+      let n = 0;
+      view.state.field(annotationField).decos.between(0, view.state.doc.length, (f, t, d) => {
+        if (d.spec.widget) n++;
+      });
+      return n;
+    };
+    const before = countBadges();
+    assert.ok(syntaxTree(view.state).length < doc.length, `precondition: tree incomplete (${syntaxTree(view.state).length}/${doc.length})`);
+    forceParsing(view, view.state.doc.length, 1e9);
+    assert.strictEqual(syntaxTree(view.state).length, doc.length);
+    const after = countBadges();
+    assert.ok(after >= count, `expected ${count}+ badges after full parse, got ${after} (before: ${before})`);
+    view.destroy();
+  });
+});
