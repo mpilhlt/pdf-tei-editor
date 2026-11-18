@@ -93,4 +93,22 @@ describe('DashboardExtension automatic opening', () => {
       global.window.location.hash = '';
     }
   });
+
+  it('does not open when the page was opened with a link to a document', async () => {
+    for (const hash of ['#pdf=p1&xml=x1', '#xml=x1', '#pdf=p1']) {
+      global.window.location.hash = hash;
+      try {
+        const ext = buildExtension('session-1');
+        await ext.ready();
+        assert.strictEqual(ext.opened, 0, hash);
+        assert.strictEqual(ext.uiStorage.get('shownForSession'), 'session-1', hash);
+        // a later login on the same page is not following the link
+        ext.state.sessionId = 'session-2';
+        await ext.onSessionIdChange('session-2');
+        assert.strictEqual(ext.opened, 1, hash);
+      } finally {
+        global.window.location.hash = '';
+      }
+    }
+  });
 });
