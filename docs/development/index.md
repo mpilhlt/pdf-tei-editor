@@ -203,7 +203,7 @@ Users access documents through collection membership. See [Access Control](acces
 ### Development
 
 - **Testing**: Playwright (E2E), pytest (backend), Node.js native test runner (API)
-- **Version Control**: Git with Husky pre-push hooks
+- **Version Control**: Git with a Husky commit-msg hook (Conventional Commits)
 - **Package Management**: npm (frontend), uv (backend)
 
 ## Related Documentation
