@@ -6,6 +6,8 @@
  * rejected, adds an expression without a label, navigates with it, renames it and deletes it.
  * Checks that an expression with a wildcard and a predicate stays selected in the dropdown when it
  * replaces another one, and that the index follows the cursor among the nodes it selects.
+ * Checks that switching the expression keeps the position: the next node of the new expression is
+ * selected, wrapping around to the first one at the end of the document.
  * Checks that in focus mode, the up/down arrow keys move the focus to the previous/next node, and
  * that in the visual annotation mode, they always go to the previous/next node like ‹ ›.
  *
@@ -242,6 +244,59 @@ test.describe('XPath navigation', () => {
         view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf('Div text') + 2 } });
       });
       await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[3]`, selected: CHILDREN, counter: '(3/3)' });
+    } finally {
+      await page.evaluate(async (variant) => {
+        try {
+          await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, { entries: [] });
+        } catch { /* nothing to clean up */ }
+      }, VARIANT).catch(() => {});
+      await releaseAllLocks(page).catch(() => {});
+      stopErrorMonitoring();
+    }
+  });
+
+  test('switching the expression selects the next node of the new expression', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const BIBL = '//tei:listBibl/tei:bibl';
+    const STRUCT = '//tei:listBibl/tei:biblStruct';
+    const MIXED = `<text>
+    <listBibl>
+      <bibl>Alpha</bibl>
+      <biblStruct/>
+      <bibl>Beta</bibl>
+      <biblStruct/>
+      <bibl>Gamma</bibl>
+    </listBibl>
+  </text>`;
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.evaluate(async ({ variant, bibl, struct }) => {
+        await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, {
+          entries: [{ value: bibl, label: 'Bibls' }, { value: struct, label: 'Structs' }]
+        });
+      }, { variant: VARIANT, bibl: BIBL, struct: STRUCT });
+      await loadNavigationDocument(page, MIXED);
+      await page.reload();
+      await expect.poll(() => dropdownTexts(page)).toContain(STRUCT);
+
+      await clickDropdownEntry(page, 'Bibls');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[1]`, selected: BIBL, counter: '(1/3)' });
+      await page.locator('[name="nextNodeBtn"]').click();
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+
+      // the <biblStruct/> after "Beta"
+      await clickDropdownEntry(page, 'Structs');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${STRUCT}[2]`, selected: STRUCT, counter: '(2/2)' });
+      // the <bibl> after the second <biblStruct/>
+      await clickDropdownEntry(page, 'Bibls');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[3]`, selected: BIBL, counter: '(3/3)' });
+      // no <biblStruct/> after "Gamma": wraps around to the first one
+      await clickDropdownEntry(page, 'Structs');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${STRUCT}[1]`, selected: STRUCT, counter: '(1/2)' });
     } finally {
       await page.evaluate(async (variant) => {
         try {

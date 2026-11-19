@@ -32,7 +32,7 @@ import { parseXPath } from '../modules/utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
-import { checkNavigationXpath, labelToText } from '../modules/navigation-xpath-utils.js'
+import { checkNavigationXpath, labelToText, indexAtOrAfterPosition } from '../modules/navigation-xpath-utils.js'
 
 await registerTemplate('xpath-navigation-dialog', 'xpath-navigation-dialog.html')
 
@@ -150,7 +150,7 @@ class XpathNavigationPlugin extends Plugin {
       if (this.#currentVariant) {
         this.#setXpathPreference(this.#currentVariant, baseXpath)
       }
-      await this.dispatchStateChange({ xpath: baseXpath ? `${baseXpath}[1]` : '' })
+      await this.dispatchStateChange({ xpath: baseXpath ? `${baseXpath}[${this.#indexAtCurrentPosition(baseXpath)}]` : '' })
     })
     this.#xpathDropdown.addEventListener('widget-action', (evt) => {
       if (/** @type {CustomEvent} */ (evt).detail.action === EDIT_ACTION) this.showDialog()
@@ -427,6 +427,36 @@ class XpathNavigationPlugin extends Plugin {
     index = index || 1
     this.#nodeCounterWidget.text = `(${size > 0 ? index : 0}/${size})`
     this.#nextNodeBtn.disabled = this.#prevNodeBtn.disabled = size < 2
+  }
+
+  /**
+   * The index of the node of `xpath` to select when the dropdown switches to it, so that the navigation
+   * keeps its position in the document: the first node that contains the current position or follows
+   * it, wrapping around to the first node if there is none. The current position is the start of the
+   * current node, or the cursor if there is none.
+   * @param {string} xpath - The expression selected in the dropdown
+   * @returns {number} The 1-based index, 1 if the editor is not ready or the expression selects no node
+   */
+  #indexAtCurrentPosition(xpath) {
+    if (!this.#xmlEditor.isReady() || !this.#xmlEditor.getXmlTree()) return 1
+    try {
+      let pos = this.#xmlEditor.getView().state.selection.main.head
+      if (this.state?.xpath?.startsWith('/')) {
+        try {
+          pos = this.#xmlEditor.getSyntaxNodeByXpath(this.state.xpath).from
+        } catch {
+          // the current node no longer exists: use the cursor
+        }
+      }
+      const ranges = this.#xmlEditor.getDomNodesByXpath(xpath).map(node => {
+        const { from, to } = this.#xmlEditor.getSyntaxNodeFromDomNode(node)
+        return { from, to }
+      })
+      return indexAtOrAfterPosition(ranges, pos) || 1
+    } catch (error) {
+      this.#logger.debug('Could not determine the node at the current position: ' + String(error))
+      return 1
+    }
   }
 
   /**
