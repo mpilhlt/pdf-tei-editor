@@ -131,7 +131,7 @@ Some entries of the context menu have a variant that is shown instead while you 
 
 The center of the statusbar contains node navigation controls. These are only shown once a document is loaded and the active variant has navigation XPath expressions. Annotators, reviewers and administrators also see the dropdown for variants without expressions, so that they can add some.
 
-1. Use the dropdown to select an XPath expression (the list is variant-specific).
+1. Use the dropdown to select an XPath expression (the list is variant-specific). Switching to another expression keeps your place in the document: the first node of the new expression that contains or follows the current node is selected. If there is none after it, the first node of the document is selected.
 2. Use the **‹** / **›** buttons to move between matching nodes; the counter (e.g. `3/15`) shows the current position.
 3. Click the counter to jump to a specific node by number.
 
