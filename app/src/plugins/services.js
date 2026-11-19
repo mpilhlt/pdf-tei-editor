@@ -495,7 +495,7 @@ class ServicesPlugin extends Plugin {
       this.#logger.debug('PDF position found by a pdfSearch.fallback handler')
     } else {
       this.#logger.debug(`No PDF match for query: ${query.slice(0, 80)}...`)
-      notify('No sufficiently similar text found in the PDF', 'warning', 'search')
+      this.#pdfViewer.showStatusMessage('No sufficiently similar text found in the PDF')
     }
   }
 
