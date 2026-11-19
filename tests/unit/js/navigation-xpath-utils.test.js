@@ -85,3 +85,22 @@ describe('indexAtOrAfterNode', () => {
     assert.strictEqual(indexAtOrAfterNode([], page), 0)
   })
 })
+
+describe('indexAtOrAfterNode with milestones', () => {
+  const { window } = new JSDOM('')
+  const xml = new window.DOMParser().parseFromString(
+    '<text><pb n="1"/><front>A<lb/></front><body>B<lb/><pb n="2"/>C<lb/></body><pb n="3"/><page>3</page></text>', 'application/xml')
+  const pbs = Array.from(xml.getElementsByTagName('pb'))
+  const [front, body, page] = ['front', 'body', 'page'].map(name => /** @type {Element} */ (xml.getElementsByTagName(name)[0]))
+
+  it('selects the last milestone at or before the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode(pbs, front), 1)
+    assert.strictEqual(indexAtOrAfterNode(pbs, body), 1)
+    assert.strictEqual(indexAtOrAfterNode(pbs, pbs[1]), 2)
+    assert.strictEqual(indexAtOrAfterNode(pbs, page), 3)
+  })
+
+  it('selects the first milestone if none precedes the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode(pbs.slice(1), front), 1)
+  })
+})

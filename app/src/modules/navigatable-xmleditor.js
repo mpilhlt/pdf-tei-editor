@@ -1,6 +1,7 @@
 import { XMLEditor } from "./xmleditor.js";
 import { focusRangeField } from './codemirror/focus-mode.js';
 import { navigationNodeXpath } from './utils.js';
+import { isMilestone } from './navigation-xpath-utils.js';
 
 export {XMLEditor}
 
@@ -83,7 +84,7 @@ export class NavXmlEditor extends XMLEditor {
     if (!xpath) return;
     try {
       const nodeXpath = navigationNodeXpath(xpath);
-      const { from, to } = this.getSyntaxNodeByXpath(nodeXpath);
+      const { from, to } = this.getRangeByXpath(nodeXpath);
       const range = this.getView().state.field(focusRangeField, false);
       if (range && range.from === from && range.to === to) return;
       this.focusByXpath(nodeXpath, { scroll: false });
@@ -152,8 +153,14 @@ export class NavXmlEditor extends XMLEditor {
     for (let i = 0; i < snapshot.snapshotLength; i++) {
       positions.set(/** @type {Node} */ (snapshot.snapshotItem(i)), i + 1);
     }
-    while (selectedNode && !positions.has(selectedNode)) {
-      selectedNode = selectedNode.parentNode
+    const first = snapshot.snapshotLength > 0 ? /** @type {Node} */ (snapshot.snapshotItem(0)) : null;
+    if (first && isMilestone(first)) {
+      // milestones (e.g. <pb/>) contain no text: the cursor is in the range of the last one before it
+      selectedNode = this.#milestoneBefore(snapshot, range.from);
+    } else {
+      while (selectedNode && !positions.has(selectedNode)) {
+        selectedNode = selectedNode.parentNode
+      }
     }
     if (!selectedNode) {
       return;
@@ -174,6 +181,22 @@ export class NavXmlEditor extends XMLEditor {
     if (this.#focusMode) {
       this.#tryFocus(() => this.focusDomNode(selectedNode, { scroll: false }));
     }
+  }
+
+  /**
+   * The last milestone of a snapshot that starts at or before a position of the editor text.
+   * @param {XPathResult} snapshot - Milestones in document order
+   * @param {number} pos
+   * @returns {Node|null}
+   */
+  #milestoneBefore(snapshot, pos) {
+    let found = null;
+    for (let i = 0; i < snapshot.snapshotLength; i++) {
+      const node = /** @type {Node} */ (snapshot.snapshotItem(i));
+      if (this.getSyntaxNodeFromDomNode(node).from > pos) break;
+      found = node;
+    }
+    return found;
   }
 
   /**
