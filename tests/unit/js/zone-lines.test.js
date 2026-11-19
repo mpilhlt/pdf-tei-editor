@@ -17,6 +17,7 @@ import { readZoneLines, pagesOf, OUTSIDE } from '../../../app/src/modules/zone-l
 const FIXTURES = new URL('../fixtures/zone-lines/', import.meta.url);
 const SAMPLE = readFileSync(new URL('segmentation-sample.tei.xml', FIXTURES), 'utf-8');
 const LAYOUT = JSON.parse(readFileSync(new URL('segmentation-sample.layout.json', FIXTURES), 'utf-8'));
+const SAMPLE_PB = readFileSync(new URL('segmentation-sample-pb.tei.xml', FIXTURES), 'utf-8');
 const EXPECTED = JSON.parse(readFileSync(new URL('segmentation-sample.expected.json', FIXTURES), 'utf-8'));
 
 describe('zone lines', () => {
@@ -38,7 +39,19 @@ describe('zone lines', () => {
     assert.strictEqual(lines[15]?.pieces[0]?.label, OUTSIDE);
   });
 
-  it('refuses markup other than zones and <lb/>', () => {
+  it('reads <pb/> as markup without text', () => {
+    const lines = readZoneLines(SAMPLE_PB, LAYOUT.labels);
+    const pages = pagesOf(lines, LAYOUT.pages);
+    assert.deepStrictEqual({
+      lines: lines.map(l => ({ pieces: l.pieces.map(p => [p.label, p.text]), emptyLabel: l.emptyLabel })),
+      pages: pages.map(p => ({ number: p.number, firstLine: p.firstLine, endLine: p.endLine, fingerprint: p.fingerprint }))
+    }, EXPECTED);
+    const between = SAMPLE.replace('<page>2</page>', '<pb n="3"/><page>2</page>');
+    assert.strictEqual(readZoneLines(between, LAYOUT.labels)[10]?.pieces[0]?.label, 'page');
+  });
+
+  it('refuses markup other than zones, <lb/> and <pb/>', () => {
     assert.throws(() => readZoneLines(SAMPLE.replace('<body>1 Introduction', '<body><hi>1</hi> Introduction'), LAYOUT.labels));
+    assert.throws(() => readZoneLines(SAMPLE.replace('<body>1 Introduction', '<body><pb>1</pb> Introduction'), LAYOUT.labels));
   });
 });

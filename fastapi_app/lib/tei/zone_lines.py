@@ -7,6 +7,8 @@ elements belong to that stream: they are never added or moved. Correcting the do
 moving zone boundaries and relabeling zones, so this module reads the stream as
 
 - lines: the content up to and including an `<lb/>` (text after the last `<lb/>` is a last line)
+- page breaks: `<pb/>` elements, anywhere in the stream, which mark where a PDF page starts
+  (see :func:`line_pages_from_page_breaks` and :func:`insert_page_breaks`); they carry no text
 - pieces: the parts of a line that lie in different zones, each with the short code of its zone
   (see :class:`ZoneLabel`), `-` for text outside any zone
 
@@ -51,7 +53,7 @@ DEFAULT_CONTEXT_LINES = 5
 
 
 class ZoneDocumentError(ValueError):
-    """The document cannot be read as a zone document (no `<text>`, or markup other than zones and `<lb/>`)."""
+    """The document cannot be read as a zone document (no `<text>`, or markup other than zones, `<lb/>` and `<pb/>`)."""
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,7 @@ def zone_labels(entries: Iterable[Mapping[str, object]]) -> list[ZoneLabel]:
 CHAR = "char"  # one non-whitespace character (or entity reference)
 SPACE = "space"  # one whitespace character
 LB = "lb"  # an <lb/> element
+PB = "pb"  # a <pb/> element
 OTHER = "other"  # a comment, processing instruction
 
 
@@ -97,7 +100,7 @@ class Atom:
     kind: str
     start: int
     end: int
-    char: str  # decoded character ('' for LB and OTHER)
+    char: str  # decoded character ('' for LB, PB and OTHER)
     label: str  # code of the zone it lies in, OUTSIDE if none
     item: int  # index of the top-level item of <text> it lies in (see ZoneDocument.items)
     line: int = -1
@@ -121,6 +124,15 @@ class Piece:
 
     label: str
     text: str  # whitespace collapsed
+
+
+@dataclass(frozen=True)
+class PageBreak:
+    """A `<pb/>` of the text stream."""
+
+    atom: int  # index of its atom
+    n: str | None  # its `n` attribute
+    line: int  # the first line of the page it starts (len(lines) if no line follows)
 
 
 @dataclass
@@ -197,7 +209,7 @@ class ZoneDocument:
     The `<text>` of a zone document as atoms, top-level items, lines and pieces.
 
     Raises:
-        ZoneDocumentError: no `<text>` element, or a zone contains elements other than `<lb/>`.
+        ZoneDocumentError: no `<text>` element, or a zone contains elements other than `<lb/>` and `<pb/>`.
     """
 
     def __init__(self, xml: str, labels: Sequence[ZoneLabel]):
@@ -218,8 +230,13 @@ class ZoneDocument:
         self.items: list[Item] = []
         # raw start tags and element names of zones whose code is not in the vocabulary
         self.unknown: dict[str, tuple[str, str]] = {}
+        # namespace prefix of <text> ("" without), for elements added to the text
+        prefix_match = re.match(r"<([\w.-]+):", open_match.group(0))
+        self.prefix = f"{prefix_match.group(1)}:" if prefix_match else ""
+        self._pb_attrs: dict[int, dict[str, str]] = {}
         self._read()
         self.lines = self._lines()
+        self.page_breaks = self._page_breaks()
 
     # labels of zone elements
 
@@ -287,6 +304,14 @@ class ZoneDocument:
                     if not is_self:
                         raise ZoneDocumentError("<lb> must be an empty element")
                     continue
+                if _local(name) == "pb":
+                    if is_close:
+                        continue
+                    if not is_self:
+                        raise ZoneDocumentError("<pb> must be an empty element")
+                    self._pb_attrs[len(self.atoms)] = _parse_attrs(match.group("attrs") or "")
+                    add(PB, match.start(), match.end(), "")
+                    continue
                 if zone is None and not is_close:
                     attrs = _parse_attrs(match.group("attrs") or "")
                     code = self.code_of(name, attrs, token)
@@ -301,7 +326,7 @@ class ZoneDocument:
                     zone = None
                     continue
                 raise ZoneDocumentError(
-                    f"Unexpected <{'/' if is_close else ''}{name}> in <text>: zones may only contain text and <lb/>"
+                    f"Unexpected <{'/' if is_close else ''}{name}> in <text>: zones may only contain text, <lb/> and <pb/>"
                 )
         if pos < self.end:
             add_text(xml[pos:self.end], pos)
@@ -322,6 +347,31 @@ class ZoneDocument:
             for i in line.atoms:
                 self.atoms[i].line = line.index
         return lines
+
+    def _page_breaks(self) -> list[PageBreak]:
+        """
+        The `<pb/>` elements, each with the first line of its page: the line of the next character,
+        or the line after that if the line starts before the `<pb/>`.
+        """
+        if not self._pb_attrs:
+            return []
+        first_char = {line.index: next((i for i in line.atoms if self.atoms[i].kind == CHAR), -1) for line in self.lines}
+        breaks: list[PageBreak] = []
+        next_char: int | None = None
+        for index in range(len(self.atoms) - 1, -1, -1):
+            atom = self.atoms[index]
+            if atom.kind == CHAR:
+                next_char = index
+            elif atom.kind == PB:
+                if next_char is None:
+                    line = len(self.lines)
+                else:
+                    line = self.atoms[next_char].line
+                    if first_char[line] < index:
+                        line += 1
+                breaks.append(PageBreak(index, self._pb_attrs[index].get("n"), line))
+        breaks.reverse()
+        return breaks
 
     def _make_line(self, index: int, atoms: list[int]) -> Line:
         labels = [self.atoms[i].label for i in atoms]
@@ -419,6 +469,88 @@ def pages_of(doc: ZoneDocument, line_pages: Sequence[int], pieces: Sequence[Sequ
         seen[base] = count
         pages.append(Page(index, number, first, end, base if count == 1 else f"{base}.{count}"))
     return pages
+
+
+PAGE_BREAK_VICINITY = 3
+"""Lines before or after a page start within which an existing `<pb/>` counts as the page's break (see :func:`insert_page_breaks`)."""
+
+
+def _page_break_number(n: str | None) -> int | None:
+    try:
+        number = int(n) if n is not None else None
+    except ValueError:
+        return None
+    return number if number is not None and number > 0 else None
+
+
+def line_pages_from_page_breaks(doc: ZoneDocument) -> list[int] | None:
+    """
+    The page index (0-based) of every line from the document's `<pb/>` elements, or None if it has
+    none. A `<pb/>` starts the page of its `n` attribute (1-based) if that is a number greater than
+    the page before it, else the page after it. Lines before the first `<pb/>` belong to the page
+    before it (the first page at the least).
+    """
+    if not doc.page_breaks:
+        return None
+    starts: dict[int, int] = {}
+    previous: int | None = None
+    for pb in doc.page_breaks:
+        number = _page_break_number(pb.n)
+        if number is not None and (previous is None or number - 1 > previous):
+            page = number - 1
+        elif previous is None:
+            page = 0 if pb.line == 0 else 1
+        else:
+            page = previous + 1
+        starts[pb.line] = page
+        previous = page
+    first_line = doc.page_breaks[0].line
+    page = max(starts[first_line] - 1, 0) if first_line > 0 else starts[first_line]
+    pages: list[int] = []
+    for line in range(len(doc.lines)):
+        page = starts.get(line, page)
+        pages.append(page)
+    return pages
+
+
+def page_start_lines(line_pages: Sequence[int], line_count: int) -> list[int]:
+    """The lines that start a page of the layout (the first line and every line whose page differs from the line before)."""
+    count = min(line_count, len(line_pages))
+    return [line for line in range(count) if line == 0 or line_pages[line] != line_pages[line - 1]]
+
+
+def insert_page_breaks(
+    xml: str, labels: Sequence[ZoneLabel], line_pages: Sequence[int], vicinity: int = PAGE_BREAK_VICINITY
+) -> tuple[str, int]:
+    """
+    The document with a `<pb n="…"/>` (1-based page number) before the first character of the
+    first line of every page of a line layout, and the number of page breaks inserted. A page start
+    gets none if an existing `<pb/>` lies within `vicinity` lines of it: each existing `<pb/>`
+    counts for the nearest page start within that distance. Lines without text get none. The rest
+    of the XML is kept byte for byte.
+
+    Raises:
+        ZoneDocumentError: see :class:`ZoneDocument`.
+    """
+    doc = ZoneDocument(xml, labels)
+    starts = page_start_lines(line_pages, len(doc.lines))
+    claimed: set[int] = set()
+    for pb in doc.page_breaks:
+        near = [line for line in starts if abs(line - pb.line) <= vicinity]
+        if near:
+            claimed.add(min(near, key=lambda line: (abs(line - pb.line), line)))
+    insertions: list[tuple[int, str]] = []
+    for line in starts:
+        if line in claimed:
+            continue
+        first_char = next((i for i in doc.lines[line].atoms if doc.atoms[i].kind == CHAR), None)
+        if first_char is None:
+            continue
+        insertions.append((doc.atoms[first_char].start, f'<{doc.prefix}pb n="{line_pages[line] + 1}"/>'))
+    result = xml
+    for position, tag in reversed(insertions):
+        result = result[:position] + tag + result[position:]
+    return result, len(insertions)
 
 
 # ── Processing windows ───────────────────────────────────────────────

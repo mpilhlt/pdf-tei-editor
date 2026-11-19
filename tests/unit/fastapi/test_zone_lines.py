@@ -25,6 +25,8 @@ from fastapi_app.lib.tei.zone_lines import (
     changes_between,
     check_changes,
     format_listing,
+    insert_page_breaks,
+    line_pages_from_page_breaks,
     page_windows,
     pages_of,
     parse_answer,
@@ -36,8 +38,15 @@ FIXTURES = Path(__file__).parent.parent / "fixtures" / "zone-lines"
 SAMPLE = (FIXTURES / "segmentation-sample.tei.xml").read_text(encoding="utf-8")
 LAYOUT = json.loads((FIXTURES / "segmentation-sample.layout.json").read_text(encoding="utf-8"))
 EXPECTED = FIXTURES / "segmentation-sample.expected.json"
+# the sample with the <pb/> elements insert_page_breaks() adds from its layout
+SAMPLE_PB = (FIXTURES / "segmentation-sample-pb.tei.xml").read_text(encoding="utf-8")
 LABELS = zone_labels(LAYOUT["labels"])
 DEMO = Path(__file__).parents[3] / "docker" / "demo-data" / "default" / "tei" / "10.5771__2699-1284-2024-3-149.tei.xml"
+
+
+def text_of(xml: str) -> str:
+    """The <text> of a document."""
+    return xml[xml.index("<text"):]
 
 
 def digest(xml: str) -> dict[str, object]:
@@ -221,6 +230,78 @@ class TestApplyLabels(unittest.TestCase):
     def test_mismatching_pieces_raise(self):
         with self.assertRaises(ValueError):
             apply_labels(SAMPLE, LABELS, [LabelChange(10, 10, pieces=(("page", "3"),))])
+
+
+class TestPageBreaks(unittest.TestCase):
+    def test_page_breaks_carry_no_text(self):
+        # lines, pieces and page fingerprints are those of the sample without <pb/>
+        self.assertEqual(digest(SAMPLE_PB), json.loads(EXPECTED.read_text(encoding="utf-8")))
+        self.assertEqual(non_space(SAMPLE_PB), non_space(SAMPLE))
+
+    def test_page_breaks_and_their_lines(self):
+        doc = ZoneDocument(SAMPLE_PB, LABELS)
+        self.assertEqual([(pb.n, pb.line) for pb in doc.page_breaks], [("1", 0), ("2", 2), ("3", 10), ("4", 16)])
+        self.assertEqual(line_pages_from_page_breaks(doc), LAYOUT["pages"])
+        self.assertIsNone(line_pages_from_page_breaks(ZoneDocument(SAMPLE, LABELS)))
+
+    def test_insert_page_breaks(self):
+        result, count = insert_page_breaks(SAMPLE, LABELS, LAYOUT["pages"])
+        self.assertEqual(count, 4)
+        self.assertEqual(text_of(result), text_of(SAMPLE_PB))
+        self.assertIn("<page><pb n=\"3\"/>2</page>", result)
+        # before the first character of the line, after the <lb/> of the line before
+        self.assertIn("<front><pb n=\"2\"/>A Sample Article", result)
+
+    def test_insertion_is_skipped_next_to_existing_page_breaks(self):
+        self.assertEqual(insert_page_breaks(SAMPLE_PB, LABELS, LAYOUT["pages"]), (SAMPLE_PB, 0))
+        # a <pb/> one line after the page start of page 2 counts for it
+        moved = SAMPLE_PB.replace('<pb n="2"/>A Sample Article <lb/>', 'A Sample Article <lb/><pb n="2"/>')
+        self.assertEqual(insert_page_breaks(moved, LABELS, LAYOUT["pages"])[1], 0)
+        # one too far away does not
+        far = SAMPLE_PB.replace('<pb n="2"/>A Sample Article', "A Sample Article").replace("<body>1 Introduction <lb/>The body starts on the first page <lb/>", '<body>1 Introduction <lb/>The body starts on the first page <lb/><pb n="2"/>')
+        self.assertEqual(ZoneDocument(far, LABELS).page_breaks[1].line, 8)
+        result, count = insert_page_breaks(far, LABELS, LAYOUT["pages"], vicinity=3)
+        self.assertEqual(count, 1)
+        self.assertIn('<front><pb n="2"/>A Sample Article', result)
+        # each existing <pb/> counts for one page start only
+        self.assertEqual(insert_page_breaks(SAMPLE, LABELS, [0, 1, 2, 3] + [3] * 14, vicinity=3)[1], 4)
+        one = SAMPLE.replace("<titlePage>Journal", '<titlePage><pb n="1"/>Journal')
+        self.assertEqual(insert_page_breaks(one, LABELS, [0, 1, 2, 3] + [3] * 14, vicinity=3)[1], 3)
+
+    def test_page_break_inside_a_line_starts_the_next_line(self):
+        xml = SAMPLE.replace("Jane Doe and John Roe <lb/>", 'Jane Doe <pb/>and John Roe <lb/>')
+        self.assertEqual(ZoneDocument(xml, LABELS).page_breaks[0].line, 4)
+
+    def test_pages_without_numbers(self):
+        xml = SAMPLE_PB.replace(' n="1"', "").replace(' n="2"', "").replace(' n="3"', ' n="x"')
+        self.assertEqual(line_pages_from_page_breaks(ZoneDocument(xml, LABELS)), LAYOUT["pages"])
+        # lines before the first <pb/> belong to the page before it
+        xml = SAMPLE_PB.replace('<pb n="1"/>', "")
+        self.assertEqual(line_pages_from_page_breaks(ZoneDocument(xml, LABELS)), LAYOUT["pages"])
+
+    def test_page_break_between_zones(self):
+        xml = SAMPLE.replace("<page>2</page>", '<pb n="3"/><page>2</page>')
+        doc = ZoneDocument(xml, LABELS)
+        self.assertEqual(doc.page_breaks[0].line, 10)
+        self.assertEqual(doc.lines[10].pieces[0].label, "page")
+
+    def test_non_empty_page_break_is_refused(self):
+        with self.assertRaises(ZoneDocumentError):
+            ZoneDocument(SAMPLE.replace("<body>1 Introduction", "<body><pb>1</pb> Introduction"), LABELS)
+
+    def test_apply_labels_keeps_page_breaks(self):
+        for change in (LabelChange(2, 2, label="titlePage"), LabelChange(10, 10, label="note:headnote"), LabelChange(16, 17, label="body")):
+            result = apply_labels(SAMPLE_PB, LABELS, [change])
+            self.assertEqual(result.count("<pb "), 4, change)
+            self.assertEqual(non_space(result), non_space(SAMPLE_PB))
+            doc = ZoneDocument(result, LABELS)
+            self.assertEqual(line_pages_from_page_breaks(doc), LAYOUT["pages"], change)
+            # labels as without page breaks
+            self.assertEqual([line.pieces for line in doc.lines], [line.pieces for line in ZoneDocument(apply_labels(SAMPLE, LABELS, [change]), LABELS).lines])
+
+    def test_prefixed_text(self):
+        xml = SAMPLE.replace('<TEI xmlns="http://www.tei-c.org/ns/1.0">', '<tei:TEI xmlns:tei="http://www.tei-c.org/ns/1.0">').replace("</TEI>", "</tei:TEI>").replace('<text xml:lang="en">', '<tei:text xml:lang="en">').replace("</text>", "</tei:text>")
+        self.assertIn('<tei:pb n="1"/>', insert_page_breaks(xml, LABELS, LAYOUT["pages"])[0])
 
 
 if __name__ == "__main__":
