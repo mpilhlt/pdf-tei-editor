@@ -653,6 +653,7 @@ class PluginAdminPlugin extends Plugin {
     this.#installing.add(key)
     this.#renderAvailable()
     const outcome = await this.#runInstall(p, version)
+    if (outcome.ok) this.#markInstalled(p, version)
     const message = outcome.ok
       ? [outcome.text, 'success', 'check-circle', 6000]
       : [outcome.text, 'danger', 'exclamation-octagon', 12000]
@@ -703,7 +704,10 @@ class PluginAdminPlugin extends Plugin {
     const untrusted = updates.filter(p => !p.trusted)
     const versions = updates.map(p => `${p.id} v${p.installed_version} → v${p.latest_version}`).join(', ')
     const packages = [...new Set(updates.flatMap(p => p.install_packages ?? []))]
-    const text = `Upgrade ${updates.length === 1 ? 'this plugin' : `these ${updates.length} plugins`} to the latest release (${versions})? Plugins in use take the new version after the server processes restart.`
+    const text = `Upgrade ${updates.length === 1 ? 'this plugin' : `these ${updates.length} plugins`} to the latest release (${versions})?`
+      + (this.#restartSupported
+        ? ' Plugins in use take the new version when the server processes restart, which happens once after all upgrades are installed. Jobs running in a restarting process (for example a batch extraction) are interrupted.'
+        : ' Plugins in use take the new version after the server is restarted.')
       + (packages.length ? ` The packages ${packages.join(', ')} and their dependencies are installed from PyPI with them.` : '')
       + (untrusted.length ? ` ${untrusted.map(p => p.repository).join(', ')} ${untrusted.length === 1 ? 'does' : 'do'} not belong to a trusted owner. Type "upgrade" to confirm.` : '')
     this.#confirm(`Upgrade ${updates.length} plugin${updates.length === 1 ? '' : 's'}?`, text, updates.map(p => p.id),
@@ -711,7 +715,19 @@ class PluginAdminPlugin extends Plugin {
   }
 
   /**
-   * Upgrade the plugins one after the other and report the outcome in one message
+   * Show a plugin as installed in the given version in the "Available" tab, before the list is
+   * reloaded from the server
+   * @param {AvailablePlugin} p
+   * @param {string} version
+   */
+  #markInstalled(p, version) {
+    p.installed_version = version
+    p.update_available = false
+  }
+
+  /**
+   * Upgrade the plugins one after the other, restart the server processes once if an upgraded
+   * plugin is in use, and report the outcome in one message
    * @param {AvailablePlugin[]} updates
    */
   async #upgradeAll(updates) {
@@ -729,6 +745,7 @@ class PluginAdminPlugin extends Plugin {
         const outcome = await this.#runInstall(p, /** @type {string} */ (p.latest_version))
         this.#installing.delete(installKey(p))
         if (outcome.ok) {
+          this.#markInstalled(p, /** @type {string} */ (p.latest_version))
           upgraded.push(`${p.id} v${p.latest_version}`)
           restartRequired ||= outcome.restartRequired
         } else {
@@ -742,12 +759,16 @@ class PluginAdminPlugin extends Plugin {
       this.#upgradingAll = false
       this.#renderAvailable()
     }
+    const restartNow = restartRequired && this.#restartSupported
     if (upgraded.length) {
-      notify(`Upgraded ${upgraded.join(', ')}` + (restartRequired ? '; apply the plugin changes to use the new versions' : ''), 'success', 'check-circle', 8000)
+      notify(`Upgraded ${upgraded.join(', ')}`
+        + (restartNow ? '; restarting the server processes to use the new versions' : restartRequired ? '; restart the server to use the new versions' : ''),
+      'success', 'check-circle', 8000)
     }
     if (failures.length) {
       notify(failures.join(' '), 'danger', 'exclamation-octagon', 12000)
     }
+    if (restartNow) await this.#restart()
   }
 
   /**

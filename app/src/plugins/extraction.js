@@ -21,6 +21,7 @@ import { extractDoi } from '../modules/doi-utils.js'
 import { UserAbortException } from '../modules/utils.js'
 import { getDocumentMetadata } from '../modules/tei-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
+import { notify } from '../modules/sl-utils.js'
 
 /**
  * Extractor configuration object
@@ -253,7 +254,10 @@ class ExtractionPlugin extends Plugin {
 
         if (ocr && !extractsFromXml) {
           ui.spinner.show('Applying text recognition, this may take a while')
-          await this.getDependency('ocr').recognize(file_id, ocr)
+          const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr)
+          if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
+            notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
+          }
           ui.spinner.show(spinnerMessage)
         }
 
@@ -711,19 +715,40 @@ class ExtractionPlugin extends Plugin {
           render()
         })
         .catch(error => logger.warn('Could not load OCR engines: ' + String(error)))
+    }
 
+    /** @param {unknown} error */
+    const showCheckError = error => {
+      if (signal.aborted) return
+      renderTextQuality(section.textQuality, null, 'Could not check the text layer: ' + String(error))
+      section.applyOcr.disabled = false
+    }
+
+    let checkStarted = false
+    /**
+     * Check the text layer once the section is shown, i.e. only for extractors that read the PDF:
+     * first the fast character checks, then, if they found no problems, the comparison with the
+     * words recognized on sample pages.
+     */
+    const checkTextLayer = () => {
+      if (checkStarted || !pdfStableId) return
+      checkStarted = true
       ocrPlugin.getTextQuality(pdfStableId)
         .then(report => {
           if (signal.aborted) return
           quality = report
-          renderTextQuality(section.textQuality, report)
+          const checkLayout = report.status === 'good'
+          renderTextQuality(section.textQuality, report, '', checkLayout ? 'Comparing the text layer with the page images…' : '')
           render()
+          if (!checkLayout) return
+          return ocrPlugin.getTextQuality(pdfStableId, { layout: true }).then(layoutReport => {
+            if (signal.aborted) return
+            quality = layoutReport
+            renderTextQuality(section.textQuality, layoutReport)
+            render()
+          })
         })
-        .catch(error => {
-          if (signal.aborted) return
-          renderTextQuality(section.textQuality, null, 'Could not check the text layer: ' + String(error))
-          section.applyOcr.disabled = false
-        })
+        .catch(showCheckError)
     }
 
     section.applyOcr.addEventListener('sl-change', () => { userToggled = true }, { signal })
@@ -743,11 +768,16 @@ class ExtractionPlugin extends Plugin {
     }, { signal })
 
     return {
-      update: visible => { wanted = visible && Boolean(pdfStableId); render() },
+      update: visible => {
+        wanted = visible && Boolean(pdfStableId)
+        if (wanted) checkTextLayer()
+        render()
+      },
       getRunOptions: () => {
         const engine = selectedEngine()
         if (!engine || !wanted || !section.applyOcr.checked) return null
-        return { engine: engine.id, ...settingsFor(engine) }
+        // Checking the box asks for a new text layer, even where the checks found no problem
+        return { engine: engine.id, ...settingsFor(engine), rebuild: true }
       },
       dispose: () => controller.abort()
     }
@@ -759,8 +789,9 @@ class ExtractionPlugin extends Plugin {
  * @param {HTMLElement} container
  * @param {TextQualityReport|null} report
  * @param {string} [message] - Text to show instead of a report
+ * @param {string} [pending] - Note about a check that is still running
  */
-function renderTextQuality(container, report, message = '') {
+function renderTextQuality(container, report, message = '', pending = '') {
   container.innerHTML = ''
   container.dataset.status = report?.status ?? ''
   if (!report) {
@@ -773,9 +804,18 @@ function renderTextQuality(container, report, message = '') {
   summary.textContent = report.summary
   container.append(icon, ' ', summary)
   const details = [...report.reasons]
+  if (pending) {
+    details.push(pending)
+  } else if (report.layout_checked && report.status === 'good') {
+    details.push('The text layer matches the words recognized on sample pages.')
+  }
   if (report.ocr_applied) {
     const date = new Date(report.ocr_applied.applied_at).toLocaleString()
     details.push(`Text recognition was applied on ${date} (${report.ocr_applied.engine}, ${report.ocr_applied.languages.join(', ')}).`)
+    if (report.ocr_applied.method === 'force') {
+      const reason = report.ocr_applied.fallback_reason ? `, since ${report.ocr_applied.fallback_reason}` : ''
+      details.push(`The pages were converted to images${reason}.`)
+    }
   }
   if (details.length) {
     const list = document.createElement('ul')

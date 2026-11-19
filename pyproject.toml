@@ -23,6 +23,9 @@ dependencies = [
     "pypdf>=6.16.1",
     "py3langid>=0.4.0",
     "ocrmypdf>=17.14.2",
+    "pypdfium2>=5.15.2",
+    "pillow>=13.0.0",
+    "pikepdf>=10.18.2",
 ]
 
 [project.optional-dependencies]

@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     poppler-utils \
+    # Ghostscript: replaces broken text layers while keeping vector graphics (OCRmyPDF plugin)
+    ghostscript \
     tesseract-ocr \
     $(for lang in ${TESSERACT_LANGS}; do echo "tesseract-ocr-${lang}"; done) \
     # Clean up package cache

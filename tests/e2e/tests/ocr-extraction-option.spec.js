@@ -47,7 +47,8 @@ test.describe('OCR extraction option', () => {
       await waitForTestMessage(consoleLogs, 'EXTRACTION_OPTIONS_DIALOG_STARTING', 10000);
 
       const quality = await waitForTestMessage(consoleLogs, 'OCR_TEXT_QUALITY', 15000);
-      expect(quality.value).toEqual({ stableId, status: 'missing' });
+      // Without a text layer, the comparison with the page images is not requested
+      expect(quality.value).toEqual({ stableId, status: 'missing', layout: false, layoutChecked: false });
 
       // No text layer: the option is checked and cannot be unchecked
       await expect.poll(() => page.evaluate(() => {

@@ -37,6 +37,7 @@ class OcrRequest(BaseModel):
     engine: str = Field(..., min_length=1, description="Id of the OCR engine")
     languages: list[str] = Field(default_factory=list, description="Languages of the document as BCP 47 codes; the engine default if empty")
     options: dict[str, OcrOptionValue] = Field(default_factory=dict, description="Engine parameters")
+    rebuild: bool = Field(False, description="The user explicitly asked to recreate the text layer: a digital text layer is replaced even if it looks fine")
 
 
 class OcrResponse(BaseModel):
@@ -45,6 +46,8 @@ class OcrResponse(BaseModel):
     stable_id: str = Field(..., description="stable_id of the PDF (unchanged)")
     changed: bool = Field(..., description="Whether the PDF content changed")
     message: Optional[str] = Field(None, description="Message of the engine, if any")
+    method: Optional[str] = Field(None, description="How the text layer was created ('skip', 'redo', 'force', 'vectorize'), if the engine reports it")
+    fallback_reason: Optional[str] = Field(None, description="Why the engine fell back from the preferred method, if it did")
     quality: "TextQualityReport" = Field(..., description="Text layer quality after OCR")
 
 
@@ -67,6 +70,10 @@ class TextQualityReport(BaseModel):
     plausible_word_ratio: Optional[float] = Field(None, description="Share of tokens that look like words or numbers")
     language: Optional[str] = Field(None, description="Language detected in the text layer")
     language_confidence: Optional[float] = Field(None, description="Confidence of the language detection (0-1)")
+    layout_checked: bool = Field(default=False, description="Whether the text layer was compared with the words recognized on sample page images")
+    layout_text_match: Optional[float] = Field(default=None, description="Share of words recognized on the page images that match the text layer (0-1)")
+    layout_position_match: Optional[float] = Field(default=None, description="Share of matching words that are at the same place in the text layer (0-1)")
+    layout_order_agreement: Optional[float] = Field(default=None, description="Share of matching words that are in the same order in the text layer (0-1)")
     ocr_applied: Optional[dict[str, str | list[str]]] = Field(default=None, description="Record of a previous OCR run by this application")
 
 
