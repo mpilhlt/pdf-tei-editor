@@ -222,7 +222,7 @@ Only one window can edit a document at a time. When the document is already open
 - *You have this document open for editing in another window or session*: you have it open yourself, in another tab, browser or after logging in again.
 - A notice of a plugin, e.g. while a background job changes the document.
 
-When the other window closes the document, it becomes editable here and *You can now edit this document* appears.
+When the other window closes the document, or its user logs out, it becomes editable here and *You can now edit this document* appears.
 
 ### Superseded versions
 

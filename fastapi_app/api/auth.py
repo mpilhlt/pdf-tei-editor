@@ -15,6 +15,10 @@ from ..lib.core.login_rate_limit import check_login_allowed, client_ip, login_ra
 from ..config import get_settings
 from ..lib.utils.auth import AuthManager
 from ..lib.core.sessions import SessionManager
+from ..lib.core.locking import release_session_locks
+from ..lib.core.dependencies import get_sse_service
+from ..lib.sse.sse_utils import broadcast_to_other_sessions
+from ..lib.sse.event_bus import get_event_bus
 from ..lib.utils.server_utils import get_session_id_from_request
 from ..lib.utils.logging_utils import get_logger
 from ..lib.plugins.plugin_window_auth import PLUGIN_ROUTES_PREFIX, PLUGIN_SESSION_COOKIE
@@ -184,15 +188,28 @@ async def logout(request: Request, response: Response):
     """
     Logout user by deleting their session.
 
-    Also clears the cookie that authenticates backend plugin pages. Returns success even if no session exists.
+    Releases the file locks of the session and clears the cookie that authenticates backend plugin pages. Returns success even if no session exists.
     """
     session_id = get_session_id_from_request(request)
     response.delete_cookie(PLUGIN_SESSION_COOKIE, path=PLUGIN_ROUTES_PREFIX, httponly=True, samesite="strict")
 
     if session_id:
         session_manager = get_session_manager()
+        # Release the session's locks before it ends, so that other sessions learn that the files are free again
+        released = release_session_locks([session_id], get_settings().db_dir, logger)
         session_manager.delete_session(session_id)
         logger.info(f"User logged out, deleted session {session_id[:8]}...")
+        sse_service = get_sse_service()
+        for stable_id in released:
+            broadcast_to_other_sessions(
+                sse_service=sse_service,
+                session_manager=session_manager,
+                current_session_id=session_id,
+                event_type="lockReleased",
+                data={"stable_id": stable_id},
+                logger=logger
+            )
+            await get_event_bus().emit("file.lock_changed", stable_id=stable_id)
 
     return LogoutResponse(status="logged_out")
 
