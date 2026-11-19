@@ -44,7 +44,7 @@
  */
 
 import { EditorState, EditorSelection, Compartment, Transaction, StateEffect, Annotation } from "@codemirror/state";
-import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk, diff } from "@codemirror/merge"
+import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, getOriginalDoc, diff } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldedRanges, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
@@ -891,30 +891,26 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Accept all remaining changes in the document
+   * Accept all remaining changes in the document, in one transaction (one undo step). Each chunk
+   * is replaced as the merge view's own per-chunk accept does it (`rejectChunk()` of
+   * @codemirror/merge, since the incoming document is the merge view's "original").
    */
   acceptAllDiffs() {
     if (!this.isMergeViewActive()) {
       throw new Error("Not in merge view")
     }
     const state = this.#view.state;
-    //const originalDocument = getOriginalDoc(state);
-    const { chunks } = getChunks(state) || {};
-    for (const chunk of chunks || []) {
-      //const originalChunkText = originalDocument.sliceString(chunk.fromB, chunk.toB);
-      rejectChunk(this.#view, chunk.fromA)
-      // changes.push({
-      //   from: chunk.fromA,
-      //   to: chunk.toA,
-      //   insert: originalChunkText
-      // });
+    const result = getChunks(state);
+    if (result && result.chunks.length > 0) {
+      const incoming = getOriginalDoc(state);
+      const changes = result.chunks.map(chunk => {
+        let insert = incoming.sliceString(chunk.fromA, Math.max(chunk.fromA, chunk.toA - 1));
+        if (chunk.fromA != chunk.toA && chunk.toB <= state.doc.length) insert += state.lineBreak;
+        return { from: chunk.fromB, to: Math.min(state.doc.length, chunk.toB), insert };
+      });
+      this.#view.dispatch({ changes, userEvent: "revert" });
     }
     this.hideMergeView()
-
-    // changes = changes.slice(0,3)
-    // console.log(changes)
-
-    // this.#view.dispatch({ changes });
   }
 
   /**
