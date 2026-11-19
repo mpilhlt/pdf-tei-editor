@@ -16,6 +16,7 @@ import { XmlAnnotationPopup } from '../modules/codemirror/xml-annotation-popup.j
 import { XMLEditor } from '../modules/xmleditor.js'
 import ui from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
+import { navigationNodeXpath } from '../modules/utils.js'
 import { createAnnotationField, annotationTheme, navigateEffect, createNavigationField } from '../modules/codemirror/xml-annotation-decorations.js'
 import { findCmScrollContainer, getFirstVisibleCharacter, scrollCharacterToTop } from '../modules/codemirror/codemirror-utils.js'
 import { relocatePartialAnnotationTags } from '../modules/codemirror/xml-annotation-ops.js'
@@ -479,7 +480,7 @@ class XmlAnnotationPlugin extends Plugin {
    */
   #scrollToXpath(xpath) {
     try {
-      const nodes = this.#xmlEditor.getDomNodesByXpath?.(xpath)
+      const nodes = this.#xmlEditor.getDomNodesByXpath?.(navigationNodeXpath(xpath))
       const domNode = nodes?.[0]
       if (!domNode) return
       const pos = this.#xmlEditor.getDomNodePosition?.(domNode)

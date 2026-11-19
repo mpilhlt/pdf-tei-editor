@@ -7,7 +7,8 @@
  * Checks that an expression with a wildcard and a predicate stays selected in the dropdown when it
  * replaces another one, and that the index follows the cursor among the nodes it selects.
  * Checks that switching the expression keeps the position: the next node of the new expression is
- * selected, wrapping around to the first one at the end of the document.
+ * selected, wrapping around to the first one at the end of the document, also for an expression
+ * whose nodes have different parents.
  * Checks that in focus mode, the up/down arrow keys move the focus to the previous/next node, and
  * that in the visual annotation mode, they always go to the previous/next node like ‹ ›.
  *
@@ -297,6 +298,60 @@ test.describe('XPath navigation', () => {
       // no <biblStruct/> after "Gamma": wraps around to the first one
       await clickDropdownEntry(page, 'Structs');
       await expect.poll(() => navigationState(page)).toEqual({ xpath: `${STRUCT}[1]`, selected: STRUCT, counter: '(1/2)' });
+    } finally {
+      await page.evaluate(async (variant) => {
+        try {
+          await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, { entries: [] });
+        } catch { /* nothing to clean up */ }
+      }, VARIANT).catch(() => {});
+      await releaseAllLocks(page).catch(() => {});
+      stopErrorMonitoring();
+    }
+  });
+
+  test('switching the expression keeps the position among nodes with different parents', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const LIST = '//tei:listBibl';
+    const CHILDREN = '/tei:TEI/tei:text/*[normalize-space()]';
+    // `//tei:listBibl[2]` selects nothing, since each <listBibl> is the first in its parent
+    const NESTED = `<text>
+    <front><listBibl><bibl>Alpha</bibl></listBibl></front>
+    <body>Body text</body>
+    <back><listBibl><bibl>Beta</bibl></listBibl></back>
+  </text>`;
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.evaluate(async ({ variant, list, children }) => {
+        await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, {
+          entries: [{ value: list, label: 'Lists' }, { value: children, label: 'Children' }]
+        });
+      }, { variant: VARIANT, list: LIST, children: CHILDREN });
+      await loadNavigationDocument(page, NESTED);
+      await page.reload();
+      await expect.poll(() => dropdownTexts(page)).toContain(CHILDREN);
+      /** The text of the line of the cursor, which the navigation places in the current node */
+      const cursorLine = () => page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        return view.state.doc.lineAt(view.state.selection.main.head).text.trim();
+      });
+
+      await clickDropdownEntry(page, 'Lists');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${LIST}[1]`, selected: LIST, counter: '(1/2)' });
+      await page.locator('[name="nextNodeBtn"]').click();
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${LIST}[2]`, selected: LIST, counter: '(2/2)' });
+      await expect.poll(cursorLine).toContain('Beta');
+
+      // the <back> that contains the second <listBibl>
+      await clickDropdownEntry(page, 'Children');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[3]`, selected: CHILDREN, counter: '(3/3)' });
+      // and back to the second <listBibl>, the first one inside <back>
+      await clickDropdownEntry(page, 'Lists');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${LIST}[2]`, selected: LIST, counter: '(2/2)' });
+      await expect.poll(cursorLine).toContain('Beta');
     } finally {
       await page.evaluate(async (variant) => {
         try {
