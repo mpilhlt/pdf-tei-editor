@@ -722,11 +722,13 @@ export function baseFingerprint(fingerprint) {
  * @param {ReviewData} data
  * @param {Unit[]} units - The current units
  * @param {Map<string, string>} carry - Old fingerprint by new fingerprint, for units edited in the editor
+ * @param {Set<string>} [keep] - Fingerprints of units an edit in the editor changed or removed, whose
+ *   marks are kept because undoing the edit restores the units
  * @returns {boolean} True if the data changed
  */
-export function reconcileReviewData(data, units, carry) {
+export function reconcileReviewData(data, units, carry, keep = new Set()) {
   const current = new Set(units.map(u => u.fingerprint));
-  const carriedFrom = new Set(carry.values());
+  const carriedFrom = new Set([...carry.values(), ...keep]);
   let changed = false;
   for (const reviewer of data.reviewers.values()) {
     for (const [newFp, oldFp] of carry) {
