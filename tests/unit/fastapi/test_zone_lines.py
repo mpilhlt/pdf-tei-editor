@@ -248,24 +248,37 @@ class TestPageBreaks(unittest.TestCase):
         result, count = insert_page_breaks(SAMPLE, LABELS, LAYOUT["pages"])
         self.assertEqual(count, 4)
         self.assertEqual(text_of(result), text_of(SAMPLE_PB))
-        self.assertIn("<page><pb n=\"3\"/>2</page>", result)
-        # before the first character of the line, after the <lb/> of the line before
-        self.assertIn("<front><pb n=\"2\"/>A Sample Article", result)
+        # a page that starts with a zone: before the zone, on a line of its own
+        self.assertIn('\n    <pb n="3"/>\n    <page>2</page>', result)
+        self.assertIn('<pb n="2"/>\n    <front>A Sample Article', result)
+
+    def test_insert_page_breaks_inside_a_zone(self):
+        # a page that starts inside a zone: before the first character of its first line
+        pages = [0, 0, 0, 1] + [1] * 14
+        result, count = insert_page_breaks(SAMPLE, LABELS, pages)
+        self.assertEqual(count, 2)
+        self.assertIn('A Sample Article <lb/><pb n="2"/>Jane Doe', result)
+        # a zone tag that does not start a line gets the <pb/> right before it
+        xml = SAMPLE.replace("<page>2</page>", "<page>2 <lb/></page>")
+        result, count = insert_page_breaks(xml, LABELS, [0] * 11 + [1] * 8)
+        self.assertEqual(count, 2)
+        self.assertIn('<page>2 <lb/></page> <pb n="2"/><note place="headnote">', result)
+        self.assertEqual(ZoneDocument(result, LABELS).page_breaks[1].line, 11)
 
     def test_insertion_is_skipped_next_to_existing_page_breaks(self):
         self.assertEqual(insert_page_breaks(SAMPLE_PB, LABELS, LAYOUT["pages"]), (SAMPLE_PB, 0))
         # a <pb/> one line after the page start of page 2 counts for it
-        moved = SAMPLE_PB.replace('<pb n="2"/>A Sample Article <lb/>', 'A Sample Article <lb/><pb n="2"/>')
+        moved = SAMPLE_PB.replace('<pb n="2"/>\n    <front>A Sample Article <lb/>', '<front>A Sample Article <lb/><pb n="2"/>')
         self.assertEqual(insert_page_breaks(moved, LABELS, LAYOUT["pages"])[1], 0)
         # one too far away does not
-        far = SAMPLE_PB.replace('<pb n="2"/>A Sample Article', "A Sample Article").replace("<body>1 Introduction <lb/>The body starts on the first page <lb/>", '<body>1 Introduction <lb/>The body starts on the first page <lb/><pb n="2"/>')
+        far = SAMPLE_PB.replace('<pb n="2"/>\n    <front>', "<front>").replace("<body>1 Introduction <lb/>The body starts on the first page <lb/>", '<body>1 Introduction <lb/>The body starts on the first page <lb/><pb n="2"/>')
         self.assertEqual(ZoneDocument(far, LABELS).page_breaks[1].line, 8)
         result, count = insert_page_breaks(far, LABELS, LAYOUT["pages"], vicinity=3)
         self.assertEqual(count, 1)
-        self.assertIn('<front><pb n="2"/>A Sample Article', result)
+        self.assertIn('<pb n="2"/>\n    <front>A Sample Article', result)
         # each existing <pb/> counts for one page start only
         self.assertEqual(insert_page_breaks(SAMPLE, LABELS, [0, 1, 2, 3] + [3] * 14, vicinity=3)[1], 4)
-        one = SAMPLE.replace("<titlePage>Journal", '<titlePage><pb n="1"/>Journal')
+        one = SAMPLE.replace("<titlePage>Journal", '<pb n="1"/><titlePage>Journal')
         self.assertEqual(insert_page_breaks(one, LABELS, [0, 1, 2, 3] + [3] * 14, vicinity=3)[1], 3)
 
     def test_page_break_inside_a_line_starts_the_next_line(self):

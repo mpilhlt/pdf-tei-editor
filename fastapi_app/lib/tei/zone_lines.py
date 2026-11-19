@@ -523,8 +523,10 @@ def insert_page_breaks(
     xml: str, labels: Sequence[ZoneLabel], line_pages: Sequence[int], vicinity: int = PAGE_BREAK_VICINITY
 ) -> tuple[str, int]:
     """
-    The document with a `<pb n="…"/>` (1-based page number) before the first character of the
-    first line of every page of a line layout, and the number of page breaks inserted. A page start
+    The document with a `<pb n="…"/>` (1-based page number) at the start of every page of a line
+    layout, and the number of page breaks inserted. If the first character of the page is the
+    first character of its zone, the `<pb/>` goes before the zone's start tag, on a line of its
+    own if the zone tag starts a line; otherwise it goes before that character inside the zone. A page start
     gets none if an existing `<pb/>` lies within `vicinity` lines of it: each existing `<pb/>`
     counts for the nearest page start within that distance. Lines without text get none. The rest
     of the XML is kept byte for byte.
@@ -546,7 +548,15 @@ def insert_page_breaks(
         first_char = next((i for i in doc.lines[line].atoms if doc.atoms[i].kind == CHAR), None)
         if first_char is None:
             continue
-        insertions.append((doc.atoms[first_char].start, f'<{doc.prefix}pb n="{line_pages[line] + 1}"/>'))
+        tag = f'<{doc.prefix}pb n="{line_pages[line] + 1}"/>'
+        item = doc.items[doc.atoms[first_char].item]
+        starts_zone = item.label != OUTSIDE and not any(doc.atoms[i].kind == CHAR for i in item.atoms if i < first_char)
+        if starts_zone:
+            line_start = xml.rfind("\n", 0, item.start) + 1
+            starts_line = not xml[line_start:item.start].strip()
+            insertions.append((item.start, f"{tag}\n{xml[line_start:item.start]}" if starts_line else tag))
+        else:
+            insertions.append((doc.atoms[first_char].start, tag))
     result = xml
     for position, tag in reversed(insertions):
         result = result[:position] + tag + result[position:]

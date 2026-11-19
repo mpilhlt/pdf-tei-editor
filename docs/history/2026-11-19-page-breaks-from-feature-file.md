@@ -24,7 +24,7 @@ Segmentation documents (`grobid.training.segmentation`) mark the start of every 
 ## Rules
 
 - A page start gets no `<pb/>` if an existing `<pb/>` lies within 3 lines of it; each existing `<pb/>` counts for the nearest page start only. This covers GROBID emitting `<pb/>` itself and running the enhancement again.
-- The `<pb/>` goes before the first character of the page's first line, inside the zone that character is in.
+- If the page's first character is the first character of its zone, the `<pb/>` goes before the zone's start tag (at `<text>` level, on a line of its own when the zone tag starts a line), following TEI practice of placing `<pb/>` before everything on the new page. Otherwise (a page that starts mid-zone) it goes before that character inside the zone.
 - Without a matching feature file (fewer than half the lines aligned), nothing is inserted.
 - When a document has `<pb/>` elements, they define its pages; the feature file only provides the layout hints.
 - The GROBID plugin requires plugin API 1.6 (`pte-plugin-api: ^1.6`); editor and plugins are upgraded together.
