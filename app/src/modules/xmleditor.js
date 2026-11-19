@@ -1348,12 +1348,24 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Selects the given DOM node in the editor and scrolls it to the vertical center.
+   * Selects the given DOM node in the editor and scrolls it to the vertical center. For a milestone
+   * such as `<pb/>`, places the cursor after it and scrolls its range (see
+   * {@link XMLEditor#getNodeRange}) to the center instead.
    * @param {Node} domNode - A node in the XML DOM
    * @throws {Error} If the DOM node has no attached syntax node
    */
   selectDomNode(domNode) {
-    const { from, to } = this.getNodeRange(domNode);
+    if (isMilestone(domNode)) {
+      // a milestone's range can be long (e.g. a page): place the cursor after it instead of selecting the range
+      const { from, to } = this.getNodeRange(domNode);
+      const cursor = this.getSyntaxNodeFromDomNode(domNode).to;
+      this.#view.dispatch({
+        selection: EditorSelection.cursor(cursor),
+        effects: EditorView.scrollIntoView(EditorSelection.range(to, from), { y: 'center' })
+      });
+      return;
+    }
+    const { from, to } = this.getSyntaxNodeFromDomNode(domNode);
     this.#selectRange(from, to);
   }
 
