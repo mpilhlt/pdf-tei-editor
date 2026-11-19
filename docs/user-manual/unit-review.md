@@ -183,7 +183,7 @@ Once a proposal has been merged, the editor marks each of your overrides whose t
 
 ## Edited units
 
-A mark belongs to the exact content of a unit. When you edit a reviewed unit in the editor, its marks are kept as "before the last edit" and the unit is shown with grey dashes until it is reviewed again; undoing the edit restores the marks. If one of these marks was not OK, the unit is also listed in the diagnostics drawer. Marks of units that were changed outside the editor (for example by uploading a new file) are removed the next time a mark is set.
+A mark belongs to the exact content of a unit. When you edit a reviewed unit in the editor, its marks are kept as "before the last edit" and the unit is shown with grey dashes until it is reviewed again; undoing the edit restores the marks, also those of units the edit deleted or merged into another unit. If one of these marks was not OK, the unit is also listed in the diagnostics drawer. Marks of units that were changed outside the editor (for example by uploading a new file) are removed the next time a mark is set.
 
 ## Starting a version without reviews
 

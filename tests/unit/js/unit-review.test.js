@@ -222,6 +222,19 @@ describe('reconcileReviewData', () => {
     assert.strictEqual(byFingerprint.get('new')?.state, 'stale');
   });
 
+  it('keeps the marks of units an edit removed, so that undoing it restores them', () => {
+    const data = emptyReviewData();
+    setMark(data, { id: 'a' }, 'first', 'not-ok', { comment: 'one' });
+    setMark(data, { id: 'a' }, 'second', 'not-ok', { comment: 'two' });
+    // both units were merged into one, which carries over the marks of the second only
+    const units = [{ fingerprint: 'merged', from: 0, to: 1, name: 'bibl' }];
+    reconcileReviewData(data, units, new Map([['merged', 'second']]), new Set(['first', 'second']));
+    assert.strictEqual(data.reviewers.get('a')?.marks.get('first')?.comment, 'one');
+    assert.strictEqual(data.reviewers.get('a')?.marks.get('second')?.comment, 'two');
+    reconcileReviewData(data, units, new Map([['merged', 'second']]));
+    assert.ok(!data.reviewers.get('a')?.marks.has('first'));
+  });
+
   it('removes was- marks once the unit is reviewed again', () => {
     const data = emptyReviewData();
     setMark(data, { id: 'a' }, 'old', 'not-ok');

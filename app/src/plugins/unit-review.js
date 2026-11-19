@@ -167,6 +167,11 @@ class UnitReviewPlugin extends Plugin {
 
   /** @type {Map<string, string>} Original fingerprint by fingerprint of a unit edited in this session */
   #carry = new Map()
+  /**
+   * @type {Set<string>} Fingerprints of units that an edit in this session changed or removed: their
+   *   marks are kept, so that undoing the edit restores them
+   */
+  #gone = new Set()
 
   /** @type {ReturnType<typeof setTimeout>|undefined} */
   #timer = undefined
@@ -395,6 +400,7 @@ class UnitReviewPlugin extends Plugin {
       this.#pendingChanges = null
       this.#carryPending = false
       this.#carry = new Map()
+      this.#gone = new Set()
       this.#scan = { units: [], looseText: [], complete: true, path: null }
       clearTimeout(this.#timer)
       this.#timer = setTimeout(() => this.#refresh(), REFRESH_DELAY_MS)
@@ -451,6 +457,7 @@ class UnitReviewPlugin extends Plugin {
     this.#pendingChanges = null
     this.#carryPending = false
     this.#carry = new Map()
+    this.#gone = new Set()
     this.#scan = { units: [], looseText: [], complete: true, path: null }
     this.#fpCache = new Map()
     this.#loadLayout()
@@ -613,7 +620,7 @@ class UnitReviewPlugin extends Plugin {
     } else if (this.#carryPending && this.#canWrite(true)) {
       this.#carryPending = false
       const copy = this.#readData(state)
-      if (reconcileReviewData(copy, scan.units, this.#carry)) this.#write(copy, false)
+      if (reconcileReviewData(copy, scan.units, this.#carry, this.#gone)) this.#write(copy, false)
     }
     this.#acceptAppliedFixes()
   }
@@ -671,7 +678,7 @@ class UnitReviewPlugin extends Plugin {
     const overlaps = (/** @type {{from: number, to: number}} */ r, /** @type {Unit} */ u) => r.from < u.to && r.to > u.from || r.from === r.to && u.from <= r.from && r.from <= u.to
     // with the marks of the edited units carried over, which may not be written yet
     const data = this.#readData(state)
-    reconcileReviewData(data, this.#scan.units, this.#carry)
+    reconcileReviewData(data, this.#scan.units, this.#carry, this.#gone)
     const { byFingerprint } = combineReviews(this.#scan.units, data, { mode: this.#mode, llmVote: this.#llmVote })
     const fps = this.#scan.units
       .filter(u => ranges.some(r => overlaps(r, u)) && needsRecheck(byFingerprint.get(u.fingerprint)) && !open.some(d => overlaps(d, u)))
@@ -716,6 +723,18 @@ class UnitReviewPlugin extends Plugin {
       const root = this.#carry.get(old.fingerprint) ?? old.fingerprint
       if (root !== unit.fingerprint) this.#carry.set(unit.fingerprint, root)
     }
+    // units that disappeared, also those merged into another unit, which carries the marks of only
+    // one of them over: their marks stay until the document is loaded again. Units created by an
+    // edit in this session hold only carried-over marks, which go with them.
+    const current = new Set(scan.units.map(u => u.fingerprint))
+    for (const old of this.#scan.units) {
+      const fp = old.fingerprint
+      if (!current.has(fp) && !renames.has(fp) && !this.#carry.has(fp)) this.#gone.add(fp)
+    }
+    // a unit back in an earlier state (e.g. after undo) has its own marks again
+    for (const fp of current) {
+      if (this.#gone.delete(fp)) this.#carry.delete(fp)
+    }
     return renames
   }
 
@@ -755,7 +774,7 @@ class UnitReviewPlugin extends Plugin {
    * @param {boolean} addToHistory - False for automatic changes the user should not undo separately
    */
   #write(data, addToHistory) {
-    reconcileReviewData(data, this.#scan.units, this.#carry)
+    reconcileReviewData(data, this.#scan.units, this.#carry, this.#gone)
     // record the path the units were found with, so that the units stay the same for all reviewers
     if (!data.unitPath || data.unitPath === DEFAULT_UNIT_PATH || this.#unitPath === PAGES_UNIT_PATH) data.unitPath = this.#scan.path ?? this.#unitPath
     const { summary } = combineReviews(this.#scan.units, data, { mode: this.#mode, llmVote: this.#llmVote })
