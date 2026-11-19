@@ -1,25 +1,30 @@
 # XPath switch keeps the position
 
-Switching the expression in the XPath navigation dropdown used to select the first node of the new expression (`[1]`), which jumped back to the start of the document.
+Switching the expression in the XPath navigation dropdown used to select the first node of the new expression, which jumped back to the start of the document.
 
-## Behavior
+## Navigation xpath state
 
-The dropdown handler in `app/src/plugins/xpath-navigation.js` (`#indexAtCurrentPosition`) computes the index of the new expression from the current node:
+The `xpath` state (and the `xpath` URL parameter) is `(path)[n]`: the n-th node, in document order, of all nodes that the navigation expression `path` selects. This is a valid XPath expression for the node, so it is evaluated as is everywhere (`NavXmlEditor`, xpath-navigation plugin, `xml-annotation.js`, `xmleditor.js`).
 
-- The current node is the node of the `xpath` state, or the element at the cursor if navigation was off.
-- The selected node is the first node of the new expression, in document order, that is the current node, contains it, or follows it (which includes its descendants), see `indexAtOrAfterNode` in `app/src/modules/navigation-xpath-utils.js`. The comparison uses `Node.compareDocumentPosition()` on the XML DOM, not editor positions.
-- If no node follows, the navigation wraps around to the first node, like ‹ › do.
-- If the current node cannot be determined (editor not ready), index 1 is used.
+The former form `path[n]` is not accepted any more (discarded on load, no migration). As XPath, `[n]` counts only siblings within each parent, so `//tei:listBibl[2]` selected nothing when every `<listBibl>` was the first in its parent, although the counter showed two nodes (issue #859).
 
-Loading a document with the stored expression of the variant and changing the selected expression in the dialog still start at `[1]`.
+`navigationXpath(path, index)` and `parseNavigationXpath(xpath)` in `app/src/modules/navigation-xpath-utils.js` build and split the state value.
 
-## Navigation index vs. XPath index
+`UrlHash.serialize()` (`app/src/modules/browser-utils.js`) writes hash values without percent-encoding, apart from `%`, `&`, `+`, `#` (and `=` in keys) and control characters, so that the xpath stays readable in the address bar.
 
-In the navigation and the `xpath` state, `path[n]` is the n-th of all nodes that `path` selects, in document order (this is how the counter and the cursor tracking count). Evaluated as XPath, `[n]` counts only the siblings within each parent: `//tei:listBibl[2]` selects nothing if every `<listBibl>` is the first in its parent. The first version of this feature resolved the current node with the plain XPath, did not find it for such expressions and fell back to the cursor; ‹ › also did not move the editor to such nodes.
+## Switching the expression
 
-`navigationNodeXpath()` in `app/src/modules/utils.js` turns `path[n]` into `(path)[n]`. It is used wherever a navigation xpath is evaluated: `NavXmlEditor` (`selectByIndex`, focus mode, focus realignment), the arrow keys and dropdown switch in the xpath-navigation plugin, the visual mode's scroll to the current node (`xml-annotation.js`) and the line wrapping toggle (`xmleditor.js`).
+The dropdown handler (`#indexAtCurrentPosition` in `app/src/plugins/xpath-navigation.js`) takes the element at the cursor (the start of the selection) as the position if it is inside the current node, otherwise the current node. `indexAtOrAfterNode` then selects:
+
+- the innermost node of the new expression that is the position element or contains it,
+- else the first node of the new expression after the start of the position element in document order (which includes its descendants),
+- else the first node (wrap around, like ‹ ›).
+
+Starting from the cursor matters for large nodes such as the children of `<text>`: from the start of the current node, the first descendant matching the new expression would be selected, e.g. the first `<pb/>` of the `<body>`, which looks like starting from the beginning.
+
+Loading a document with the stored expression of the variant and changing the selected expression in the dialog start at `[1]`.
 
 ## Tests
 
-- Unit: `tests/unit/js/navigation-xpath-utils.test.js` (`indexAtOrAfterNode`).
-- E2E: `tests/e2e/tests/xpath-navigation.spec.js`, "switching the expression selects the next node of the new expression" and "switching the expression keeps the position among nodes with different parents" (both fail without the respective fix).
+- Unit: `tests/unit/js/navigation-xpath-utils.test.js` (`indexAtOrAfterNode`), `tests/unit/js/browser-utils.test.js` (`UrlHash.serialize`).
+- E2E: `tests/e2e/tests/xpath-navigation.spec.js`: switching keeps the position, nodes with different parents, starting from the element at the cursor (each fails without its fix), unencoded xpath in the URL.

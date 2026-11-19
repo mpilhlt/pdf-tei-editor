@@ -131,7 +131,7 @@ Some entries of the context menu have a variant that is shown instead while you 
 
 The center of the statusbar contains node navigation controls. These are only shown once a document is loaded and the active variant has navigation XPath expressions. Annotators, reviewers and administrators also see the dropdown for variants without expressions, so that they can add some.
 
-1. Use the dropdown to select an XPath expression (the list is variant-specific). Switching to another expression keeps your place in the document: the current node stays selected if the new expression matches it, otherwise the first node of the new expression that contains or follows it is selected (for milestones such as `<pb/>`, the one whose page holds it). If there is none after it, the first node of the document is selected.
+1. Use the dropdown to select an XPath expression (the list is variant-specific). Switching to another expression keeps your place in the document. It starts from the element at the cursor: if the new expression matches it or an element that contains it, that one stays selected, otherwise the next node of the new expression after the cursor is selected (for milestones such as `<pb/>`, the one whose page holds the cursor). If there is none after it, the first node of the document is selected.
 2. Use the **‹** / **›** buttons to move between matching nodes; the counter (e.g. `3/15`) shows the current position.
 3. Click the counter to jump to a specific node by number.
 
@@ -143,7 +143,7 @@ Node navigation is on while an XPath expression is selected in the dropdown. The
 
 **Tools → Review document annotations** always reviews the whole document with the model selected in **Tools → Inference**. To review only the current node, use the **LLM Review** button in the bottom right corner of the focused node in focus mode. The suggestions of a review are kept for the browser tab: after an accidental reload, or when you return to the document, they are shown again without a new review, except those whose text you have changed in the meantime.
 
-The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
+The current node is part of the page URL, as the `xpath` parameter next to the open document, in the form `(expression)[n]` for the n-th node of the expression, e.g. `xpath=(//tei:listBibl/tei:bibl)[3]`. After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
 
 ### Editing the Navigation XPaths
 

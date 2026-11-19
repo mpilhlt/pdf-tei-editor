@@ -1,7 +1,6 @@
 import { XMLEditor } from "./xmleditor.js";
 import { focusRangeField } from './codemirror/focus-mode.js';
-import { navigationNodeXpath } from './utils.js';
-import { isMilestone } from './navigation-xpath-utils.js';
+import { navigationXpath, isMilestone } from './navigation-xpath-utils.js';
 
 export {XMLEditor}
 
@@ -30,7 +29,7 @@ export class NavXmlEditor extends XMLEditor {
   selectedNode = null;
 
   /**
-   * The xpath of the last selected primary node
+   * The xpath of the last selected primary node, `(parentPath)[index]`
    * @type {string?}
    */
   selectedXpath = null;
@@ -80,14 +79,13 @@ export class NavXmlEditor extends XMLEditor {
    */
   #realignFocus() {
     if (!this.#focusMode) return;
-    const xpath = this.selectedXpath ?? (this.parentPath ? `${this.parentPath}[${this.currentIndex}]` : null);
+    const xpath = this.selectedXpath ?? (this.parentPath ? navigationXpath(this.parentPath, this.currentIndex) : null);
     if (!xpath) return;
     try {
-      const nodeXpath = navigationNodeXpath(xpath);
-      const { from, to } = this.getRangeByXpath(nodeXpath);
+      const { from, to } = this.getRangeByXpath(xpath);
       const range = this.getView().state.field(focusRangeField, false);
       if (range && range.from === from && range.to === to) return;
-      this.focusByXpath(nodeXpath, { scroll: false });
+      this.focusByXpath(xpath, { scroll: false });
     } catch (error) {
       console.warn(`Could not realign focus: ${String(error)}`);
     }
@@ -175,7 +173,7 @@ export class NavXmlEditor extends XMLEditor {
     }
     this.currentIndex = nodeIndex;
     this.selectedNode = selectedNode;
-    this.selectedXpath = `${this.parentPath}[${nodeIndex}]`;
+    this.selectedXpath = navigationXpath(this.parentPath, nodeIndex);
 
     // moving the cursor into another node moves the focus along, without scrolling
     if (this.#focusMode) {
@@ -221,10 +219,10 @@ export class NavXmlEditor extends XMLEditor {
       return;
     }
     if (this.selectedXpath) {
-      const xpath = navigationNodeXpath(this.selectedXpath);
+      const xpath = this.selectedXpath;
       this.#tryFocus(() => this.focusByXpath(xpath));
     } else if (this.parentPath) {
-      const xpath = `(${this.parentPath})[${this.currentIndex}]`;
+      const xpath = navigationXpath(this.parentPath, this.currentIndex);
       this.#tryFocus(() => this.focusByXpath(xpath));
     }
   }
@@ -268,8 +266,7 @@ export class NavXmlEditor extends XMLEditor {
     this.currentIndex = index;
     this.selectedNode = null; // reset so the next handeSelectionChange doesn't skip as "same node"
 
-    // the n-th of all nodes of the path, not the n-th sibling (see navigationNodeXpath)
-    const newXpath = `(${this.parentPath})[${this.currentIndex}]`
+    const newXpath = navigationXpath(this.parentPath, this.currentIndex)
 
     try {
       if (this.#focusMode) {

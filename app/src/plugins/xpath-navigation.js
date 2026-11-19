@@ -28,11 +28,10 @@ import { keymap } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { focusRangeField } from '../modules/codemirror/focus-mode.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import { parseXPath, navigationNodeXpath } from '../modules/utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
-import { checkNavigationXpath, labelToText, indexAtOrAfterNode } from '../modules/navigation-xpath-utils.js'
+import { checkNavigationXpath, labelToText, indexAtOrAfterNode, navigationXpath, parseNavigationXpath } from '../modules/navigation-xpath-utils.js'
 
 await registerTemplate('xpath-navigation-dialog', 'xpath-navigation-dialog.html')
 
@@ -150,7 +149,7 @@ class XpathNavigationPlugin extends Plugin {
       if (this.#currentVariant) {
         this.#setXpathPreference(this.#currentVariant, baseXpath)
       }
-      await this.dispatchStateChange({ xpath: baseXpath ? `${baseXpath}[${this.#indexAtCurrentPosition(baseXpath)}]` : '' })
+      await this.dispatchStateChange({ xpath: baseXpath ? navigationXpath(baseXpath, this.#indexAtCurrentPosition(baseXpath)) : '' })
     })
     this.#xpathDropdown.addEventListener('widget-action', (evt) => {
       if (/** @type {CustomEvent} */ (evt).detail.action === EDIT_ACTION) this.showDialog()
@@ -195,7 +194,7 @@ class XpathNavigationPlugin extends Plugin {
         if (this.state?.xpath || !this.state?.variant) return
         const savedXpath = this.#getXpathPreference(this.state.variant)
         if (savedXpath && this.#selectableValues().includes(savedXpath)) {
-          await this.scheduleStateChange({ xpath: `${savedXpath}[1]` })
+          await this.scheduleStateChange({ xpath: navigationXpath(savedXpath, 1) })
         }
       }, 0))
     })
@@ -236,17 +235,17 @@ class XpathNavigationPlugin extends Plugin {
     const canEdit = this.#canEdit(state)
     this.#setWidgetsVisible(Boolean(state.xml) && (hasEntries || canEdit), Boolean(state.xml) && hasEntries)
 
-    // xpath state => dropdown selection and counter
-    if (state.xpath && !state.xpath.startsWith('/')) {
+    // xpath state => dropdown selection and counter. The state is `(path)[n]`, the n-th node of `path`
+    // in the document
+    const node = parseNavigationXpath(state.xpath)
+    if (state.xpath && !node) {
       this.#logger.warn(`Discarding invalid xpath state: "${state.xpath}"`)
       this.scheduleStateChange({ xpath: '' })
     }
-    if (state.xpath?.startsWith('/')) {
-      const { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
-      const nonIndexedPath = pathBeforePredicates + nonIndexPredicates
-      this.#xpathDropdown.selected = this.#selectableValues().includes(nonIndexedPath) ? nonIndexedPath : ''
-      this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(nonIndexedPath, index))
-    } else if (!state.xpath) {
+    if (node) {
+      this.#xpathDropdown.selected = this.#selectableValues().includes(node.path) ? node.path : ''
+      this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(node.path, node.index))
+    } else {
       // no node selected: navigation is off until an xpath is selected in the dropdown
       this.#xpathDropdown.selected = ''
       this.#nodeCounterWidget.text = '(0/0)'
@@ -255,18 +254,15 @@ class XpathNavigationPlugin extends Plugin {
 
     this.#updateNavigationActive(state)
 
-    // xpath state => editor selection. The navigation path keeps the predicates other than the index
-    // (e.g. `[normalize-space()]`), so that the index counts the same nodes as the counter.
-    if (this.#xmlEditor.isReady() && state.xpath?.startsWith('/') && state.xml) {
-      const { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
-      const navigationPath = pathBeforePredicates + nonIndexPredicates
+    // xpath state => editor selection
+    if (this.#xmlEditor.isReady() && node && state.xml) {
       try {
-        const size = this.#xmlEditor.countDomNodesByXpath(navigationPath)
-        const pathChanged = this.#xmlEditor.parentPath !== navigationPath
-        const indexChanged = index !== this.#xmlEditor.currentIndex
+        const size = this.#xmlEditor.countDomNodesByXpath(node.path)
+        const pathChanged = this.#xmlEditor.parentPath !== node.path
+        const indexChanged = node.index !== this.#xmlEditor.currentIndex
         if (size > 0 && (pathChanged || indexChanged)) {
-          this.#xmlEditor.parentPath = navigationPath
-          this.#xmlEditor.selectByIndex(index || 1)
+          this.#xmlEditor.parentPath = node.path
+          this.#xmlEditor.selectByIndex(Math.min(node.index, size))
         }
       } catch (e) {
         this.#logger.error(e)
@@ -406,15 +402,15 @@ class XpathNavigationPlugin extends Plugin {
     }
     // Only the index follows the cursor: the expression stays the one chosen in the dropdown. A
     // selection made for another expression (e.g. one that was active before) is ignored.
-    if (navigationPath !== this.#xpathDropdown.selected || !selectedXpath.startsWith(`${navigationPath}[`)) return
+    if (navigationPath !== this.#xpathDropdown.selected || parseNavigationXpath(selectedXpath)?.path !== navigationPath) return
     if (selectedXpath !== state.xpath) {
       await this.dispatchStateChange({ xpath: selectedXpath })
     }
   }
 
   /**
-   * @param {string} xpath
-   * @param {number|null} index
+   * @param {string} xpath - The navigation expression
+   * @param {number} index - 1-based
    */
   #updateNodeCounter(xpath, index) {
     let size
@@ -424,30 +420,34 @@ class XpathNavigationPlugin extends Plugin {
       this.#logger.warn('Cannot update counter: ' + String(e))
       size = 0
     }
-    index = index || 1
     this.#nodeCounterWidget.text = `(${size > 0 ? index : 0}/${size})`
     this.#nextNodeBtn.disabled = this.#prevNodeBtn.disabled = size < 2
   }
 
   /**
    * The index of the node of `xpath` to select when the dropdown switches to it, so that the navigation
-   * keeps its position in the document: the current node if `xpath` selects it, else the first node
-   * that contains it or follows it, wrapping around to the first node if there is none. The current
-   * node is the node of the `xpath` state, or the element at the cursor if navigation is off.
+   * keeps its position in the document (see {@link indexAtOrAfterNode}). The position is the element at
+   * the cursor (the start of the selection), as long as it is inside the current node, so that moving
+   * the cursor within a large node counts. Otherwise it is the current node.
    * @param {string} xpath - The expression selected in the dropdown
    * @returns {number} The 1-based index, 1 if the editor is not ready or the expression selects no node
    */
   #indexAtCurrentPosition(xpath) {
     if (!this.#xmlEditor.isReady() || !this.#xmlEditor.getXmlTree()) return 1
     try {
-      let current = null
-      if (this.state?.xpath?.startsWith('/')) {
-        current = this.#xmlEditor.getDomNodeByXpath(navigationNodeXpath(this.state.xpath))
+      const currentNode = parseNavigationXpath(this.state?.xpath)
+        ? this.#xmlEditor.getDomNodeByXpath(/** @type {string} */ (this.state?.xpath))
+        : null
+      /** @type {Node|null} */
+      let atCursor = null
+      try {
+        atCursor = this.#xmlEditor.getDomNodeAt(this.#xmlEditor.getView().state.selection.main.from)
+      } catch {
+        // no element at the cursor
       }
-      if (!current) {
-        current = this.#xmlEditor.getDomNodeAt(this.#xmlEditor.getView().state.selection.main.head)
-      }
-      return indexAtOrAfterNode(this.#xmlEditor.getDomNodesByXpath(xpath), current) || 1
+      const position = atCursor && (!currentNode || currentNode.contains(atCursor)) ? atCursor : currentNode
+      if (!position) return 1
+      return indexAtOrAfterNode(this.#xmlEditor.getDomNodesByXpath(xpath), position) || 1
     } catch (error) {
       this.#logger.debug('Could not determine the node at the current position: ' + String(error))
       return 1
@@ -473,16 +473,14 @@ class XpathNavigationPlugin extends Plugin {
    * @returns {string|null}
    */
   #adjacentXpath(state, delta, { wrap = true } = {}) {
-    if (!state?.xpath) return null
-    let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath)
-    const normativeXpath = pathBeforePredicates + nonIndexPredicates
-    const size = this.#xmlEditor.countDomNodesByXpath(normativeXpath)
+    const node = parseNavigationXpath(state?.xpath)
+    if (!node) return null
+    const size = this.#xmlEditor.countDomNodesByXpath(node.path)
     if (size < 2) return null
-    if (index === null) index = 1
-    index += delta
+    let index = node.index + delta
     if (index < 1) index = wrap ? size : 0
     if (index > size) index = wrap ? 1 : 0
-    return index ? normativeXpath + `[${index}]` : null
+    return index ? navigationXpath(node.path, index) : null
   }
 
   /** Called when the user clicks on the counter to enter the node index */
@@ -490,10 +488,10 @@ class XpathNavigationPlugin extends Plugin {
     const index = prompt('Enter node index')
     if (!index) return
     const parsedIndex = parseInt(index, 10)
-    if (isNaN(parsedIndex) || !this.state?.xpath) return
+    const node = parseNavigationXpath(this.state?.xpath)
+    if (isNaN(parsedIndex) || parsedIndex < 1 || !node) return
     try {
-      const { pathBeforePredicates, nonIndexPredicates } = parseXPath(this.state.xpath)
-      await this.dispatchStateChange({ xpath: `${pathBeforePredicates}${nonIndexPredicates}[${parsedIndex}]` })
+      await this.dispatchStateChange({ xpath: navigationXpath(node.path, parsedIndex) })
     } catch (error) {
       this.#logger.warn('Failed to select by index: ' + String(error))
     }
@@ -630,7 +628,7 @@ class XpathNavigationPlugin extends Plugin {
     if (!xpath) return false
     if (this.#xmlEditor.isFocusMode()) {
       try {
-        this.#xmlEditor.focusByXpath(navigationNodeXpath(xpath))
+        this.#xmlEditor.focusByXpath(xpath)
       } catch (error) {
         this.#logger.warn(`Could not focus node: ${String(error)}`)
       }
@@ -836,7 +834,7 @@ class XpathNavigationPlugin extends Plugin {
       // keep the navigation on an edited expression that is currently selected
       if (previousSelected && previous !== xpath) {
         this.#setXpathPreference(variant, xpath)
-        await this.dispatchStateChange({ xpath: `${xpath}[1]` })
+        await this.dispatchStateChange({ xpath: navigationXpath(xpath, 1) })
       }
     }
   }

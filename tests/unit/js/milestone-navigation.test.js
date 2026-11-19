@@ -81,9 +81,9 @@ describe('milestone navigation', () => {
       '<pb n="1"/>\n    <titlePage>Journal of Samples <lb/>Cover page <lb/></titlePage>\n    <body>The body <lb/>continues <lb/>');
     assert.strictEqual(textOf(editor, editor.getNodeRange(pb2)), '<pb n="2"/>on the next page <lb/></body>');
     assert.strictEqual(textOf(editor, editor.getNodeRange(pb3)), '<pb n="3"/>\n    <page>3 <lb/></page>\n    <body>Last page <lb/></body>');
-    assert.deepStrictEqual(editor.getRangeByXpath('//pb[1]'), editor.getNodeRange(pb1));
+    assert.deepStrictEqual(editor.getRangeByXpath('(//pb)[1]'), editor.getNodeRange(pb1));
     // other elements keep their own range
-    assert.strictEqual(textOf(editor, editor.getRangeByXpath('//page[1]')), '<page>3 <lb/></page>');
+    assert.strictEqual(textOf(editor, editor.getRangeByXpath('(//page)[1]')), '<page>3 <lb/></page>');
   });
 
   it('focus mode focuses the range of the milestone', async () => {
@@ -113,7 +113,7 @@ describe('milestone navigation', () => {
       editor.selectedNode = null;
       const pos = text.indexOf(needle);
       await editor.handeSelectionChange([{ from: pos, to: pos, node: editor.getDomNodeAt(pos) }]);
-      assert.strictEqual(editor.selectedXpath, `//pb[${index}]`, needle);
+      assert.strictEqual(editor.selectedXpath, `(//pb)[${index}]`, needle);
     }
   });
 });

@@ -63,7 +63,6 @@ import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
 import { normalizeXmlWhitespaceForDiff } from './diff-utils.js';
 import { isMilestone } from './navigation-xpath-utils.js';
-import { navigationNodeXpath } from './utils.js';
 import { focusModeExtension, focusRangeField, setFocusRangeEffect, focusActionsFacet } from './codemirror/focus-mode.js';
 /**
  * @import {EditorTheme} from './codemirror/editor-themes.js'
@@ -1320,14 +1319,14 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * The range of the node that a navigation xpath (`path[n]`: the n-th node of all that `path`
-   * selects, see {@link navigationNodeXpath}) points to, see {@link XMLEditor#getNodeRange}.
+   * The range of the node that a navigation xpath (`(path)[n]`: the n-th node of all that `path`
+   * selects) points to, see {@link XMLEditor#getNodeRange}.
    * @param {string} xpath
    * @returns {{from: number, to: number}}
    * @throws {Error} If no node matches the XPath expression or it has no attached syntax node
    */
   getRangeByXpath(xpath) {
-    const node = this.getDomNodeByXpath(navigationNodeXpath(xpath));
+    const node = this.getDomNodeByXpath(xpath);
     if (!node) {
       throw new Error(`No XML node found for XPath: ${xpath}`);
     }
