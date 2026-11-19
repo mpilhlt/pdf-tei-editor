@@ -55,6 +55,10 @@ A comment stays with its element when you edit the element's content or when ele
 
 When saving a revision to a new personal version, the Save Revision dialog offers **Keep comments** (checked by default). Uncheck it to start the new version without comments; the original keeps its comments.
 
+## Converting XML comments
+
+The TEI Wizard (wand icon) has an enhancement **Convert XML comments** that turns the XML comments (`<!-- … -->`) inside `<text>` into unit comments by you and removes them from the text. It asks for confirmation before it runs. A comment directly before an element (only whitespace in between) is attached to that element; any other comment to the element that contains it.
+
 ## How the comments are stored
 
 The comments are stored in `TEI/standOff/listAnnotation[@type="unit-comment"]`, next to the [unit review](unit-review.md) marks. The `<standOff>` is folded and only admins can edit it by hand.

@@ -93,7 +93,19 @@ test.describe('TEI Wizard', () => {
       expect(labels).toContain('Pretty Print XML');
       // superseded by the LLM review
       expect(labels).not.toContain('Fix Common Extraction Issues');
-      expect(labels).not.toContain('Convert XML comments');
+      expect(labels).toContain('Convert XML comments');
+
+      // Convert XML comments asks first; cancelling leaves the document alone
+      await items.filter({ hasText: 'Convert XML comments' }).click();
+      const dialog = page.locator('sl-dialog[name="dialog"]');
+      await expect(dialog).toContainText('Convert XML comments into document comments?');
+      await page.waitForTimeout(500);
+      await dialog.locator('sl-button[name="cancelBtn"]').click();
+      await expect(dialog).not.toHaveAttribute('open', '');
+      expect(await page.evaluate(() => /** @type {any} */ (window).__teiWizardResult ?? null)).toBeNull();
+
+      await button.click();
+      await expect(items.first()).toBeVisible();
 
       await items.filter({ hasText: 'Pretty Print XML' }).click();
       await page.waitForFunction(() => {

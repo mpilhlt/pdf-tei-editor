@@ -34,6 +34,7 @@
  * @property {EnhancementExecuteFunction} execute - The function to execute
  * @property {string[]} [variants] - Variant ids the enhancement is offered for (a trailing `*` matches a prefix); all if missing
  * @property {XslAppliesTo} [appliesTo] - Further test: an XPath expression or a function of the document
+ * @property {string} [confirmation] - Question the user has to confirm before the enhancement runs
  */
 
 const ENHANCEMENTS_URL = '/api/plugins/tei-wizard/enhancements.js';
@@ -47,7 +48,7 @@ export default class TeiWizardExtension extends FrontendExtensionPlugin {
   constructor(/** @type {PluginContext} */ context) {
     super(context, {
       name: 'tei-wizard',
-      deps: ['logger', 'xmleditor', 'config', 'acl-utils', 'sl-utils', 'tei-utils', 'ui', 'xsl-applicability', 'unit-review']
+      deps: ['logger', 'xmleditor', 'config', 'acl-utils', 'sl-utils', 'tei-utils', 'ui', 'xsl-applicability', 'unit-review', 'dialog']
     });
   }
 
@@ -214,6 +215,9 @@ export default class TeiWizardExtension extends FrontendExtensionPlugin {
     const enhancement = this._applicableEnhancements().find(e => e.name === name);
     if (!enhancement) {
       notify(`"${name}" does not apply to this document.`, 'warning', 'exclamation-triangle');
+      return;
+    }
+    if (enhancement.confirmation && !await this.getDependency('dialog').confirm(enhancement.confirmation, enhancement.name)) {
       return;
     }
     let teiDoc = xmlEditor.getXmlTree();

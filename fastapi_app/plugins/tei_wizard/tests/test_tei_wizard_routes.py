@@ -119,7 +119,7 @@ export function execute(xmlDoc) {
 
 
 class TestOptionalExports(unittest.TestCase):
-    """The optional exports variants and appliesTo are passed into the registration."""
+    """The optional exports variants, appliesTo and confirmation are passed into the registration."""
 
     def _register(self, content: str) -> dict[str, object]:
         """Run the transformed bundle in Node and return what it registered."""
@@ -127,20 +127,21 @@ class TestOptionalExports(unittest.TestCase):
         if not node:
             self.skipTest("node not available")
         bundle = transform_to_registration(content, "test.js", "plugin")
-        script = "let r; globalThis.window = { registerTeiEnhancement: e => { r = e; } };\n" + bundle + "\nprocess.stdout.write(JSON.stringify({ name: r.name, variants: r.variants ?? null, appliesTo: r.appliesTo ?? null, execute: typeof r.execute }));"
+        script = "let r; globalThis.window = { registerTeiEnhancement: e => { r = e; } };\n" + bundle + "\nprocess.stdout.write(JSON.stringify({ name: r.name, variants: r.variants ?? null, appliesTo: r.appliesTo ?? null, confirmation: r.confirmation ?? null, execute: typeof r.execute }));"
         result = subprocess.run([node, "-e", script], capture_output=True, text=True, check=True)
         return json.loads(result.stdout)
 
     def test_without_optional_exports(self):
         """Enhancements without the exports register them as undefined."""
         registered = self._register('export const name = "A";\nexport const description = "D";\nexport function execute(doc) { return doc; }')
-        self.assertEqual(registered, {"name": "A", "variants": None, "appliesTo": None, "execute": "function"})
+        self.assertEqual(registered, {"name": "A", "variants": None, "appliesTo": None, "confirmation": None, "execute": "function"})
 
     def test_with_optional_exports(self):
         """Declared exports are passed on."""
-        registered = self._register('export const name = "A";\nexport const description = "D";\nexport const variants = ["v1", "v2.*"];\nexport const appliesTo = "//tei:listBibl";\nexport function execute(doc) { return doc; }')
+        registered = self._register('export const name = "A";\nexport const description = "D";\nexport const variants = ["v1", "v2.*"];\nexport const appliesTo = "//tei:listBibl";\nexport const confirmation = "Sure?";\nexport function execute(doc) { return doc; }')
         self.assertEqual(registered["variants"], ["v1", "v2.*"])
         self.assertEqual(registered["appliesTo"], "//tei:listBibl")
+        self.assertEqual(registered["confirmation"], "Sure?")
 
 
 class TestEnhancementsEndpoint(unittest.TestCase):

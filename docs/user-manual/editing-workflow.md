@@ -74,6 +74,7 @@ The **TEI Wizard** (wand icon) opens a menu of enhancements that change the whol
 *The TEI Wizard menu.*
 
 - **Pretty Print XML** (ships with the application) indents the document. If the document's variant has [review units](unit-review.md) (for example the references of a reference list), each unit is put on its own line, and its content is left as it is. In the TEI header, `<desc>` elements and elements that mix text and markup are left as they are.
+- **Convert XML comments** (ships with the application) turns the XML comments in `<text>` into [unit comments](unit-comments.md#converting-xml-comments), after asking for confirmation.
 - Plugins add further enhancements, for example **Enrich TEI Header from PDF Metadata** (metadata extraction plugin).
 
 The button is disabled if you cannot edit the document or no enhancement applies to it.

@@ -39,12 +39,13 @@ def transform_to_registration(content: str, filename: str, plugin_id: str) -> st
             pluginId: "...",
             execute: execute,
             variants: typeof variants !== 'undefined' ? variants : undefined,
-            appliesTo: typeof appliesTo !== 'undefined' ? appliesTo : undefined
+            appliesTo: typeof appliesTo !== 'undefined' ? appliesTo : undefined,
+            confirmation: typeof confirmation !== 'undefined' ? confirmation : undefined
           });
         })();
 
-    The optional exports `variants` and `appliesTo` (see the plugin README) are passed on when
-    the module declares them.
+    The optional exports `variants`, `appliesTo` and `confirmation` (see the plugin README) are
+    passed on when the module declares them.
 
     Args:
         content: Original JavaScript content
@@ -83,7 +84,8 @@ window.registerTeiEnhancement({{
   pluginId: "{plugin_id}",
   execute: execute,
   variants: typeof variants !== 'undefined' ? variants : undefined,
-  appliesTo: typeof appliesTo !== 'undefined' ? appliesTo : undefined
+  appliesTo: typeof appliesTo !== 'undefined' ? appliesTo : undefined,
+  confirmation: typeof confirmation !== 'undefined' ? confirmation : undefined
 }});
 }})();"""
 

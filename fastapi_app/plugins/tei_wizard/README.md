@@ -74,7 +74,7 @@ export function execute(xmlDoc, currentState, configMap, env) {
 
 ### Optional Exports
 
-Two optional exports restrict the documents the enhancement is offered for. Without them, it is offered for every TEI document.
+`variants` and `appliesTo` restrict the documents the enhancement is offered for; without them, it is offered for every TEI document. `confirmation` makes the wizard ask before running the enhancement.
 
 ```javascript
 /**
@@ -89,6 +89,11 @@ export const variants = ["grobid.training.references", "grobid.training.referenc
  * `tei` and `xml` bound, result converted to a boolean) or a function that receives the document
  */
 export const appliesTo = "//tei:listBibl";
+
+/**
+ * Question the user has to confirm before the enhancement runs (title: the enhancement's name)
+ */
+export const confirmation = "Convert XML comments into document comments?";
 ```
 
 ### Execution Environment
@@ -103,7 +108,7 @@ export const appliesTo = "//tei:listBibl";
 
 ## Enhancement File Requirements
 
-- **Named exports only**: Use `export const name`, `export const description`, and `export function execute`, optionally `export const variants` and `export const appliesTo`
+- **Named exports only**: Use `export const name`, `export const description`, and `export function execute`, optionally `export const variants`, `export const appliesTo` and `export const confirmation`
 - **No imports**: Import statements are stripped during transformation
 - **Pure function**: The `execute` function must only modify `xmlDoc` based on its inputs - no side effects, network calls, or DOM manipulation outside the document
 - **Return the document**: Always return the modified `xmlDoc`
@@ -132,7 +137,7 @@ Returns a list of `(Path, plugin_id)` tuples for all registered enhancements.
 
 ## Built-in Enhancements
 
-The `tei-wizard` plugin registers this enhancement from its own `enhancements/` directory:
+The `tei-wizard` plugin registers these enhancements from its own `enhancements/` directory:
 
 ### Pretty Print XML (`pretty-print-xml.js`)
 
@@ -154,6 +159,10 @@ Three lists are configurable in `config.json`:
 | `tei.pretty-print.no-indent-inside` | `["bibl", "p", "ab"]` | Explicit override: children of these elements are never indented even though the dynamic check would indent them (e.g. `bibl` contains `author`/`title` which are not inline but should not be indented). |
 | `tei.pretty-print.inline-elements` | `["lb", "pb", "hi", "ref", ...]` | Elements treated as always-inline: no leading indent is inserted before them, and their own children are not indented. |
 | `tei.pretty-print.header-keep` | `["desc"]` | Elements of the `teiHeader` whose content is never reformatted. |
+
+### Convert XML comments (`convert-xml-comments.js`)
+
+Turns the XML comments inside `<text>` into unit comments (`TEI/standOff/listAnnotation[@type="unit-comment"]`) by the current user and removes them from the text. Asks for confirmation before it runs.
 
 ## Example Plugin Structure
 
