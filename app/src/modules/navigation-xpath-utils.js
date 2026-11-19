@@ -2,6 +2,21 @@
  * Helpers for the XPath expressions of the node navigation (see the xpath-navigation plugin).
  */
 
+/** Local names of the TEI milestone elements, which mark a position in the text instead of enclosing it */
+export const MILESTONE_ELEMENTS = Object.freeze(['pb', 'cb', 'gb', 'lb', 'milestone'])
+
+/**
+ * Whether a node is an empty milestone element (see {@link MILESTONE_ELEMENTS}), such as `<pb/>`.
+ * The navigation treats the text from a milestone to the next one of the same name as its range
+ * (see `XMLEditor#getNodeRange()`).
+ * @param {Node} node
+ * @returns {boolean}
+ */
+export function isMilestone(node) {
+  return node.nodeType === 1 /* Node.ELEMENT_NODE */ && !node.hasChildNodes()
+    && MILESTONE_ELEMENTS.includes(/** @type {Element} */ (node).localName)
+}
+
 /** Namespace prefixes that navigation XPath expressions can use, as resolved by the XML editor */
 export const NAVIGATION_XPATH_NAMESPACES = Object.freeze({
   tei: 'http://www.tei-c.org/ns/1.0',
@@ -68,12 +83,22 @@ export function labelToText(html, doc = document) {
  * one of its ancestors, that is the innermost of them; otherwise it is the first node, in document
  * order, after the start of the current node (which includes its descendants). If there is none, the
  * navigation wraps around to the first node.
+ * For milestones (see {@link isMilestone}), it is the last one at or before the current node,
+ * whose range holds it, or the first one if there is none.
  * @param {Node[]} nodes - The nodes of the new expression in document order
  * @param {Node} current - The current node, e.g. the element at the cursor
  * @returns {number} The index, or 0 if there are no nodes
  */
 export function indexAtOrAfterNode(nodes, current) {
   if (nodes.length === 0) return 0
+  if (isMilestone(nodes[0])) {
+    // the milestone whose range holds the current node: the last one at or before it
+    let index = 0
+    nodes.forEach((node, i) => {
+      if (node === current || Boolean(current.compareDocumentPosition(node) & 2 /* Node.DOCUMENT_POSITION_PRECEDING */)) index = i + 1
+    })
+    return index || 1
+  }
   const positions = new Map(nodes.map((node, i) => [node, i + 1]))
   for (let node = /** @type {Node|null} */ (current); node; node = node.parentNode) {
     const position = positions.get(node)

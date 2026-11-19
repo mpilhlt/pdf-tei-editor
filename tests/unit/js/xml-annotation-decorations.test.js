@@ -232,6 +232,37 @@ describe('createAnnotationField with display-only elements', () => {
   });
 });
 
+describe('createAnnotationField with display-only empty elements', () => {
+  const tagDefs = [
+    { tag: 'body', label: 'body', color: '#f38ba8', attributes: [] },
+    { tag: 'lb', label: 'lb', color: '#a6e3a1', attributes: [], empty: true, readOnly: true },
+    { tag: 'pb', label: 'pb', color: '#fab387', attributes: [], empty: true, readOnly: true },
+  ];
+  const extensions = createAnnotationField(tagDefs);
+  const annotationField = extensions[0];
+
+  it('renders <lb/> and <pb/> as non-clickable badges', () => {
+    const parent = document.getElementById('editor');
+    parent.innerHTML = '';
+    const doc = '<body><pb n="2"/>First line <lb/>second line <lb/></body>';
+    const view = new EditorView({ state: EditorState.create({ doc, extensions: [xml(), extensions] }), parent });
+    const widgets = [];
+    view.state.field(annotationField).decos.between(0, doc.length, (f, t, value) => {
+      if (value.spec.widget?.tag) widgets.push({ f, t, widget: value.spec.widget });
+    });
+    assert.deepStrictEqual(widgets.map(w => w.widget.tag), ['body', 'pb', 'lb', 'lb']);
+    for (const { widget } of widgets.filter(w => w.widget.tag !== 'body')) {
+      const dom = widget.toDOM();
+      assert.ok(dom.classList.contains('ann-badge--readonly'), `${widget.tag} badge is read-only`);
+      let clicked = false;
+      dom.addEventListener('ann-badge-click', () => { clicked = true; });
+      dom.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      assert.ok(!clicked, `a click on the ${widget.tag} badge opens no popup`);
+    }
+    view.destroy();
+  });
+});
+
 describe('createAnnotationField with incremental parsing', () => {
   const tagDefs = [{ tag: 'bibl', label: 'BIBL', color: '#89dceb', attributes: [] }];
 

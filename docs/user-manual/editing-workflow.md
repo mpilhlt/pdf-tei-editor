@@ -131,11 +131,13 @@ Some entries of the context menu have a variant that is shown instead while you 
 
 The center of the statusbar contains node navigation controls. These are only shown once a document is loaded and the active variant has navigation XPath expressions. Annotators, reviewers and administrators also see the dropdown for variants without expressions, so that they can add some.
 
-1. Use the dropdown to select an XPath expression (the list is variant-specific). Switching to another expression keeps your place in the document. It starts from the element at the cursor: if the new expression matches it or an element that contains it, that one stays selected, otherwise the next node of the new expression after the cursor is selected. If there is none after it, the first node of the document is selected.
+1. Use the dropdown to select an XPath expression (the list is variant-specific). Switching to another expression keeps your place in the document. It starts from the element at the cursor: if the new expression matches it or an element that contains it, that one stays selected, otherwise the next node of the new expression after the cursor is selected (for milestones such as `<pb/>`, the one whose page holds the cursor). If there is none after it, the first node of the document is selected.
 2. Use the **‹** / **›** buttons to move between matching nodes; the counter (e.g. `3/15`) shows the current position.
 3. Click the counter to jump to a specific node by number.
 
 Each time you navigate, the node is scrolled to the vertical center of the editor and highlighted. Your XPath selection is remembered per-variant across sessions.
+
+An expression that selects milestones, empty TEI elements that mark a position instead of enclosing text (`<pb/>`, `<cb/>`, `<gb/>`, `<lb/>`, `<milestone/>`), navigates by the text from one milestone to the next one of the same name, or to the end of `<text>` after the last one. With `//tei:pb` (**Page (`<pb>`)** for GROBID segmentation documents), you move from page to page, focus mode focuses the whole page, and **LLM Review** reviews that page. Moving the cursor selects the page it is on.
 
 Node navigation is on while an XPath expression is selected in the dropdown. The **×** button at the end of the navigation group turns it off: the node loses its highlight or focus, the XPath selection is cleared, the **‹** / **›** buttons and the focus toggle are disabled, and the node is removed from the URL. Selecting an XPath expression in the dropdown turns navigation on again.
 

@@ -408,10 +408,10 @@ test.describe('XPath navigation', () => {
       await clickDropdownEntry(page, 'Children');
       await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${CHILDREN})[1]`, selected: CHILDREN, counter: '(1/2)' });
       // the cursor moves within the <body>, which stays the current node
-      await moveCursorTo('Two');
+      await moveCursorTo('Three');
       await page.waitForTimeout(500);
       expect((await navigationState(page)).xpath).toBe(`(${CHILDREN})[1]`);
-      // the <pb/> after "Two", not the first one in the <body>
+      // the <pb/> whose page holds "Three", not the first one in the <body>
       await clickDropdownEntry(page, 'Breaks');
       await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${BREAKS})[2]`, selected: BREAKS, counter: '(2/2)' });
 
