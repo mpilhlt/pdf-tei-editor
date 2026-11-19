@@ -1,5 +1,10 @@
 /**
- * Decides whether a registered XSL stylesheet applies to a given XML document.
+ * @registerModule
+ */
+
+/**
+ * Decides whether a registered XSL stylesheet (or another document tool with the same kind of
+ * test, such as a TEI enhancement) applies to a given XML document.
  *
  * A stylesheet applies when the document's root element is in the stylesheet's namespace and, if the
  * registration has an `appliesTo` test, that test passes. The test is either an XPath expression,
@@ -73,4 +78,17 @@ export function stylesheetAppliesTo(rule, xmlDoc) {
     console.warn(`XSL stylesheet "${rule.label}": applicability test failed:`, error);
     return false;
   }
+}
+
+/**
+ * Checks whether a document variant is one of a list of variant ids. An id ending in `*` matches
+ * every variant that starts with the rest of the id.
+ * @param {string[]|null|undefined} variants - Without a list, every document matches
+ * @param {string|null|undefined} variant - The document's variant id; null if it has none
+ * @returns {boolean}
+ */
+export function variantMatches(variants, variant) {
+  if (!variants) return true;
+  if (!variant) return false;
+  return variants.some(id => id.endsWith('*') ? variant.startsWith(id.slice(0, -1)) : id === variant);
 }

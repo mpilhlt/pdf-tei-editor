@@ -6,7 +6,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM();
@@ -37,6 +37,23 @@ function serialize(xmlDoc) {
 function prettyPrint(xml) {
   const doc = parse(xml);
   execute(doc, {}, new Map());
+  return serialize(doc);
+}
+
+/**
+ * Run execute() with an environment whose findUnits() returns the elements matched by `selector`.
+ * @param {string} xml
+ * @param {string} localName - Local name of the unit elements below <text>
+ * @returns {string}
+ */
+function prettyPrintWithUnits(xml, localName) {
+  const doc = parse(xml);
+  const env = {
+    variant: 'test',
+    unitPath: `.//${localName}`,
+    findUnits: (/** @type {Document} */ d) => Array.from(d.getElementsByTagNameNS(TEI_NS, 'text')[0].getElementsByTagNameNS(TEI_NS, localName))
+  };
+  execute(doc, {}, new Map(), env);
   return serialize(doc);
 }
 
@@ -99,7 +116,7 @@ describe('pretty-print-xml enhancement', () => {
   });
 
   describe('real test.xml file (listBibl with bibl + stray text)', () => {
-    it('indents bibl elements even when stray text nodes exist between them', () => {
+    it('indents bibl elements even when stray text nodes exist between them', { skip: !existsSync('.local/test.xml') && 'local test file .local/test.xml not present' }, () => {
       const xml = readFileSync('.local/test.xml', 'utf-8');
       const out = prettyPrint(xml);
       // Every bibl opening tag must be preceded by a newline+whitespace (i.e. on its own indented line)
@@ -134,6 +151,68 @@ describe('pretty-print-xml enhancement', () => {
       const out = prettyPrint(input);
       console.log('--- note with p children ---\n' + out);
       assert.ok(out.match(/\n\s+<p>/), 'p elements inside note should be indented');
+    });
+  });
+
+  describe('review units', () => {
+    const unitXml = `<TEI xmlns="${TEI_NS}"><text><back><listBibl><bibl><author>A</author> <title>T</title>  <lb/>x</bibl><bibl><label>2</label> <author>B</author></bibl></listBibl></back></text></TEI>`;
+
+    it('keeps the content of each unit byte for byte', () => {
+      const out = prettyPrintWithUnits(unitXml, 'bibl');
+      assert.ok(out.includes('<bibl><author>A</author> <title>T</title>  <lb/>x</bibl>'), out);
+      assert.ok(out.includes('<bibl><label>2</label> <author>B</author></bibl>'), out);
+    });
+
+    it('puts each unit on its own line and indents its ancestors', () => {
+      const out = prettyPrintWithUnits(unitXml, 'bibl');
+      assert.match(out, /\n {2}<text>\n {4}<back>\n {6}<listBibl>\n {8}<bibl>/);
+      assert.strictEqual((out.match(/\n {8}<bibl>/g) || []).length, 2, out);
+    });
+
+    it('indents ancestors that the heuristic would leave alone', () => {
+      const xml = `<TEI xmlns="${TEI_NS}"><text><p><seg>one</seg><seg>two</seg></p></text></TEI>`;
+      const out = prettyPrintWithUnits(xml, 'seg');
+      assert.match(out, /<p>\n\s+<seg>one<\/seg>\n\s+<seg>two<\/seg>\n\s+<\/p>/);
+    });
+
+    it('strips whitespace inside units without them (generic behavior)', () => {
+      const out = prettyPrint(unitXml);
+      assert.ok(out.includes('<author>A</author><title>T</title>'), out);
+    });
+  });
+
+  describe('teiHeader', () => {
+    it('keeps desc elements even without text', () => {
+      const xml = `<TEI xmlns="${TEI_NS}"><teiHeader><revisionDesc><change><desc><ptr target="x"/> <measure quantity="2"/></desc></change></revisionDesc></teiHeader></TEI>`;
+      const out = prettyPrint(xml);
+      assert.ok(out.includes('<desc><ptr target="x"/> <measure quantity="2"/></desc>'), out);
+      assert.match(out, /\n\s+<change>\n\s+<desc>/);
+    });
+
+    it('keeps elements with mixed content, including the space between inline elements', () => {
+      const xml = `<TEI xmlns="${TEI_NS}"><teiHeader><fileDesc><publicationStmt><availability><licence>See <ref target="a">A</ref> <ref target="b">B</ref>.</licence></availability></publicationStmt></fileDesc></teiHeader></TEI>`;
+      const out = prettyPrint(xml);
+      assert.ok(out.includes('<licence>See <ref target="a">A</ref> <ref target="b">B</ref>.</licence>'), out);
+      assert.match(out, /\n\s+<availability>\n\s+<licence>/);
+    });
+
+    it('indents header elements without mixed content as before', () => {
+      const xml = `<TEI xmlns="${TEI_NS}"><teiHeader><fileDesc><titleStmt><title>T</title><author><persName>P</persName></author></titleStmt></fileDesc></teiHeader></TEI>`;
+      const out = prettyPrint(xml);
+      assert.match(out, /\n\s+<author>\n\s+<persName>P<\/persName>\n\s+<\/author>/);
+    });
+
+    it('applies the header rules only in the teiHeader', () => {
+      const xml = `<TEI xmlns="${TEI_NS}"><text><div><desc><p>a</p></desc></div></text></TEI>`;
+      const out = prettyPrint(xml);
+      assert.match(out, /<desc>\n\s+<p>a<\/p>/);
+    });
+
+    it('reads the kept header elements from the config', () => {
+      const xml = `<TEI xmlns="${TEI_NS}"><teiHeader><encodingDesc><appInfo><application><label>x</label></application></appInfo></encodingDesc></teiHeader></TEI>`;
+      const doc = parse(xml);
+      execute(doc, {}, new Map([['tei.pretty-print.header-keep', ['appInfo']]]));
+      assert.ok(serialize(doc).includes('<appInfo><application><label>x</label></application></appInfo>'));
     });
   });
 });

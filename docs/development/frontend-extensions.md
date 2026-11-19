@@ -107,6 +107,7 @@ These modules are pre-registered by `module-registry.js` and are always availabl
 | `'tei-utils'` | `app/src/modules/tei-utils.js` | `encodeXmlEntities(xml, opts)` and other TEI helpers |
 | `'ui-system'` | `app/src/modules/ui-system.js` | `createFromTemplate`, `createSingleFromTemplate`, `addTemplateHtml`, `registerTemplate`, `updateUi` |
 | `'lint-utils'` | `app/src/modules/lint-utils.js` | `applyMergedDiagnostics` (see [Contributing editor diagnostics](#contributing-editor-diagnostics)) |
+| `'xsl-applicability'` | `app/src/modules/xsl-applicability.js` | `stylesheetAppliesTo(rule, xmlDoc)`, `variantMatches(variants, variant)` |
 
 To expose an additional module, add a `@registerModule` tag to its file header and run `npm run generate`, which regenerates `app/src/module-registry.js` (not under version control; `npm install` and `npm run start:dev` also generate it).
 
@@ -123,6 +124,7 @@ To expose an additional module, add a `@registerModule` tag to its file header a
 | `'xsl-viewer'` | `register(options)` |
 | `'tools'` | `addMenuItems(items, group)` |
 | `'xmleditor'` | `getXmlTree()`, `showMergeView(xml)`, etc. |
+| `'unit-review'` | `getVariant()`, `getUnitPath()`, `findUnitElements(xmlDoc, unitPath)`, `getUnits()`, `setMarks(reviewer, marks)` |
 
 ### Standard Plugin API (inherited)
 

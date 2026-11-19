@@ -58,7 +58,7 @@ Upload the PDFs and extract them into the collection, either one by one in the e
 
 *The extraction, read-only for annotators.*
 
-Before you hand the documents over, you can clean up the extraction, for example with the **TEI Wizard** (wand icon in the editor toolbar): *Pretty Print XML* puts each unit on its own line, which makes the review easier, and *Fix Common Extraction Issues* corrects errors that extractors typically make. Do this now and not later: every change that you make after the annotators have made their copies has to be made in each copy.
+Before you hand the documents over, you can clean up the extraction, for example with the **TEI Wizard** (wand icon in the editor toolbar): *Pretty Print XML* puts each unit on its own line, which makes the review easier. Do this now and not later: every change that you make after the annotators have made their copies has to be made in each copy.
 
 Keep the clean-up mechanical. Anything that requires a decision about the content is the annotators' work.
 

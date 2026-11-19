@@ -57,7 +57,7 @@ When saving a revision to a new personal version, the Save Revision dialog offer
 
 ## Converting XML comments
 
-The TEI Wizard (wand icon) has an enhancement **Convert XML comments** that turns the XML comments (`<!-- … -->`) inside `<text>` into unit comments by you and removes them from the text. A comment directly before an element (only whitespace in between) is attached to that element; any other comment to the element that contains it.
+The TEI Wizard (wand icon) has an enhancement **Convert XML comments** that turns the XML comments (`<!-- … -->`) inside `<text>` into unit comments by you and removes them from the text. It asks for confirmation before it runs. A comment directly before an element (only whitespace in between) is attached to that element; any other comment to the element that contains it.
 
 ## How the comments are stored
 
