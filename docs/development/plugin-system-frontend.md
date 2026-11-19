@@ -447,7 +447,7 @@ export const myPlugin = MyPlugin.getInstance();
 To add a new class-based plugin:
 
 1. Create `app/src/plugins/my-plugin.js` with the class
-2. Run `node scripts/build/build.js --steps=plugins` to add it to `plugin-registry.js`
+2. Run `npm run generate` to add it to `plugin-registry.js` (generated, not under version control; `npm install` and `npm run start:dev` also generate it)
 3. Import from `./plugin-registry.js` and add to the `plugins` array in `plugins.js`
 
 ### Loading Process

@@ -21,6 +21,12 @@ node_modules
 # Build artifacts
 app/web/pdfjs
 
+# Generated source files (npm run generate, run by npm install and bin/start-dev)
+app/src/plugin-registry.js
+app/src/module-registry.js
+app/web/importmap.json
+app/web/highlight.js
+
 # Debug logs
 log/
 

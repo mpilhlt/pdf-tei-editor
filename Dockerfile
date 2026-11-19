@@ -87,7 +87,7 @@ COPY . .
 
 # Run the build and cleanup in one layer
 RUN uv run python scripts/build/compile-sl-icons.py \
-    && node scripts/build/build.js --steps=templates,version,pdfjs,bundle \
+    && node scripts/build/build.js --steps=plugins,modules,highlight,templates,version,pdfjs,bundle \
     && uv run python scripts/build/generate-sandbox-client-script.py \
     # Remove dev dependencies immediately after build
     && npm prune --omit=dev \

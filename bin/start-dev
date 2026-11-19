@@ -47,6 +47,14 @@ if __name__ == '__main__':
             print_server_running_message(host, port, pid)
             sys.exit(0)
 
+    # Generate the plugin and module registries, the importmap and the highlight.js bundle,
+    # which are not under version control and are needed to load the frontend from source
+    try:
+        subprocess.run(['npm', 'run', '--silent', 'generate'], cwd=project_root, check=True, shell=sys.platform == 'win32')
+    except (OSError, subprocess.CalledProcessError) as e:
+        print(f"Generating the frontend source files failed ({e}). Run `npm install` and try again.", file=sys.stderr)
+        sys.exit(1)
+
     # Set up logging
     log_file = setup_log_directory(project_root)
 

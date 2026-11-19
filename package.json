@@ -8,7 +8,8 @@
     "scripts": {
         "ci": "uv sync && npm install",
         "build": "node scripts/build/build.js",
-        "prepare": "husky",
+        "prepare": "husky && npm run generate",
+        "generate": "node scripts/build/build.js --steps=plugins,modules,importmap,highlight",
         "test": "npm run test:all:bail",
         "postinstall": "npm run build",
         "build:ui-types": "node scripts/build/generate-ui-types.js",
