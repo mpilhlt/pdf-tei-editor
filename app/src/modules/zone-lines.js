@@ -124,7 +124,7 @@ function codeOf(labels, element, rawAttributes) {
  * @param {string} xml - The whole document
  * @param {ZoneLabel[]} labels - The variant's zone labels
  * @returns {ZoneLine[]}
- * @throws {Error} No `<text>` element, or a zone contains elements other than `<lb/>`
+ * @throws {Error} No `<text>` element, or a zone contains elements other than `<lb/>` and `<pb/>`
  */
 export function readZoneLines(xml, labels) {
   const open = TEXT_OPEN_RE.exec(xml);
@@ -220,6 +220,12 @@ export function readZoneLines(xml, labels) {
         endLine(label);
         continue;
       }
+      if (localName(name) === 'pb') {
+        // page breaks carry no text
+        if (isClose) continue;
+        if (!isSelf) throw new Error('<pb> must be an empty element');
+        continue;
+      }
       if (zoneElement === null && !isClose) {
         label = codeOf(labels, name, m[4] ?? '');
         zoneElement = isSelf ? null : name;
@@ -231,7 +237,7 @@ export function readZoneLines(xml, labels) {
         label = OUTSIDE;
         continue;
       }
-      throw new Error(`Unexpected <${isClose ? '/' : ''}${name}> in <text>: zones may only contain text and <lb/>`);
+      throw new Error(`Unexpected <${isClose ? '/' : ''}${name}> in <text>: zones may only contain text, <lb/> and <pb/>`);
     }
   }
   if (pos < end) addText(xml.slice(pos, end), pos);

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt><title>Zone lines sample with page breaks</title></titleStmt>
+    </fileDesc>
+    <encodingDesc>
+      <appInfo>
+        <application version="0.8.3" ident="GROBID" type="extractor">
+          <label type="revision">0707645</label>
+          <label type="flavor">default</label>
+          <label type="variant-id">grobid.training.segmentation</label>
+        </application>
+      </appInfo>
+    </encodingDesc>
+  </teiHeader>
+  <text xml:lang="en">
+    <pb n="1"/>
+    <titlePage>Journal of Samples <lb/>Cover page &amp; notes <lb/></titlePage>
+    <pb n="2"/>
+    <front>A Sample Article <lb/>Jane Doe and John Roe <lb/>Abstract. This is "the" abstract, <lb/>continued here. <lb/></front>
+    <body>1 Introduction <lb/>The body starts on the first page <lb/>and goes on.<lb/></body>
+    <note place="footnote">1 A footnote &#160;with a reference. <lb/></note>
+    <pb n="3"/>
+    <page>2</page> <note place="headnote">Doe and Roe, A Sample Article <lb/></note>
+    <body>The second page continues the body <lb/>with more text <lb/></body>
+    <listBibl>Smith, J. (2020). A book. <lb/>Miller, K. (2021). Another book. <lb/></listBibl>
+    stray text outside <lb/>
+    <pb n="4"/>
+    <note place="headnote">Doe and Roe, A Sample Article <lb/></note>
+    <body>Third page. <lb/></body>
+    <!-- end -->
+  </text>
+</TEI>
