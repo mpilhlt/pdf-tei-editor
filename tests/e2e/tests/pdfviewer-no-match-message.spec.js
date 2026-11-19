@@ -9,6 +9,11 @@
  * @testCovers app/src/plugins/services.js
  */
 
+/**
+ * @import { PDFJSViewer } from '../../../app/src/modules/pdfviewer.js'
+ * @import { Page } from '@playwright/test'
+ */
+
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
@@ -23,6 +28,38 @@ const ALLOWED_ERROR_PATTERNS = [
 ];
 
 const MESSAGE = 'No sufficiently similar text found in the PDF';
+const NO_MATCH_TEXT = 'qzxv wjkq pfzx vbnq mlkj zzqx ywqv';
+
+/**
+ * Searches the PDF for a `<p>` in `/TEI/text` with the given text, as Autosearch does.
+ * @param {Page} page
+ * @param {string} text
+ */
+async function searchText(page, text) {
+  await page.evaluate(async (text) => {
+    const ns = 'http://www.tei-c.org/ns/1.0';
+    const doc = document.implementation.createDocument(ns, 'TEI', null);
+    const p = doc.createElementNS(ns, 'p');
+    p.textContent = text;
+    doc.documentElement.appendChild(doc.createElementNS(ns, 'text')).appendChild(p);
+    await /** @type {any} */ (window).app.getDependency('services').searchNodeContentsInPdf(p);
+  }, text);
+}
+
+/**
+ * Returns a line of text from the loaded PDF.
+ * @param {Page} page
+ * @returns {Promise<string>}
+ */
+async function pickPdfText(page) {
+  return page.evaluate(async () => {
+    /** @type {PDFJSViewer} */
+    const viewer = /** @type {any} */ (window).app.getDependency('pdfviewer');
+    const models = await viewer._getPageModels();
+    const items = models.flatMap(m => m.items).filter(it => it.str.trim().length > 40);
+    return items[Math.floor(items.length / 2)].str.trim();
+  });
+}
 
 test.describe('PDF viewer no-match message', () => {
 
@@ -36,14 +73,7 @@ test.describe('PDF viewer no-match message', () => {
       expect(loadResult.success).toBe(true);
 
       // Search for a text in /TEI/text that does not occur in the PDF
-      await page.evaluate(async () => {
-        const doc = new DOMParser().parseFromString(
-          '<TEI xmlns="http://www.tei-c.org/ns/1.0"><text><p>qzxv wjkq pfzx vbnq mlkj zzqx ywqv</p></text></TEI>',
-          'application/xml'
-        );
-        const node = /** @type {Element} */ (doc.getElementsByTagNameNS('http://www.tei-c.org/ns/1.0', 'p')[0]);
-        await /** @type {any} */ (window).app.getDependency('services').searchNodeContentsInPdf(node);
-      });
+      await searchText(page, NO_MATCH_TEXT);
 
       const message = page.locator('#pdf-viewer status-bar status-text[name="statusMessage"]');
       await expect(message).toHaveAttribute('text', MESSAGE);
@@ -63,6 +93,30 @@ test.describe('PDF viewer no-match message', () => {
 
       // Removed after 5 seconds
       await expect(message).toHaveCount(0, { timeout: 7000 });
+    } finally {
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
+      await performLogout(page);
+    }
+  });
+
+  test('removes the message when a subsequent search finds a match', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+
+      await searchText(page, NO_MATCH_TEXT);
+      const message = page.locator('#pdf-viewer status-bar status-text[name="statusMessage"]');
+      await expect(message).toHaveAttribute('text', MESSAGE);
+
+      const shownAt = Date.now();
+      await searchText(page, await pickPdfText(page));
+      await expect(message).toHaveCount(0, { timeout: 1000 });
+      expect(Date.now() - shownAt).toBeLessThan(5000);
     } finally {
       stopErrorMonitoring();
       await releaseAllLocks(page);
