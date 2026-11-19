@@ -80,7 +80,7 @@ class PdfViewerPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#pdfViewer;
-    const pluginMethods = new Set(['isAutoSearchEnabled', 'showStatusMessage']);
+    const pluginMethods = new Set(['isAutoSearchEnabled', 'showStatusMessage', 'clearStatusMessage']);
     return /** @type {PDFJSViewer} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -118,13 +118,21 @@ class PdfViewerPlugin extends Plugin {
     }
     this.#statusMessageWidget.text = text;
     this.#statusMessageWidget.variant = variant;
-    this.#statusMessageTimer = setTimeout(() => {
+    this.#statusMessageTimer = setTimeout(() => this.clearStatusMessage(), timeout);
+  }
+
+  /**
+   * Removes the message shown with {@link showStatusMessage}, if any, before its timeout.
+   */
+  clearStatusMessage() {
+    if (this.#statusMessageTimer) {
+      clearTimeout(this.#statusMessageTimer);
       this.#statusMessageTimer = null;
-      if (this.#statusMessageWidget) {
-        statusBar.removeById(this.#statusMessageWidget.id);
-        this.#statusMessageWidget = null;
-      }
-    }, timeout);
+    }
+    if (this.#statusMessageWidget) {
+      ui.pdfViewer.statusbar.removeById(this.#statusMessageWidget.id);
+      this.#statusMessageWidget = null;
+    }
   }
 
   /** @param {ApplicationState} initialState */
