@@ -27,4 +27,4 @@ Segmentation documents (`grobid.training.segmentation`) mark the start of every 
 - The `<pb/>` goes before the first character of the page's first line, inside the zone that character is in.
 - Without a matching feature file (fewer than half the lines aligned), nothing is inserted.
 - When a document has `<pb/>` elements, they define its pages; the feature file only provides the layout hints.
-- The plugin inserts `<pb/>` only on editors with plugin API 1.6, since older editors refuse `<pb/>` in zone documents.
+- The GROBID plugin requires plugin API 1.6 (`pte-plugin-api: ^1.6`); editor and plugins are upgraded together.
