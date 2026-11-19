@@ -17,6 +17,7 @@ import ui, { Spinner, updateUi } from '../ui.js'
 import { testLog } from '../modules/test-log.js'
 import { HeartbeatPlugin } from '../plugin-registry.js'
 import { UrlHash, renderTitleTemplate } from '../modules/browser-utils.js'
+import { parseNavigationXpath } from '../modules/navigation-xpath-utils.js'
 
 class StartPlugin extends Plugin {
   static extensionPoints = [ep.title.updateSlots];
@@ -109,10 +110,10 @@ class StartPlugin extends Plugin {
       const diff = this.state.diff
 
       // the xpath of the node to select, from the URL hash or the restored state. Loading the XML
-      // resets the xpath state, so it has to be captured before. Discard non-absolute values
-      // (e.g. bare numbers stored by a stale/buggy session)
+      // resets the xpath state, so it has to be captured before. Discard values that are not of the
+      // form `(path)[n]` (e.g. bare numbers stored by a stale/buggy session)
       const rawXpath = this.state.xpath || UrlHash.get("xpath") || ''
-      const initialXpath = rawXpath.startsWith('/') ? rawXpath : ''
+      const initialXpath = parseNavigationXpath(rawXpath) ? rawXpath : ''
 
       if (pdf !== null || xml !== null) {
         // load the documents (PDF-XML pairs or XML-only files)

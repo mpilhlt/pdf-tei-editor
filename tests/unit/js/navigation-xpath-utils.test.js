@@ -70,6 +70,10 @@ describe('indexAtOrAfterNode', () => {
     assert.strictEqual(indexAtOrAfterNode(children, bibls[2]), 4)
   })
 
+  it('selects the innermost of several nodes that contain the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode([text, listBibl1, bibls[0]], bibls[1]), 2)
+  })
+
   it('selects the first descendant or following node', () => {
     assert.strictEqual(indexAtOrAfterNode(bibls, listBibl1), 1)
     assert.strictEqual(indexAtOrAfterNode(bibls, page), 3)

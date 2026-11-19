@@ -32,7 +32,6 @@ import { THEMES, getTheme } from '../modules/codemirror/editor-themes.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
-import { navigationNodeXpath } from '../modules/utils.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import XmlEditorDraftStore from '../modules/xml-editor-draft-store.js'
@@ -619,7 +618,7 @@ class XmlEditorPlugin extends Plugin {
       this.#logger.debug(`Line wrapping ${enabled ? 'enabled' : 'disabled'}`);
       if (this.state?.xpath) {
         try {
-          this.#xmlEditor.selectByXpath(navigationNodeXpath(this.state.xpath));
+          this.#xmlEditor.selectByXpath(this.state.xpath);
         } catch (err) {
           this.#logger.debug(`Could not restore scroll position after wrap toggle: ${err.message}`);
         }

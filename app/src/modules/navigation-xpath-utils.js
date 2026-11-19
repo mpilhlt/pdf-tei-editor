@@ -63,16 +63,48 @@ export function labelToText(html, doc = document) {
 }
 
 /**
- * The 1-based index of the node to select when the navigation switches to another XPath expression:
- * the first node, in document order, that is the current node, contains it or follows it (which
- * includes its descendants). If there is none, the navigation wraps around to the first node.
+ * The 1-based index of the node to select when the navigation switches to another XPath expression,
+ * so that it keeps its position in the document. If the new expression selects the current node or
+ * one of its ancestors, that is the innermost of them; otherwise it is the first node, in document
+ * order, after the start of the current node (which includes its descendants). If there is none, the
+ * navigation wraps around to the first node.
  * @param {Node[]} nodes - The nodes of the new expression in document order
- * @param {Node} current - The current node
+ * @param {Node} current - The current node, e.g. the element at the cursor
  * @returns {number} The index, or 0 if there are no nodes
  */
 export function indexAtOrAfterNode(nodes, current) {
   if (nodes.length === 0) return 0
-  const index = nodes.findIndex(node => node === current || node.contains(current) ||
+  const positions = new Map(nodes.map((node, i) => [node, i + 1]))
+  for (let node = /** @type {Node|null} */ (current); node; node = node.parentNode) {
+    const position = positions.get(node)
+    if (position) return position
+  }
+  const index = nodes.findIndex(node =>
     Boolean(current.compareDocumentPosition(node) & 4 /* Node.DOCUMENT_POSITION_FOLLOWING */))
   return index < 0 ? 1 : index + 1
+}
+
+/**
+ * The xpath of the n-th node, in document order, of all nodes that a navigation expression selects,
+ * in the form `(path)[n]` that the `xpath` state uses. Unlike `path[n]`, which counts siblings, this
+ * is the n-th node of the whole document.
+ * @param {string} path - The navigation expression, e.g. `//tei:listBibl/tei:bibl`
+ * @param {number} index - 1-based
+ * @returns {string} e.g. `(//tei:listBibl/tei:bibl)[3]`
+ */
+export function navigationXpath(path, index) {
+  return `(${path})[${index}]`
+}
+
+/**
+ * Splits a navigation xpath of the form `(path)[n]` into the expression and the index
+ * @param {string|null|undefined} xpath
+ * @returns {{path: string, index: number}|null} null if the xpath does not have this form or the
+ *   expression is not absolute
+ */
+export function parseNavigationXpath(xpath) {
+  const match = /^\((\/[\s\S]*)\)\[(\d+)\]$/.exec(xpath ?? '')
+  if (!match) return null
+  const index = parseInt(match[2], 10)
+  return index > 0 ? { path: match[1], index } : null
 }

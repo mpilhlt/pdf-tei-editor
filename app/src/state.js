@@ -36,7 +36,7 @@
  * @property {string|null} pdf - The document identifier for the PDF file in the viewer
  * @property {string|null} xml - The document identifier for the XML file in the editor
  * @property {string|null} diff - The document identifier for an XML file which is used to create a diff, if any
- * @property {string|null} xpath - The current xpath used to select a node in the editor
+ * @property {string|null} xpath - The current node of the navigation, as `(path)[n]`: the n-th node, in document order, of all nodes that the navigation expression `path` selects
  * @property {string|null} variant - The variant filter to show only files with matching variant-id
  * @property {boolean} editorReadOnly - Whether the XML editor is read-only
  * @property {boolean} connectionLost - Whether the browser cannot reach the backend server (client-server connectivity)

@@ -8,7 +8,8 @@
  * replaces another one, and that the index follows the cursor among the nodes it selects.
  * Checks that switching the expression keeps the position: the next node of the new expression is
  * selected, wrapping around to the first one at the end of the document, also for an expression
- * whose nodes have different parents.
+ * whose nodes have different parents, and starting from the element at the cursor within the current
+ * node.
  * Checks that in focus mode, the up/down arrow keys move the focus to the previous/next node, and
  * that in the visual annotation mode, they always go to the previous/next node like ‹ ›.
  *
@@ -178,8 +179,10 @@ test.describe('XPath navigation', () => {
       await expect(dialog).not.toHaveAttribute('open', '');
       await clickDropdownEntry(page, '//tei:listBibl/tei:bibl');
       await expect.poll(() => page.evaluate(() => (/** @type {any} */ (window)).app.getCurrentState().xpath))
-        .toBe('//tei:listBibl/tei:bibl[1]');
+        .toBe('(//tei:listBibl/tei:bibl)[1]');
       await expect(page.locator('[name="nodeCounterWidget"]')).toContainText('(1/3)');
+      // the URL shows the xpath without percent-encoding
+      await expect.poll(() => page.evaluate(() => window.location.hash)).toContain('xpath=(//tei:listBibl/tei:bibl)[1]');
 
       // rename it
       await clickDropdownEntry(page, 'Edit...');
@@ -233,18 +236,18 @@ test.describe('XPath navigation', () => {
 
       // the first non-empty child of <text> is the <listBibl> selected before
       await clickDropdownEntry(page, 'listBibl');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: '//tei:listBibl[1]', selected: '//tei:listBibl', counter: '(1/1)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: '(//tei:listBibl)[1]', selected: '//tei:listBibl', counter: '(1/1)' });
       await clickDropdownEntry(page, CHILDREN);
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[1]`, selected: CHILDREN, counter: '(1/3)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${CHILDREN})[1]`, selected: CHILDREN, counter: '(1/3)' });
       await page.waitForTimeout(1000);
-      expect(await navigationState(page)).toEqual({ xpath: `${CHILDREN}[1]`, selected: CHILDREN, counter: '(1/3)' });
+      expect(await navigationState(page)).toEqual({ xpath: `(${CHILDREN})[1]`, selected: CHILDREN, counter: '(1/3)' });
 
       // the index counts only the nodes that the predicate selects: <back/> is empty
       await page.evaluate(() => {
         const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
         view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf('Div text') + 2 } });
       });
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[3]`, selected: CHILDREN, counter: '(3/3)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${CHILDREN})[3]`, selected: CHILDREN, counter: '(3/3)' });
     } finally {
       await page.evaluate(async (variant) => {
         try {
@@ -285,19 +288,19 @@ test.describe('XPath navigation', () => {
       await expect.poll(() => dropdownTexts(page)).toContain(STRUCT);
 
       await clickDropdownEntry(page, 'Bibls');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[1]`, selected: BIBL, counter: '(1/3)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${BIBL})[1]`, selected: BIBL, counter: '(1/3)' });
       await page.locator('[name="nextNodeBtn"]').click();
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[2]`);
 
       // the <biblStruct/> after "Beta"
       await clickDropdownEntry(page, 'Structs');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${STRUCT}[2]`, selected: STRUCT, counter: '(2/2)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${STRUCT})[2]`, selected: STRUCT, counter: '(2/2)' });
       // the <bibl> after the second <biblStruct/>
       await clickDropdownEntry(page, 'Bibls');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[3]`, selected: BIBL, counter: '(3/3)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${BIBL})[3]`, selected: BIBL, counter: '(3/3)' });
       // no <biblStruct/> after "Gamma": wraps around to the first one
       await clickDropdownEntry(page, 'Structs');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${STRUCT}[1]`, selected: STRUCT, counter: '(1/2)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${STRUCT})[1]`, selected: STRUCT, counter: '(1/2)' });
     } finally {
       await page.evaluate(async (variant) => {
         try {
@@ -340,18 +343,87 @@ test.describe('XPath navigation', () => {
       });
 
       await clickDropdownEntry(page, 'Lists');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${LIST}[1]`, selected: LIST, counter: '(1/2)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${LIST})[1]`, selected: LIST, counter: '(1/2)' });
       await page.locator('[name="nextNodeBtn"]').click();
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${LIST}[2]`, selected: LIST, counter: '(2/2)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${LIST})[2]`, selected: LIST, counter: '(2/2)' });
       await expect.poll(cursorLine).toContain('Beta');
 
       // the <back> that contains the second <listBibl>
       await clickDropdownEntry(page, 'Children');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${CHILDREN}[3]`, selected: CHILDREN, counter: '(3/3)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${CHILDREN})[3]`, selected: CHILDREN, counter: '(3/3)' });
       // and back to the second <listBibl>, the first one inside <back>
       await clickDropdownEntry(page, 'Lists');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${LIST}[2]`, selected: LIST, counter: '(2/2)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${LIST})[2]`, selected: LIST, counter: '(2/2)' });
       await expect.poll(cursorLine).toContain('Beta');
+    } finally {
+      await page.evaluate(async (variant) => {
+        try {
+          await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, { entries: [] });
+        } catch { /* nothing to clean up */ }
+      }, VARIANT).catch(() => {});
+      await releaseAllLocks(page).catch(() => {});
+      stopErrorMonitoring();
+    }
+  });
+
+  test('switching the expression starts from the element at the cursor', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    const CHILDREN = '/tei:TEI/tei:text/*[normalize-space()]';
+    const BREAKS = '//tei:pb';
+    const BIBL = '//tei:listBibl/tei:bibl';
+    const UNITS = `<text>
+    <body>
+      <p>One</p>
+      <pb/>
+      <p>Two</p>
+      <pb/>
+      <p>Three</p>
+    </body>
+    <listBibl>
+      <bibl>Alpha</bibl>
+      <bibl>Beta</bibl>
+      <bibl>Gamma</bibl>
+    </listBibl>
+  </text>`;
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await page.evaluate(async ({ variant, children, breaks, bibl }) => {
+        await (/** @type {any} */ (window)).client.apiClient.navigationXpathSave(variant, {
+          entries: [{ value: children, label: 'Children' }, { value: breaks, label: 'Breaks' }, { value: bibl, label: 'Bibls' }]
+        });
+      }, { variant: VARIANT, children: CHILDREN, breaks: BREAKS, bibl: BIBL });
+      await loadNavigationDocument(page, UNITS);
+      await page.reload();
+      await expect.poll(() => dropdownTexts(page)).toContain(BIBL);
+      /** @param {string} text - Moves the cursor into this text */
+      const moveCursorTo = (text) => page.evaluate((text) => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        view.dispatch({ selection: { anchor: view.state.doc.toString().indexOf(text) + 1 } });
+      }, text);
+
+      await clickDropdownEntry(page, 'Children');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${CHILDREN})[1]`, selected: CHILDREN, counter: '(1/2)' });
+      // the cursor moves within the <body>, which stays the current node
+      await moveCursorTo('Two');
+      await page.waitForTimeout(500);
+      expect((await navigationState(page)).xpath).toBe(`(${CHILDREN})[1]`);
+      // the <pb/> after "Two", not the first one in the <body>
+      await clickDropdownEntry(page, 'Breaks');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${BREAKS})[2]`, selected: BREAKS, counter: '(2/2)' });
+
+      // the <listBibl>, then the <bibl> with the cursor
+      await clickDropdownEntry(page, 'Children');
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${CHILDREN})[1]`);
+      await page.locator('[name="nextNodeBtn"]').click();
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${CHILDREN})[2]`);
+      await moveCursorTo('Beta');
+      await page.waitForTimeout(500);
+      await clickDropdownEntry(page, 'Bibls');
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${BIBL})[2]`, selected: BIBL, counter: '(2/3)' });
     } finally {
       await page.evaluate(async (variant) => {
         try {
@@ -381,7 +453,7 @@ test.describe('XPath navigation', () => {
       await page.reload();
       await expect.poll(() => dropdownTexts(page)).toContain(BIBL);
       await clickDropdownEntry(page, 'bibl');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[1]`, selected: BIBL, counter: '(1/3)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${BIBL})[1]`, selected: BIBL, counter: '(1/3)' });
       await expect.poll(() => page.evaluate(() =>
         (/** @type {any} */ (window)).app.getDependency('xmleditor').isFocusMode())).toBe(true);
 
@@ -393,29 +465,29 @@ test.describe('XPath navigation', () => {
       });
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().focus());
       await page.keyboard.press('ArrowDown');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[2]`);
       expect(await cursorLine()).toBe('<bibl>Beta');
       await page.keyboard.press('ArrowDown');
       await page.waitForTimeout(500);
-      expect((await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      expect((await navigationState(page)).xpath).toBe(`(${BIBL})[2]`);
       expect(await cursorLine()).toBe('2002</bibl>');
       await page.keyboard.press('ArrowDown');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[3]`);
       expect(await cursorLine()).toBe('<bibl>Gamma 2003</bibl>');
       await page.keyboard.press('ArrowUp');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[2]`);
 
       // outside the editor text, e.g. after clicking a navigation button
       await page.locator('[name="nextNodeBtn"]').click();
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[3]`);
       await page.keyboard.press('ArrowUp');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[2]`);
       await page.keyboard.press('ArrowUp');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[1]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[1]`);
       // no wrapping around at the first node
       await page.keyboard.press('ArrowUp');
       await page.waitForTimeout(500);
-      expect((await navigationState(page)).xpath).toBe(`${BIBL}[1]`);
+      expect((await navigationState(page)).xpath).toBe(`(${BIBL})[1]`);
     } finally {
       await page.evaluate(async (variant) => {
         try {
@@ -455,7 +527,7 @@ test.describe('XPath navigation', () => {
       await page.reload();
       await expect.poll(() => dropdownTexts(page)).toContain(BIBL);
       await clickDropdownEntry(page, 'bibl');
-      await expect.poll(() => navigationState(page)).toEqual({ xpath: `${BIBL}[1]`, selected: BIBL, counter: '(1/3)' });
+      await expect.poll(() => navigationState(page)).toEqual({ xpath: `(${BIBL})[1]`, selected: BIBL, counter: '(1/3)' });
 
       // without focus mode, too
       await page.locator('[name="focusToggle"]').click();
@@ -467,16 +539,16 @@ test.describe('XPath navigation', () => {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().focus());
       // the multi-line <bibl> is skipped in one step, the cursor does not move within it
       await page.keyboard.press('ArrowDown');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[2]`);
       await page.keyboard.press('ArrowDown');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[3]`);
       // wraps around like ›
       await page.keyboard.press('ArrowDown');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[1]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[1]`);
       await page.keyboard.press('ArrowUp');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[3]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[3]`);
       await page.keyboard.press('ArrowUp');
-      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`${BIBL}[2]`);
+      await expect.poll(async () => (await navigationState(page)).xpath).toBe(`(${BIBL})[2]`);
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation')?.dispatchStateChange({ view: null })).catch(() => {});
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xpath-navigation')?.uiStorage.remove('focusMode')).catch(() => {});
