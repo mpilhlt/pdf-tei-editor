@@ -197,19 +197,28 @@ test.describe('Plugin manager', () => {
     }
   });
 
-  // Mocked like the test above: one installed plugin has a newer release
+  // Mocked like the test above: two installed plugins have a newer release
   test('admin is told about plugin updates on login and upgrades all installed plugins', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
     /** @type {any[]} */
     const installRequests = [];
-    let upgraded = false;
+    /** @type {Set<string>} */
+    const upgraded = new Set();
+    let restartRequests = 0;
+    /** @type {() => void} */
+    let releaseSecondInstall = () => {};
+    const secondInstallReleased = new Promise(resolve => { releaseSecondInstall = () => resolve(undefined); });
 
     try {
       await page.route('**/api/v1/plugins/admin', async route => {
         const response = await route.fetch();
         const json = await response.json();
-        await route.fulfill({ response, json: { ...json, install_enabled: true } });
+        await route.fulfill({ response, json: { ...json, install_enabled: true, restart_supported: true } });
+      });
+      await page.route('**/api/v1/plugins/admin/restart', async route => {
+        restartRequests++;
+        await route.fulfill({ json: { status: 'ok' } });
       });
       await page.route('**/api/v1/plugins/admin/available*', route => route.fulfill({
         json: {
@@ -221,8 +230,14 @@ test.describe('Plugin manager', () => {
             {
               id: 'demo-plugin', repository: 'mpilhlt/pte-plugins', description: 'An installed plugin with an update', index_version: '1.1.0',
               latest_version: '1.1.0', latest_tag: 'demo-plugin-v1.1.0', versions: ['1.1.0', '1.0.0'],
-              installed_version: upgraded ? '1.1.0' : '1.0.0', installed_source: 'site', requires: [], unmet_requirements: [],
-              trusted: true, compatible: true, incompatible_reason: null, installable: true, update_available: !upgraded
+              installed_version: upgraded.has('demo-plugin') ? '1.1.0' : '1.0.0', installed_source: 'site', requires: [], unmet_requirements: [],
+              trusted: true, compatible: true, incompatible_reason: null, installable: true, update_available: !upgraded.has('demo-plugin')
+            },
+            {
+              id: 'other-plugin', repository: 'mpilhlt/pte-plugins', description: 'A second installed plugin with an update', index_version: '3.1.0',
+              latest_version: '3.1.0', latest_tag: 'other-plugin-v3.1.0', versions: ['3.1.0', '3.0.0'],
+              installed_version: upgraded.has('other-plugin') ? '3.1.0' : '3.0.0', installed_source: 'site', requires: [], unmet_requirements: [],
+              trusted: true, compatible: true, incompatible_reason: null, installable: true, update_available: !upgraded.has('other-plugin')
             },
             {
               id: 'current-plugin', repository: 'mpilhlt/pte-plugins', description: 'An installed plugin without an update', index_version: '2.0.0',
@@ -234,9 +249,12 @@ test.describe('Plugin manager', () => {
         }
       }));
       await page.route('**/api/v1/plugins/admin/install', async route => {
-        installRequests.push(route.request().postDataJSON());
-        upgraded = true;
-        await route.fulfill({ json: { plugin: 'demo-plugin', version: '1.1.0', action: 'upgrade', restart_required: true, generation: 1 } });
+        const request = route.request().postDataJSON();
+        installRequests.push(request);
+        // The second upgrade waits, so that the list can be checked in between
+        if (installRequests.length === 2) await secondInstallReleased;
+        upgraded.add(request.id);
+        await route.fulfill({ json: { plugin: request.id, version: request.version, action: 'upgrade', restart_required: true, generation: installRequests.length } });
       });
 
       await navigateAndLogin(page, TEST_ADMIN.username, TEST_ADMIN.password);
@@ -244,6 +262,7 @@ test.describe('Plugin manager', () => {
       // The update check after login shows a toast that opens the "Available" tab
       const updateAlert = page.locator('sl-alert[name="pluginUpdateAlert"]');
       await expect(updateAlert).toContainText('demo-plugin (v1.0.0 → v1.1.0)');
+      await expect(updateAlert).toContainText('other-plugin (v3.0.0 → v3.1.0)');
       await expect(updateAlert).not.toContainText('current-plugin');
       await page.waitForTimeout(500);
       await updateAlert.locator('sl-button[name="openBtn"]').click();
@@ -262,10 +281,24 @@ test.describe('Plugin manager', () => {
       await page.waitForTimeout(500);
       await okBtn.click();
 
-      await expect.poll(() => installRequests.length).toBe(1);
+      await expect.poll(() => installRequests.length).toBe(2);
       expect(installRequests[0]).toMatchObject({ repository: 'mpilhlt/pte-plugins', id: 'demo-plugin', version: '1.1.0' });
-      await expect(page.locator('sl-alert', { hasText: 'Upgraded demo-plugin v1.1.0' })).toHaveCount(1);
+      expect(installRequests[1]).toMatchObject({ repository: 'mpilhlt/pte-plugins', id: 'other-plugin', version: '3.1.0' });
+      // The upgraded plugin no longer offers an upgrade while the other one is installed
+      const demoRow = page.locator('[data-available="demo-plugin"]');
+      await expect(demoRow).toContainText('Installed v1.1.0');
+      await expect(demoRow.locator('sl-button[data-install]')).toHaveCount(0);
+      // Nothing restarts before all upgrades are installed
+      expect(restartRequests).toBe(0);
+      releaseSecondInstall();
+
+      await expect(page.locator('sl-alert', { hasText: 'Upgraded demo-plugin v1.1.0, other-plugin v3.1.0' })).toHaveCount(1);
       await expect(upgradeAllBtn).toBeHidden();
+      await expect(page.locator('[data-available="other-plugin"] sl-button[data-install]')).toHaveCount(0);
+      // The server processes restart once, after all upgrades
+      await expect.poll(() => restartRequests).toBe(1);
+      await expect(page.locator('sl-alert', { hasText: 'Plugin changes applied' })).toHaveCount(1);
+      expect(restartRequests).toBe(1);
     } finally {
       stopErrorMonitoring();
       try {
