@@ -108,7 +108,7 @@ These modules are pre-registered by `module-registry.js` and are always availabl
 | `'ui-system'` | `app/src/modules/ui-system.js` | `createFromTemplate`, `createSingleFromTemplate`, `addTemplateHtml`, `registerTemplate`, `updateUi` |
 | `'lint-utils'` | `app/src/modules/lint-utils.js` | `applyMergedDiagnostics` (see [Contributing editor diagnostics](#contributing-editor-diagnostics)) |
 
-To expose an additional module, add a `@registerModule` tag to its file header and run `node scripts/build/generate-modules.js`, which regenerates `app/src/module-registry.js`.
+To expose an additional module, add a `@registerModule` tag to its file header and run `npm run generate`, which regenerates `app/src/module-registry.js` (not under version control; `npm install` and `npm run start:dev` also generate it).
 
 ### Plugin APIs (via `getDependency`)
 
