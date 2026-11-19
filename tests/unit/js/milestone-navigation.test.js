@@ -97,6 +97,15 @@ describe('milestone navigation', () => {
     assert.strictEqual(editor.getView().state.selection.main.head, range.from + '<pb n="2"/>'.length);
   });
 
+  it('selecting a milestone places the cursor after it instead of selecting its range', async () => {
+    const editor = await editorWith(DOC);
+    const pb2 = editor.getDomNodesByXpath('//pb')[1];
+    editor.selectDomNode(pb2);
+    const selection = editor.getView().state.selection.main;
+    assert.ok(selection.empty);
+    assert.strictEqual(selection.head, editor.getNodeRange(pb2).from + '<pb n="2"/>'.length);
+  });
+
   it('the cursor selects the milestone whose range holds it', async () => {
     const editor = await editorWith(DOC);
     const text = editor.getView().state.doc.toString();

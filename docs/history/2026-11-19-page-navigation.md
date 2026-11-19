@@ -11,7 +11,7 @@ Pages are the ranges between the `<pb/>` elements that the GROBID extractor inse
 - A milestone is an empty TEI milestone element: `pb`, `cb`, `gb`, `lb` or `milestone` (`isMilestone()` in `navigation-xpath-utils.js`).
 - `XMLEditor.getNodeRange(node)`: for a milestone, from its start to the next element of the same name in document order, else to the end of the top-level element that holds it (`<text>`), without trailing whitespace. Trimming matters for zone documents: the whitespace before the next `<pb/>` belongs to the next page's first line. Other nodes keep their syntax node range.
 - `XMLEditor.getRangeByXpath(xpath)` resolves a navigation xpath (`path[n]` = n-th of all, via `navigationNodeXpath()`) to that range.
-- Focus mode and selection use the range; after focusing a milestone, the cursor is placed after it.
+- Focus mode uses the range; after focusing a milestone, the cursor is placed after it. Outside focus mode, navigating to a milestone places the cursor after it and scrolls the range to the center instead of selecting it (selecting a whole page made pdf.js throw in its `selectionchange` listener).
 - Moving the cursor selects the last milestone at or before it. Switching the dropdown to a milestone expression selects the milestone whose range holds the current node (`indexAtOrAfterNode()`).
 - The LLM Reviewer (pte-plugins annotation-review) sends the range as the scope. Its zone review already reviews the pages a scope lies on, so a page scope reviews exactly that page.
 - The GROBID plugin adds the navigation entry `//tei:text//tei:pb` ("Page (`<pb>`)") as the first entry of segmentation documents.
