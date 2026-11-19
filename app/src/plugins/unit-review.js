@@ -46,7 +46,7 @@ import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from 
 import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines, appliedFixRange, addDismissListener, addDeleteListener } from '../modules/lint-utils.js'
 import {
   LIST_TYPE, DEFAULT_UNIT_PATH, PAGES_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
-  setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint
+  setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint, findUnitElements
 } from '../modules/unit-review.js'
 import { unitReviewGutter, buildUnitReviewMarkers, setUnitReviewMarkersEffect } from '../modules/codemirror/unit-review-gutter.js'
 import { openReviewPopover, openCommentPrompt, closePopover, formatWhen } from '../modules/unit-review-popover.js'
@@ -550,6 +550,41 @@ class UnitReviewPlugin extends Plugin {
    */
   getMissingLayoutMessage() {
     return this.#scan.layoutMissing ? (this.#layout?.message ?? 'The layout information of this document is missing.') : null
+  }
+
+  /**
+   * Returns the variant id of the loaded document: its extractor's `variant-id` label, else the
+   * variant filter of the application state.
+   * @returns {string|null}
+   */
+  getVariant() {
+    return this.#documentVariant()
+  }
+
+  /**
+   * Returns the review unit path configured for the variant of the loaded document by the
+   * extractors (`reviewUnits`), without the unit path stored with the document's marks.
+   * @returns {string|null} Null if the variant has no configured path or uses the `auto` default
+   */
+  getUnitPath() {
+    const path = this.#variantPaths[this.#documentVariant() ?? '']
+    return path && path !== DEFAULT_UNIT_PATH ? path : null
+  }
+
+  /**
+   * Returns the review unit elements of a DOM document by a unit path, see the module's
+   * `findUnitElements()`. Without units for the path (`auto`, `pages`, no match), returns none.
+   * @param {Document} xmlDoc
+   * @param {string|null} [unitPath] - Default: the path configured for the loaded document's variant
+   * @returns {Element[]}
+   */
+  findUnitElements(xmlDoc, unitPath = this.getUnitPath()) {
+    try {
+      return findUnitElements(xmlDoc, unitPath)
+    } catch (e) {
+      this.#logger.warn('[unit-review] ' + String(e))
+      return []
+    }
   }
 
   /**

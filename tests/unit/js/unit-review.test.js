@@ -16,7 +16,8 @@ import { xml } from '@codemirror/lang-xml';
 import { sha256Hex } from '../../../app/src/modules/sha256.js';
 import {
   parseUnitPath, findUnits, readReviewData, serializeReviewData, combineReviews, setMark,
-  reconcileReviewData, removeUnitReviews, parseSummary, emptyReviewData, renumberMarks, LIST_TYPE, PAGES_UNIT_PATH
+  reconcileReviewData, removeUnitReviews, parseSummary, emptyReviewData, renumberMarks, LIST_TYPE, PAGES_UNIT_PATH,
+  findUnitElements
 } from '../../../app/src/modules/unit-review.js';
 import { readFileSync } from 'node:fs';
 
@@ -298,5 +299,29 @@ describe('page units of zone documents', () => {
     const scan = findUnits(makeState(sample), PAGES_UNIT_PATH, undefined, { labels: layout.labels, linePages: null });
     assert.strictEqual(scan.units.length, 0);
     assert.strictEqual(scan.layoutMissing, true);
+  });
+});
+
+describe('findUnitElements', () => {
+  /** @param {string} source */
+  const parse = source => new JSDOM(source, { contentType: 'application/xml' }).window.document;
+
+  it('finds the elements of a configured path below <text>', () => {
+    const units = findUnitElements(parse(REFS), './/listBibl/bibl');
+    assert.strictEqual(units.length, 3);
+    assert.ok(units.every(u => u.localName === 'bibl'));
+  });
+
+  it('returns only the outermost of nested units', () => {
+    const doc = parse('<TEI><teiHeader><bibl/></teiHeader><text><bibl>a<bibl>b</bibl></bibl><div><bibl>c</bibl></div></text></TEI>');
+    const units = findUnitElements(doc, './/bibl');
+    assert.deepStrictEqual(units.map(u => u.textContent), ['ab', 'c']);
+  });
+
+  it('returns no elements for auto, pages, no path and paths without a match', () => {
+    const doc = parse(REFS);
+    for (const path of ['auto', PAGES_UNIT_PATH, null, undefined, './/note']) {
+      assert.deepStrictEqual(findUnitElements(doc, path), [], String(path));
+    }
   });
 });

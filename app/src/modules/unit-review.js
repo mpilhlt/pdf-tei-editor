@@ -418,6 +418,42 @@ export function findUnits(state, unitPath, cache, zone) {
   return scan;
 }
 
+/**
+ * Finds the review unit elements of a DOM document by a configured unit path: the elements below
+ * `TEI/text` (or the first `text` element below the root) that match the path. A matching element
+ * is not searched further, so only the outermost of nested units is returned. Returns no elements
+ * for the `auto` default, the `pages` scheme (its units are text ranges, not elements) and paths
+ * that match nothing.
+ * @param {Document} xmlDoc
+ * @param {string|null|undefined} unitPath - See {@link parseUnitPath}
+ * @returns {Element[]}
+ */
+export function findUnitElements(xmlDoc, unitPath) {
+  if (!unitPath || unitPath === PAGES_UNIT_PATH) return [];
+  const steps = parseUnitPath(unitPath);
+  const root = xmlDoc.documentElement;
+  const text = root ? Array.from(root.children).find(child => child.localName === 'text') : undefined;
+  if (!steps || !text) return [];
+  /** @type {Element[]} */
+  const units = [];
+  /**
+   * @param {Element} element
+   * @param {string[]} chain
+   */
+  const walk = (element, chain) => {
+    for (const child of Array.from(element.children)) {
+      const childChain = [...chain, child.localName];
+      if (matchesSteps(steps, childChain)) {
+        units.push(child);
+      } else {
+        walk(child, childChain);
+      }
+    }
+  };
+  walk(text, []);
+  return units;
+}
+
 // ── Review data in TEI ───────────────────────────────────────────────
 
 /**

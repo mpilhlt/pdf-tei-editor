@@ -57,13 +57,26 @@ Plugins can add further buttons to the right-hand section of the toolbar, for ex
 
 | Button | Plugin | What it does |
 | --- | --- | --- |
-| TEI Wizard (wand icon) | TEI Wizard (ships with the application) | Run TEI-specific utilities (e.g. pretty-print, convert XML comments into [unit comments](unit-comments.md)) |
+| TEI Wizard (wand icon) | TEI Wizard (ships with the application) | Menu of the TEI enhancements that apply to the document, see [Enhancing the TEI](#enhancing-the-tei) |
 
 The XSL transformations listed by the XSL viewer are also provided by plugins (for example the GROBID plugin).
 
 Saving a revision and deleting documents are done with the **Document** buttons in the main toolbar, not in the editor toolbar.
 
 Buttons that are greyed out are disabled for the current document state or your role.
+
+### Enhancing the TEI
+
+The **TEI Wizard** (wand icon) opens a menu of enhancements that change the whole document. It lists only the enhancements that apply to the document's variant. Choose one to run it: the result is shown in the [merge view](#merge-view-comparing-versions), where you accept or reject the changes.
+
+![The TEI Wizard menu in the XML editor toolbar](../images/editing-workflow-tei-wizard.png)
+
+*The TEI Wizard menu.*
+
+- **Pretty Print XML** (ships with the application) indents the document. If the document's variant has [review units](unit-review.md) (for example the references of a reference list), each unit is put on its own line, and its content is left as it is. In the TEI header, `<desc>` elements and elements that mix text and markup are left as they are.
+- Plugins add further enhancements, for example **Enrich TEI Header from PDF Metadata** (metadata extraction plugin).
+
+The button is disabled if you cannot edit the document or no enhancement applies to it.
 
 ---
 
