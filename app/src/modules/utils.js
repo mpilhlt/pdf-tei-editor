@@ -36,6 +36,27 @@ export function escapeRegExp(string) {
  */
 
 /**
+ * The XPath expression that selects the node of a navigation xpath. In the navigation (and the
+ * `xpath` state), `path[n]` is the n-th node of all nodes that `path` selects, in document order.
+ * As an XPath expression, `[n]` only counts the siblings, so `//listBibl/bibl[4]` selects nothing if
+ * no `<listBibl>` has four `<bibl>` children, although `//listBibl/bibl` selects more than four
+ * nodes. This returns `(path)[n]`, which selects the n-th node of all, or the xpath itself if it
+ * has no index or cannot be parsed.
+ * @param {string} xpath - A navigation xpath such as `//tei:listBibl/tei:bibl[4]`
+ * @returns {string} e.g. `(//tei:listBibl/tei:bibl)[4]`
+ */
+export function navigationNodeXpath(xpath) {
+  let parsed
+  try {
+    parsed = parseXPath(xpath)
+  } catch {
+    return xpath
+  }
+  if (parsed.index === null) return xpath
+  return `(${parsed.pathBeforePredicates}${parsed.nonIndexPredicates})[${parsed.index}]`
+}
+
+/**
  * Parses an XPath expression focusing on the last step.
  * Identifies the parent path, the full string representation of the last step,
  * separates the node test from predicates, identifies node test components

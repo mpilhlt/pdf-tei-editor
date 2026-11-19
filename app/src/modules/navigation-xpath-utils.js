@@ -64,14 +64,15 @@ export function labelToText(html, doc = document) {
 
 /**
  * The 1-based index of the node to select when the navigation switches to another XPath expression:
- * the first node, in document order, that contains the position or starts after it. If all nodes
- * end before the position, the navigation wraps around to the first node.
- * @param {{from: number, to: number}[]} ranges - The ranges of the nodes in document order
- * @param {number} pos - The current position in the editor, e.g. the start of the current node
+ * the first node, in document order, that is the current node, contains it or follows it (which
+ * includes its descendants). If there is none, the navigation wraps around to the first node.
+ * @param {Node[]} nodes - The nodes of the new expression in document order
+ * @param {Node} current - The current node
  * @returns {number} The index, or 0 if there are no nodes
  */
-export function indexAtOrAfterPosition(ranges, pos) {
-  if (ranges.length === 0) return 0
-  const index = ranges.findIndex(range => range.to > pos)
+export function indexAtOrAfterNode(nodes, current) {
+  if (nodes.length === 0) return 0
+  const index = nodes.findIndex(node => node === current || node.contains(current) ||
+    Boolean(current.compareDocumentPosition(node) & 4 /* Node.DOCUMENT_POSITION_FOLLOWING */))
   return index < 0 ? 1 : index + 1
 }

@@ -9,7 +9,7 @@ import assert from 'node:assert'
 import { JSDOM } from 'jsdom'
 
 const { document } = new JSDOM('<!DOCTYPE html>').window
-const { checkNavigationXpath, namespacePrefixes, labelToText, indexAtOrAfterPosition } = await import('../../../app/src/modules/navigation-xpath-utils.js')
+const { checkNavigationXpath, namespacePrefixes, labelToText, indexAtOrAfterNode } = await import('../../../app/src/modules/navigation-xpath-utils.js')
 
 describe('checkNavigationXpath', () => {
   it('accepts absolute expressions that select elements', () => {
@@ -51,25 +51,37 @@ describe('labelToText', () => {
   })
 })
 
-describe('indexAtOrAfterPosition', () => {
-  const ranges = [{ from: 10, to: 20 }, { from: 30, to: 40 }, { from: 50, to: 60 }]
+describe('indexAtOrAfterNode', () => {
+  const { window } = new JSDOM('')
+  const xml = new window.DOMParser().parseFromString(
+    '<text><front><p/></front><listBibl><bibl/><bibl/></listBibl><page/><listBibl><bibl/></listBibl><back/></text>', 'application/xml')
+  const text = /** @type {Element} */ (xml.documentElement)
+  const children = Array.from(text.children)
+  const [front, listBibl1, page, listBibl2] = children
+  const bibls = Array.from(xml.getElementsByTagName('bibl'))
+  const listBibls = [listBibl1, listBibl2]
 
-  it('selects the first node that starts at or after the position', () => {
-    assert.strictEqual(indexAtOrAfterPosition(ranges, 0), 1)
-    assert.strictEqual(indexAtOrAfterPosition(ranges, 25), 2)
-    assert.strictEqual(indexAtOrAfterPosition(ranges, 50), 3)
+  it('stays on the current node if the new expression selects it', () => {
+    assert.strictEqual(indexAtOrAfterNode(children, listBibl2), 4)
   })
 
-  it('selects the node that contains the position', () => {
-    assert.strictEqual(indexAtOrAfterPosition(ranges, 35), 2)
-    assert.strictEqual(indexAtOrAfterPosition([{ from: 0, to: 100 }, { from: 10, to: 20 }], 50), 1)
+  it('selects the node that contains the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode(listBibls, bibls[1]), 1)
+    assert.strictEqual(indexAtOrAfterNode(children, bibls[2]), 4)
   })
 
-  it('wraps around to the first node when all nodes end before the position', () => {
-    assert.strictEqual(indexAtOrAfterPosition(ranges, 60), 1)
+  it('selects the first descendant or following node', () => {
+    assert.strictEqual(indexAtOrAfterNode(bibls, listBibl1), 1)
+    assert.strictEqual(indexAtOrAfterNode(bibls, page), 3)
+    assert.strictEqual(indexAtOrAfterNode(listBibls, front), 1)
+    assert.strictEqual(indexAtOrAfterNode(listBibls, page), 2)
+  })
+
+  it('wraps around to the first node when no node follows', () => {
+    assert.strictEqual(indexAtOrAfterNode(bibls, children[4]), 1)
   })
 
   it('returns 0 without nodes', () => {
-    assert.strictEqual(indexAtOrAfterPosition([], 5), 0)
+    assert.strictEqual(indexAtOrAfterNode([], page), 0)
   })
 })

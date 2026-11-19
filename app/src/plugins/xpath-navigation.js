@@ -28,11 +28,11 @@ import { keymap } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { focusRangeField } from '../modules/codemirror/focus-mode.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import { parseXPath } from '../modules/utils.js'
+import { parseXPath, navigationNodeXpath } from '../modules/utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
-import { checkNavigationXpath, labelToText, indexAtOrAfterPosition } from '../modules/navigation-xpath-utils.js'
+import { checkNavigationXpath, labelToText, indexAtOrAfterNode } from '../modules/navigation-xpath-utils.js'
 
 await registerTemplate('xpath-navigation-dialog', 'xpath-navigation-dialog.html')
 
@@ -431,28 +431,23 @@ class XpathNavigationPlugin extends Plugin {
 
   /**
    * The index of the node of `xpath` to select when the dropdown switches to it, so that the navigation
-   * keeps its position in the document: the first node that contains the current position or follows
-   * it, wrapping around to the first node if there is none. The current position is the start of the
-   * current node, or the cursor if there is none.
+   * keeps its position in the document: the current node if `xpath` selects it, else the first node
+   * that contains it or follows it, wrapping around to the first node if there is none. The current
+   * node is the node of the `xpath` state, or the element at the cursor if navigation is off.
    * @param {string} xpath - The expression selected in the dropdown
    * @returns {number} The 1-based index, 1 if the editor is not ready or the expression selects no node
    */
   #indexAtCurrentPosition(xpath) {
     if (!this.#xmlEditor.isReady() || !this.#xmlEditor.getXmlTree()) return 1
     try {
-      let pos = this.#xmlEditor.getView().state.selection.main.head
+      let current = null
       if (this.state?.xpath?.startsWith('/')) {
-        try {
-          pos = this.#xmlEditor.getSyntaxNodeByXpath(this.state.xpath).from
-        } catch {
-          // the current node no longer exists: use the cursor
-        }
+        current = this.#xmlEditor.getDomNodeByXpath(navigationNodeXpath(this.state.xpath))
       }
-      const ranges = this.#xmlEditor.getDomNodesByXpath(xpath).map(node => {
-        const { from, to } = this.#xmlEditor.getSyntaxNodeFromDomNode(node)
-        return { from, to }
-      })
-      return indexAtOrAfterPosition(ranges, pos) || 1
+      if (!current) {
+        current = this.#xmlEditor.getDomNodeAt(this.#xmlEditor.getView().state.selection.main.head)
+      }
+      return indexAtOrAfterNode(this.#xmlEditor.getDomNodesByXpath(xpath), current) || 1
     } catch (error) {
       this.#logger.debug('Could not determine the node at the current position: ' + String(error))
       return 1
@@ -635,7 +630,7 @@ class XpathNavigationPlugin extends Plugin {
     if (!xpath) return false
     if (this.#xmlEditor.isFocusMode()) {
       try {
-        this.#xmlEditor.focusByXpath(xpath)
+        this.#xmlEditor.focusByXpath(navigationNodeXpath(xpath))
       } catch (error) {
         this.#logger.warn(`Could not focus node: ${String(error)}`)
       }
