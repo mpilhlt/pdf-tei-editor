@@ -1793,7 +1793,7 @@ describe('DocumentRulesPlugin._onOverridesWidgetClick', () => {
 });
 
 describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
-  it('makes the dialog read-only and hides content-editing controls even with an override selected', () => {
+  it('keeps a selected override editable, since overrides are the user\'s own and not part of the document', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
     let setMdArgs;
@@ -1808,9 +1808,9 @@ describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
     plugin.onEditorReadOnlyChange(true);
 
     assert.strictEqual(plugin._documentReadOnly, true);
-    assert.deepStrictEqual(setMdArgs, ['override text', true]);
-    assert.strictEqual(plugin._editorDialogUi.newOverrideBtn.disabled, true);
-    assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, 'none');
+    assert.deepStrictEqual(setMdArgs, ['override text', false]);
+    assert.strictEqual(plugin._editorDialogUi.newOverrideBtn.disabled, false);
+    assert.strictEqual(plugin._editorDialogUi.saveBtn.style.display, '');
   });
 
   it('does nothing to the dialog when no resource is currently open', () => {
@@ -1819,7 +1819,7 @@ describe('DocumentRulesPlugin.onEditorReadOnlyChange', () => {
     assert.strictEqual(plugin._documentReadOnly, true);
   });
 
-  it('restores editability when the document becomes writable again, for a selected override', () => {
+  it('keeps a selected override editable when the document becomes writable again', () => {
     const plugin = makePlugin();
     plugin._editorDialogUi = makeDialogUi();
     let setMdArgs;
@@ -2137,22 +2137,6 @@ describe('DocumentRulesPlugin sync status line', () => {
     });
   }
 
-  const readOnlyCases = [
-    ['machine_outdated', 'Machine rules outdated: the guide changed since the last sync. This document is read-only. To update the machine rules from the guide, open a version of the document you can edit'],
-    ['both_changed', 'Guide and machine rules both changed since they were last marked as in sync. This document is read-only. To mark the machine rules as in sync, open a version of the document you can edit'],
-    ['in_sync', 'In sync with the guide'],
-  ];
-  for (const [status, text] of readOnlyCases) {
-    it(`shows "${text}" without a link for ${status} in a read-only document`, async () => {
-      const { plugin } = setup(async () => response(status));
-      plugin._documentReadOnly = true;
-      await plugin._refreshSyncStatus();
-      const line = plugin._editorDialogUi.syncStatus;
-      assert.strictEqual(line.textContent.trim(), text);
-      assert.strictEqual(line.querySelector('a'), null);
-    });
-  }
-
   it('appends the short hash of the last sync commit', async () => {
     const { plugin } = setup(async () => response('in_sync', 'abc1234def5678'));
     await plugin._refreshSyncStatus();
@@ -2356,8 +2340,8 @@ describe('DocumentRulesPlugin "Update from guide"', () => {
       assert.strictEqual(displayFor(schema, [schema]), 'none');
     });
 
-    it('is hidden when the document is read-only', () => {
-      assert.strictEqual(displayFor(machine, [human, machine], true), 'none');
+    it('is shown when the document is read-only', () => {
+      assert.strictEqual(displayFor(machine, [human, machine], true), '');
     });
   });
 
@@ -2863,8 +2847,8 @@ describe('DocumentRulesPlugin "Propose upstream" (paired)', () => {
       assert.strictEqual(displayFor(machine, [human, machine]), '');
     });
 
-    it('is hidden in a two-layer group when the document is read-only', () => {
-      assert.strictEqual(displayFor(human, [human, machine], { selected: true, readOnly: true }), 'none');
+    it('is shown in a two-layer group when the document is read-only', () => {
+      assert.strictEqual(displayFor(human, [human, machine], { selected: true, readOnly: true }), '');
     });
 
     it('keeps the old rule for a single-layer resource', () => {
@@ -3954,8 +3938,8 @@ describe('DocumentRulesPlugin editing workflow (#702)', () => {
       assert.deepStrictEqual(calls, ['propose']);
     });
 
-    it('shows no link for a read-only document or another status', async () => {
-      assert.strictEqual((await syncLine('machine_outdated', true)).line.querySelector('a'), null);
+    it('shows the link for a read-only document too, and none for another status', async () => {
+      assert.notStrictEqual((await syncLine('machine_outdated', true)).line.querySelector('a[name="syncStatusUpdateLink"]'), null);
       assert.strictEqual((await syncLine('machine_edited')).line.querySelector('a'), null);
     });
 

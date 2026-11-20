@@ -140,22 +140,11 @@ const SYNC_STATUS_TEXT = Object.freeze({
 })
 
 /**
- * Hint shown after the status-line copy (and the last-sync commit), before the action link; omitted when there is no link (read-only document, see SYNC_STATUS_READ_ONLY_HINT).
+ * Hint shown after the status-line copy (and the last-sync commit), before the action link.
  * @type {Readonly<Partial<Record<SyncStatusResponse['status'], string>>>}
  */
 const SYNC_STATUS_HINT = Object.freeze({
   both_changed: 'If the machine rules already reflect the guide, you can mark them as in sync. This only updates the sync marker in the repository, not the texts'
-})
-
-/**
- * Hint shown instead of the action link for a read-only document: the
- * actions store an override in the document, so they need a version the
- * user can edit.
- * @type {Readonly<Partial<Record<SyncStatusResponse['status'], string>>>}
- */
-const SYNC_STATUS_READ_ONLY_HINT = Object.freeze({
-  machine_outdated: 'This document is read-only. To update the machine rules from the guide, open a version of the document you can edit',
-  both_changed: 'This document is read-only. To mark the machine rules as in sync, open a version of the document you can edit'
 })
 
 /**
@@ -1044,10 +1033,11 @@ class DocumentRulesPlugin extends Plugin {
     icon.style.marginRight = '0.25rem'
     let text = SYNC_STATUS_TEXT[response.status] ?? response.status
     if (response.synced_commit) text += ` (last sync: ${response.synced_commit.slice(0, 7)})`
-    const action = this._documentReadOnly ? null : SYNC_STATUS_ACTIONS[response.status]
+    // Overrides and proposals are the user's own, not part of the document,
+    // so the actions don't depend on whether the document is read-only
+    const action = SYNC_STATUS_ACTIONS[response.status]
     // The hint explains the action link, so it goes with it
-    // Without the link (read-only document), say how to get to it instead
-    const hint = action ? SYNC_STATUS_HINT[response.status] : this._documentReadOnly ? SYNC_STATUS_READ_ONLY_HINT[response.status] : undefined
+    const hint = action ? SYNC_STATUS_HINT[response.status] : undefined
     if (hint) text += `. ${hint}`
     line.replaceChildren(icon, document.createTextNode(text))
     if (action === 'update') {
@@ -1223,10 +1213,9 @@ class DocumentRulesPlugin extends Plugin {
     const selected = this._currentOverrides.find(o => o.id === this._currentSelectedId) ?? null
     dialogUi.noteInput.style.display = selected ? '' : 'none'
     dialogUi.noteInput.value = selected ? selected.note : ''
-    dialogUi.noteInput.disabled = this._documentReadOnly
 
     const text = selected ? selected.text : this._currentOriginalText
-    const readOnly = selected === null || this._documentReadOnly
+    const readOnly = selected === null
 
     if (resource.format === 'xml') {
       dialogUi.textBody.style.display = 'none'
@@ -1240,15 +1229,15 @@ class DocumentRulesPlugin extends Plugin {
       if (scroll) this._scrollMarkdownBodyToAnchor(text)
     }
 
-    dialogUi.newOverrideBtn.disabled = this._documentReadOnly
-    dialogUi.saveBtn.style.display = selected && !this._documentReadOnly ? '' : 'none'
+    // Overrides are the user's own and don't change the document, so they can be edited in a read-only document too
+    dialogUi.saveBtn.style.display = selected ? '' : 'none'
     this._renderSaveButton()
     dialogUi.deleteBtn.style.display = selected ? '' : 'none'
     this._renderResetButtons()
     // A pair proposes both layers together, whatever is selected; a single resource proposes its selected override
-    dialogUi.proposeUpstreamBtn.style.display = (this._isPairGroup() ? !this._documentReadOnly : selected) ? '' : 'none'
+    dialogUi.proposeUpstreamBtn.style.display = this._isPairGroup() || selected ? '' : 'none'
     const pairedMachine = resource.layer === 'machine' && this._currentGroup.some(r => r.layer === 'human')
-    dialogUi.updateFromGuideBtn.style.display = pairedMachine && !this._documentReadOnly ? '' : 'none'
+    dialogUi.updateFromGuideBtn.style.display = pairedMachine ? '' : 'none'
   }
 
   /**
@@ -1672,12 +1661,11 @@ class DocumentRulesPlugin extends Plugin {
    * After "Update to upstream" re-pinned the document to a guide section
    * that changed since the machine rules were last updated from it: ask
    * whether to update the machine rules from the guide now, and if so open
-   * the "Update from guide" dialog. Skipped once the dialog was closed or
-   * for a read-only document.
+   * the "Update from guide" dialog. Skipped once the dialog was closed.
    * @returns {Promise<void>}
    */
   async _promptUpdateFromGuide() {
-    if (!this._editorDialogUi.open || this._documentReadOnly) return
+    if (!this._editorDialogUi.open) return
     const group = this._currentGroup
     const confirmed = await this.getDependency('dialog').confirm(
       'The guide section has changed since the machine rules were last updated from it. Update the machine rules from the guide now?',
