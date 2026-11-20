@@ -25,5 +25,5 @@ const bundle = (name) => ({
   }
 })
 
-// the application and the standalone user manual window (app/web/manual.html)
-export default [bundle('app'), bundle('manual')];
+// the application, the standalone user manual window (app/web/manual.html) and annotation guide window (app/web/guide.html)
+export default [bundle('app'), bundle('manual'), bundle('guide')];

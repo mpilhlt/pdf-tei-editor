@@ -304,6 +304,7 @@ from .routers import (
     bookmarks,
     navigation_xpath,
     manual,
+    annotation_guides,
     files_comments
 )
 
@@ -344,6 +345,7 @@ api_v1.include_router(messages.router)  # Messages for reviews and comments
 api_v1.include_router(bookmarks.router)  # Private bookmarks of the current user
 api_v1.include_router(navigation_xpath.router)  # XPath expressions of the node navigation
 api_v1.include_router(manual.router)  # Pages that plugins contribute to the user manual
+api_v1.include_router(annotation_guides.router)  # Annotation guide files of the extractors (guide window)
 api_v1.include_router(sse.router)  # SSE stream
 api_v1.include_router(maintenance.router)  # Admin maintenance controls
 api_v1.include_router(plugins_admin.router)  # Plugin management (admin); before plugins router
@@ -449,6 +451,21 @@ async def manual_window_root(request: Request) -> RedirectResponse:
 async def manual_window(path: str) -> FileResponse:
     """The page of the standalone user manual window, for any manual path."""
     return FileResponse(web_root / 'manual.html', media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+
+# Standalone annotation guide window: /guide/<guide id>#<heading>, resolved in the browser by app/src/guide.js
+
+@app.api_route("/guide", methods=["GET", "HEAD"], include_in_schema=False)
+async def guide_window_root(request: Request) -> RedirectResponse:
+    """Redirect /guide to /guide/, keeping the query string."""
+    query = f"?{request.url.query}" if request.url.query else ""
+    return RedirectResponse(url=f"/guide/{query}")
+
+
+@app.api_route("/guide/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def guide_window(path: str) -> FileResponse:
+    """The page of the standalone annotation guide window, for any guide id."""
+    return FileResponse(web_root / 'guide.html', media_type="text/html", headers={"Cache-Control": "no-cache"})
 
 
 # Mount docs

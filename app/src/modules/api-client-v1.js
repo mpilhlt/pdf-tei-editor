@@ -985,6 +985,27 @@
  */
 
 /**
+ * @typedef {Object} AnnotationGuideSectionItem
+ * @property {string} anchor - Heading anchor of the section, e.g. 'citation-model'
+ * @property {string} label - Label of the guide entry, e.g. 'Citation model guidelines'
+ * @property {string} category - Rule category of the entry; 'primary' for the main section of a variant
+ * @property {Array<string>} variant_ids - Variants the section applies to; '*' means every variant
+ */
+
+/**
+ * @typedef {Object} AnnotationGuideItem
+ * @property {string} id - Id of the guide in the guide window URL /guide/<id>, e.g. 'fossil-guidelines'
+ * @property {string} url - URL of the guide file as configured (a forge blob URL, without anchor)
+ * @property {string|null} url_template - The URL with '{ref}' in place of the branch or commit, if the URL is a recognized forge blob URL; null otherwise
+ * @property {Array<AnnotationGuideSectionItem>} sections - The sections the extractors point to, in declaration order
+ */
+
+/**
+ * @typedef {Object} AnnotationGuidesResponse
+ * @property {Array<AnnotationGuideItem>} guides
+ */
+
+/**
  * @typedef {Object} NavigationXpathItem
  * @property {string} value - XPath expression, e.g. `//tei:listBibl/tei:bibl`
  * @property {string} label - HTML-escaped label shown in the dropdown
@@ -2716,6 +2737,17 @@ export class ApiClientV1 {
    */
   async manualPages() {
     const endpoint = `/manual/pages`
+    return this.callApi(endpoint, 'GET');
+  }
+
+  /**
+   * The Markdown annotation guides that the available extractors declare, one entry per file. Served without
+   * authentication; the annotation guide window renders only these files.
+   *
+   * @returns {Promise<AnnotationGuidesResponse>}
+   */
+  async annotationGuides() {
+    const endpoint = `/annotation-guides`
     return this.callApi(endpoint, 'GET');
   }
 

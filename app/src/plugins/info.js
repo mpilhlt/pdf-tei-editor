@@ -28,11 +28,11 @@
 
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
-import { addHeadingLinkButtons, fitTocMenu, populateTocMenu, scrollToHeading } from '../modules/markdown-toc.js'
+import { addHeadingLinkButtons, fitTocMenu, populateTocMenu, scrollToHeading, visibleHeadingAnchor } from '../modules/markdown-toc.js'
 import { manualWindowUrl, parseManualUrl, parseManualWindowUrl } from '../modules/manual-links.js'
 import { notify } from '../modules/sl-utils.js'
 import { ManualViewer, resolveManualPath } from '../modules/manual-viewer.js'
-import { ManualSearchBox, loadManualIndex, markSectionMatches } from '../modules/manual-search-box.js'
+import { ManualSearchBox, attachDrawerSearch, loadManualIndex, markSectionMatches } from '../modules/manual-search-box.js'
 
 // Register templates
 await registerTemplate('info-dialog', 'info-drawer.html');
@@ -56,6 +56,9 @@ class InfoPlugin extends Plugin {
 
   /** @type {ManualSearchBox | null} */
   #searchBox = null
+
+  /** Shows or hides the search field in place of the title @type {(show: boolean) => void} */
+  #toggleSearch = () => {}
 
   /**
    * Pages contributed by plugins, for the user they were loaded for
@@ -134,20 +137,10 @@ class InfoPlugin extends Plugin {
       onOpen: target => this.#openSearchResult(target),
       onClose: () => this.#toggleSearch(false)
     })
-    this.#ui.searchBtn.addEventListener('click', () => this.#toggleSearch(this.#ui.searchInput.hidden))
-    document.addEventListener('keydown', event => {
-      if (this.#ui.open && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        this.#toggleSearch(true)
-      }
-    })
-    // Esc closes the search, not the drawer
-    this.#ui.addEventListener('sl-request-close', event => {
-      if (event.detail.source === 'keyboard' && !this.#ui.searchInput.hidden) {
-        event.preventDefault()
-        this.#toggleSearch(false)
-      }
-    })
+    this.#toggleSearch = attachDrawerSearch(
+      { drawer: this.#ui, button: this.#ui.searchBtn, input: this.#ui.searchInput, title: this.#ui.titleText },
+      () => this.#searchBox
+    )
 
     const aboutButton = createSingleFromTemplate('about-button')
     aboutButton.addEventListener('click', () => this.#showHelpFromLoginDialog())
@@ -215,29 +208,13 @@ class InfoPlugin extends Plugin {
    * Shows the current page, at the heading nearest the top of the drawer, in the manual window.
    */
   openInWindow() {
-    let url = this.linkTo(this.#visibleAnchor())
+    let url = this.linkTo(visibleHeadingAnchor(this.#ui, this.#ui.content))
     // in development mode, the window loads the sources as well
     if (new URLSearchParams(window.location.search).has('dev')) {
       const [base, hash] = url.split('#')
       url = `${base}${base.includes('?') ? '&' : '?'}dev${hash ? `#${hash}` : ''}`
     }
     window.open(url, MANUAL_WINDOW_NAME, 'popup,width=1100,height=900')
-  }
-
-  /**
-   * The anchor of the last heading at or above the top of the drawer's visible area.
-   * @returns {string} The anchor, or "" if no heading is above the top
-   */
-  #visibleAnchor() {
-    const body = this.#ui.shadowRoot?.querySelector('[part="body"]')
-    if (!body) return ''
-    const top = body.getBoundingClientRect().top + 8
-    let anchor = ''
-    for (const heading of this.#ui.content.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]')) {
-      if (heading.getBoundingClientRect().top > top) break
-      anchor = heading.id
-    }
-    return body.scrollTop > 0 ? anchor : ''
   }
 
   /**
@@ -272,22 +249,6 @@ class InfoPlugin extends Plugin {
       }
     }
     return this.#contributions.contributions
-  }
-
-  /**
-   * Shows or hides the search field in place of the title.
-   * @param {boolean} show
-   */
-  #toggleSearch(show) {
-    const input = this.#ui.searchInput
-    input.hidden = !show
-    this.#ui.titleText.hidden = show
-    if (show) {
-      setTimeout(() => input.focus(), 0)
-    } else {
-      input.value = ''
-      this.#searchBox?.hideResults()
-    }
   }
 
   /**

@@ -15,7 +15,8 @@
  * @import { PluginPage } from './manual-slots.js'
  */
 
-import { createMarkdownRenderer, extractHeadings, resolveRelativeSources } from './markdown-utils.js'
+import { createMarkdownRenderer, extractHeadings } from './markdown-utils.js'
+import { MarkdownPageViewer, isExternalHref } from './markdown-page-viewer.js'
 import { contributionPagePath, fillManualSlots, parsePluginPagePath, pickManualFile, pluginPagePath, pluginPageUrl } from './manual-slots.js'
 import { parseManualUrl } from './manual-links.js'
 
@@ -84,16 +85,7 @@ function normalizeSegments(dir, relativePath) {
   return parts.join('/')
 }
 
-/**
- * Whether a link points to another site (or uses a scheme such as mailto:)
- * @param {string} href
- * @returns {boolean}
- */
-function isExternal(href) {
-  return /^(https?:)?\/\//i.test(href) || /^[a-z][a-z0-9+.-]*:/i.test(href)
-}
-
-export class ManualViewer {
+export class ManualViewer extends MarkdownPageViewer {
   /** @type {ManualViewerOptions} */
   #options
 
@@ -110,10 +102,10 @@ export class ManualViewer {
    * @param {ManualViewerOptions} options
    */
   constructor(options) {
+    super(options.container)
     this.#options = options
     this.#md = createMarkdownRenderer()
     this.#pluginMd = createMarkdownRenderer({ html: false })
-    options.container.addEventListener('click', event => this.#handleAnchorClick(event))
   }
 
   /** The Markdown renderer of core pages @returns {MarkdownIt} */
@@ -195,7 +187,7 @@ export class ManualViewer {
     const source = await this.fetchPage(path, lang)
     this.#currentPage = source.path
     const md = source.pluginPage ? this.#pluginMd : this.#md
-    container.innerHTML = resolveRelativeSources(md.render(source.markdown), source.url)
+    this.renderMarkdown(md, source.markdown, source.url)
     this.#rewriteLinks()
     if (source.pluginPage) {
       const note = document.createElement('p')
@@ -217,58 +209,25 @@ export class ManualViewer {
   }
 
   /**
-   * Scrolls to a heading of the page shown.
-   * @param {string} anchor - Heading anchor without "#"
-   * @param {ScrollBehavior} [behavior]
-   * @returns {boolean} Whether the heading was found
-   */
-  scrollToAnchor(anchor, behavior = 'smooth') {
-    if (!anchor) return false
-    const target = this.#options.container.querySelector(`[id="${CSS.escape(anchor)}"]`)
-    if (!target) return false
-    target.scrollIntoView({ behavior, block: 'start' })
-    return true
-  }
-
-  /**
-   * Links to other manual pages call `onNavigate`, links to other sites open in a new tab. Links to sections of
-   * the page shown are handled by #handleAnchorClick.
+   * Links to other manual pages call `onNavigate`, links to other sites open in a new tab.
    */
   #rewriteLinks() {
-    for (const link of this.#options.container.querySelectorAll('a[href]')) {
-      const href = link.getAttribute('href') || ''
-      if (!href || href.startsWith('#')) continue
+    this.rewriteLinks(href => {
       const manualTarget = parseManualUrl(href)
       if (manualTarget) {
-        link.addEventListener('click', (/** @type {MouseEvent} */ event) => {
+        return (/** @type {MouseEvent} */ event) => {
           if (event.ctrlKey || event.metaKey || event.shiftKey) return
           event.preventDefault()
           event.stopPropagation()
           this.#options.onNavigate(`/${manualTarget.path}${manualTarget.anchor ? `#${manualTarget.anchor}` : ''}`)
-        })
-      } else if (isExternal(href)) {
-        link.setAttribute('target', '_blank')
-        link.setAttribute('rel', 'noopener')
-      } else {
-        link.addEventListener('click', event => {
-          event.preventDefault()
-          const { path, anchor } = resolveManualPath(this.#currentPage, href)
-          this.#options.onNavigate(`/${path}${anchor ? `#${anchor}` : ''}`)
-        })
+        }
       }
-    }
-  }
-
-  /**
-   * Keeps links to sections of the page shown ("#anchor") in the container.
-   * @param {MouseEvent} event
-   */
-  #handleAnchorClick(event) {
-    const link = /** @type {HTMLElement} */ (event.target).closest?.('a[href^="#"]')
-    if (!link) return
-    const anchor = decodeURIComponent((link.getAttribute('href') || '').slice(1))
-    if (!anchor) return
-    event.preventDefault()
-    this.scrollToAnchor(anchor)
+      if (isExternalHref(href)) return null
+      return event => {
+        event.preventDefault()
+        const { path, anchor } = resolveManualPath(this.#currentPage, href)
+        this.#options.onNavigate(`/${path}${anchor ? `#${anchor}` : ''}`)
+      }
+    })
   }
 }

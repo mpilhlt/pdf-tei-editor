@@ -1124,6 +1124,10 @@ sl-drawer.diagnostics-drawer::part(footer) {
   color: var(--sl-color-neutral-900);
 }
 
+.manual-search-section.manual-search-ungrouped {
+  padding-left: 12px;
+}
+
 .manual-search-snippet {
   display: block;
   margin-top: 2px;
@@ -1251,4 +1255,10 @@ sl-drawer.diagnostics-drawer::part(footer) {
 .xpath-navigation-error {
   color: var(--sl-color-danger-600);
   font-size: var(--sl-font-size-small);
+}
+
+/* Shoelace badges and icon buttons set their own display, which overrides the hidden attribute */
+sl-badge[hidden],
+sl-icon-button[hidden] {
+  display: none;
 }

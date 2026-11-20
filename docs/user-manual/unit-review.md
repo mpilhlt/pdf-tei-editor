@@ -134,7 +134,7 @@ When the guide changed and the guide is on GitHub or GitLab, the line also names
 
 Which override the LLM reviewer uses: if the category has a separate machine version, your selected override on **Machine rules**; otherwise your selected override on **Guide (human)**.
 
-If you select an override of the guide section, the Annotation Guide drawer shows your text for that section and marks it with a **Personal version** badge.
+If you select an override of the guide section, the Annotation Guide drawer shows your text for that section and marks it with a **Personal version** badge. The annotation guide window, which opens from the drawer, always shows the original.
 
 An override that was written against an older version of the original is marked with a warning when the original has changed since ("Based on an older version of the original"). Review it against the current original and save it again to clear the marker.
 
