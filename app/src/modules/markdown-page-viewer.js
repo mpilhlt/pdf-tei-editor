@@ -24,12 +24,15 @@ export function isExternalHref(href) {
 
 /**
  * Removes scripts, event handlers and other active content from HTML. Keeps the formatting markup that Markdown pages
- * use (e.g. `<sup>`, `<details>`) and the heading ids.
+ * use (e.g. `<sup>`, `<details>`), the heading ids and the `<sl-icon name="...">` of admonitions.
  * @param {string} html
  * @returns {string}
  */
 export function sanitizeHtml(html) {
-  return DOMPurify.sanitize(html, { ADD_ATTR: ['target'] })
+  return DOMPurify.sanitize(html, {
+    ADD_ATTR: ['target'],
+    CUSTOM_ELEMENT_HANDLING: { tagNameCheck: /^sl-icon$/, attributeNameCheck: /^name$/, allowCustomizedBuiltInElements: false }
+  })
 }
 
 export class MarkdownPageViewer {
