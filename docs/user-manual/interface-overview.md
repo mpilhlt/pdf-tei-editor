@@ -70,7 +70,7 @@ The toolbar is organized into logical sections. The application itself provides 
 
 ### Added by Plugins
 
-Depending on the installed plugins, the toolbar contains further buttons, for example the login dashboard, document search, or <sl-icon name="arrow-repeat"></sl-icon> synchronization with a WebDAV repository (WebDAV sync plugin). Uploading and downloading XML and running the TEI Wizard are done in the XML editor toolbar.
+Plugins add further functions to the interface, for example the GROBID plugin, which offers extraction with a GROBID server in the extraction dialog. Depending on the installed plugins, the toolbar also contains further buttons, for example the login dashboard or document search. Uploading and downloading XML and running the TEI Wizard are done in the XML editor toolbar. See [Plugins](plugins.md) for where plugins appear and where to find their documentation.
 
 ## Navigation Features
 

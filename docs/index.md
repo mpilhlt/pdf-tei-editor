@@ -16,6 +16,7 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[People of a Document](user-manual/document-people.md)** - Who worked on a document, adding people, sending them messages
 - **[Collection Management](user-manual/collection-management.md)** - Organizing documents
 - **[Import & Export](user-manual/import-export.md)** - Bulk import/export of files
+- **[Plugins](user-manual/plugins.md)** - Functions added by plugins and where to find their documentation
 
 ## Administration
 
