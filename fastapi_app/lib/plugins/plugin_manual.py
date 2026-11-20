@@ -27,6 +27,7 @@ MANUAL_SLOTS: dict[str, str] = {
     "tutorials": "Step-by-step tutorials (index.md, user-manual/plugins.md)",
     "extraction": "Extractors and their options (user-manual/extraction-workflow.md)",
     "review": "Review aids (user-manual/review-workflow.md)",
+    "inference": "Language models and their providers (user-manual/language-models.md)",
     "admin": "Configuration of plugins (user-manual/admin-guide.md)",
 }
 """The slots of the core manual pages: name -> what belongs there (and where the slot is)."""

@@ -963,6 +963,7 @@
  * @property {string} title - Link text
  * @property {string} description - One sentence shown after the link
  * @property {Object<string, string>} files - Markdown file per language code, relative to the plugin directory; fetch it from /api/v1/manual/plugins/{plugin_id}/{file}
+ * @property {Object<string, string>=} anchors - Heading anchor per language code, for the files the page opens at a heading of
  * @property {number} order - Sort key within the slot
  * @property {boolean} active - False if the plugin or one of the plugins the page requires is not active (only listed for administrators)
  */

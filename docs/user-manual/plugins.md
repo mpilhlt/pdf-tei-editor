@@ -10,7 +10,7 @@ Plugins add their functions to the existing parts of the interface:
 - buttons in the toolbar (see [Added by Plugins](interface-overview.md#added-by-plugins)) and in the XML editor toolbar,
 - extractors and their options in the extraction dialog (see [Extraction Workflow](extraction-workflow.md)),
 - entries in the context menu of the XML editor, such as **Bookmark…** and **Comment…** (see [Editing Workflow](editing-workflow.md)),
-- models under **Tools** > **Inference** > **Default Model**, registered by the LLM provider plugins.
+- models under **Tools** > **Inference** > **Default Model**, registered by the LLM provider plugins (see [Choosing a language model](language-models.md)).
 
 ![The open Tools menu with the sections Administration, Inference, Document rules and Annotation; the Annotation section contains the entry Review document annotations](../images/admin-tools-menu.png)
 
