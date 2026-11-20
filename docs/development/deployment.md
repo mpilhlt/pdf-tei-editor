@@ -12,6 +12,8 @@ The deployment system consists of three layers:
 2. **Container management** (`scripts/deploy/container.js deploy`) - Low-level container operations
 3. **Container runtime** - Docker/Podman commands
 
+Instances can also run from a git checkout as a systemd service, see [Git Checkout Deployment (systemd)](#git-checkout-deployment-systemd).
+
 ## Deployment Wrapper Script
 
 ### Overview
@@ -273,6 +275,31 @@ podman rm pdf-tei-editor-editor-company-com
 # Inspect container
 podman inspect pdf-tei-editor-editor-company-com
 ```
+
+## Git Checkout Deployment (systemd)
+
+Instead of a container, an instance can run directly from a git checkout as a systemd service. `bin/start-dev` runs `npm run generate` on every start to create the plugin and module registries, the importmap and the highlight.js bundle, which are not under version control. A systemd unit does not load nvm or the user's shell profile, so node and npm must be on the `PATH` set in the unit. If npm is missing, `bin/start-dev` falls back to the files generated earlier by `npm run build` and prints a warning; if these files do not exist either, it exits with an error.
+
+### Install the Service
+
+Run as the user that owns the checkout (not with `sudo`), with the node version to use active:
+
+```bash
+nvm use 24                                          # if node is installed with nvm
+scripts/deploy/install-systemd-service.sh --dry-run # show the unit file
+scripts/deploy/install-systemd-service.sh           # write /etc/systemd/system/pdf-tei-editor.service
+sudo systemctl restart pdf-tei-editor
+```
+
+The script writes the directories of the current `node`, `npm` and `uv` into the unit's `PATH`. Re-run it after switching to another node version, otherwise the unit points to a node directory that no longer exists. Options: `--name` for the service name, `--start start-prod` to run the production server instead of `start-dev`. A drop-in in `/etc/systemd/system/pdf-tei-editor.service.d/` that sets `Environment=PATH=...` overrides the `PATH` in the unit; remove it when switching to the generated unit.
+
+### Update the Instance
+
+```bash
+scripts/deploy/update-instance.sh
+```
+
+The script switches on maintenance mode (via `npm run manage-remote`, which needs `API_TOKEN` in `.env`), runs `git pull --ff-only`, `uv sync`, `npm install` and `npm run build`, restarts the service and waits for `/health` to respond. It then reloads the frontend of logged-in users and switches maintenance mode off. If the server does not come back within the timeout (`--timeout`, default 120 seconds), it prints the last lines of the service log and exits with an error; maintenance mode then stays on until `npm run manage-remote -- maintenance off` is run. Local changes in the checkout are stashed before pulling.
 
 ## Development Workflow
 
