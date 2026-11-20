@@ -2137,6 +2137,22 @@ describe('DocumentRulesPlugin sync status line', () => {
     });
   }
 
+  const readOnlyCases = [
+    ['machine_outdated', 'Machine rules outdated: the guide changed since the last sync. This document is read-only. To update the machine rules from the guide, open a version of the document you can edit'],
+    ['both_changed', 'Guide and machine rules both changed since they were last marked as in sync. This document is read-only. To mark the machine rules as in sync, open a version of the document you can edit'],
+    ['in_sync', 'In sync with the guide'],
+  ];
+  for (const [status, text] of readOnlyCases) {
+    it(`shows "${text}" without a link for ${status} in a read-only document`, async () => {
+      const { plugin } = setup(async () => response(status));
+      plugin._documentReadOnly = true;
+      await plugin._refreshSyncStatus();
+      const line = plugin._editorDialogUi.syncStatus;
+      assert.strictEqual(line.textContent.trim(), text);
+      assert.strictEqual(line.querySelector('a'), null);
+    });
+  }
+
   it('appends the short hash of the last sync commit', async () => {
     const { plugin } = setup(async () => response('in_sync', 'abc1234def5678'));
     await plugin._refreshSyncStatus();

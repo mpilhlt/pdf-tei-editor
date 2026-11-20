@@ -140,11 +140,22 @@ const SYNC_STATUS_TEXT = Object.freeze({
 })
 
 /**
- * Hint shown after the status-line copy (and the last-sync commit), before the action link; omitted when there is no link (read-only document).
+ * Hint shown after the status-line copy (and the last-sync commit), before the action link; omitted when there is no link (read-only document, see SYNC_STATUS_READ_ONLY_HINT).
  * @type {Readonly<Partial<Record<SyncStatusResponse['status'], string>>>}
  */
 const SYNC_STATUS_HINT = Object.freeze({
   both_changed: 'If the machine rules already reflect the guide, you can mark them as in sync. This only updates the sync marker in the repository, not the texts'
+})
+
+/**
+ * Hint shown instead of the action link for a read-only document: the
+ * actions store an override in the document, so they need a version the
+ * user can edit.
+ * @type {Readonly<Partial<Record<SyncStatusResponse['status'], string>>>}
+ */
+const SYNC_STATUS_READ_ONLY_HINT = Object.freeze({
+  machine_outdated: 'This document is read-only. To update the machine rules from the guide, open a version of the document you can edit',
+  both_changed: 'This document is read-only. To mark the machine rules as in sync, open a version of the document you can edit'
 })
 
 /**
@@ -1035,7 +1046,8 @@ class DocumentRulesPlugin extends Plugin {
     if (response.synced_commit) text += ` (last sync: ${response.synced_commit.slice(0, 7)})`
     const action = this._documentReadOnly ? null : SYNC_STATUS_ACTIONS[response.status]
     // The hint explains the action link, so it goes with it
-    const hint = action ? SYNC_STATUS_HINT[response.status] : undefined
+    // Without the link (read-only document), say how to get to it instead
+    const hint = action ? SYNC_STATUS_HINT[response.status] : this._documentReadOnly ? SYNC_STATUS_READ_ONLY_HINT[response.status] : undefined
     if (hint) text += `. ${hint}`
     line.replaceChildren(icon, document.createTextNode(text))
     if (action === 'update') {

@@ -128,6 +128,8 @@ When a category has both layers, a status line below the tabs shows whether the 
 
 The guide repository does not check the markers itself: the machine rules are kept in sync from here, with **Update from guide**, **Mark as in sync** and **Propose change upstream** (see below). If someone changes either file directly in the repository, the status line shows it.
 
+Both links store an override in the document. In a read-only document the line has no link and says instead that you need to open a version of the document you can edit.
+
 When the guide changed and the guide is on GitHub or GitLab, the line also names the commit of the guide that the machine rules were last synced with, e.g. "(last sync: a1b2c3d)". The line is refreshed when you switch tabs, select a version or save.
 
 Which override the LLM reviewer uses: if the category has a separate machine version, your selected override on **Machine rules**; otherwise your selected override on **Guide (human)**.
