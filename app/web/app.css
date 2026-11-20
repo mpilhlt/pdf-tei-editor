@@ -1064,6 +1064,105 @@ sl-drawer.diagnostics-drawer::part(footer) {
   opacity: 1;
 }
 
+/* User manual search (manual-search-box.js): results below the search field in the drawer and the manual window */
+.manual-drawer-label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.manual-drawer-label sl-input {
+  flex: 1;
+}
+
+.manual-drawer-label [hidden] {
+  display: none;
+}
+
+.manual-search-anchor {
+  position: sticky;
+  top: calc(-1 * var(--body-spacing, var(--sl-spacing-large)));
+  height: 0;
+  z-index: 10;
+}
+
+.manual-search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--sl-color-neutral-0);
+  border: 1px solid var(--sl-color-neutral-300);
+  border-radius: var(--sl-border-radius-medium);
+  box-shadow: var(--sl-shadow-large);
+  font-size: var(--sl-font-size-small);
+}
+
+.manual-search-results [role="option"] {
+  cursor: pointer;
+}
+
+.manual-search-page {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-weight: var(--sl-font-weight-semibold);
+  color: var(--sl-color-neutral-800);
+  background: var(--sl-color-neutral-50);
+  border-top: 1px solid var(--sl-color-neutral-200);
+}
+
+.manual-search-page:first-child {
+  border-top: 0;
+}
+
+.manual-search-section {
+  padding: 5px 12px 5px 26px;
+  color: var(--sl-color-neutral-900);
+}
+
+.manual-search-snippet {
+  display: block;
+  margin-top: 2px;
+  color: var(--sl-color-neutral-600);
+  font-size: var(--sl-font-size-x-small);
+}
+
+.manual-search-results [role="option"]:hover,
+.manual-search-results [role="option"].selected {
+  background: var(--sl-color-primary-100);
+}
+
+.manual-search-source {
+  font-weight: var(--sl-font-weight-normal);
+  font-size: var(--sl-font-size-x-small);
+  padding: 0 6px;
+  border-radius: var(--sl-border-radius-pill);
+  background: var(--sl-color-primary-100);
+  color: var(--sl-color-primary-700);
+}
+
+.manual-search-message {
+  padding: 6px 12px;
+  color: var(--sl-color-neutral-500);
+  font-size: var(--sl-font-size-x-small);
+  border-top: 1px solid var(--sl-color-neutral-200);
+}
+
+.manual-search-message:first-child {
+  border-top: 0;
+}
+
+.manual-search-results mark,
+.markdown-body mark.manual-search-mark {
+  background: var(--sl-color-warning-200);
+  color: inherit;
+  padding: 0;
+}
+
 /* Screenshots in the user manual: a paragraph with only an image, followed by an italic caption paragraph */
 .markdown-body p > img:only-child {
   display: block;

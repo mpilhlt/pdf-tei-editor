@@ -53,3 +53,59 @@ export function manualUrl(path, anchor = '', ref = 'main') {
   const cleanPath = path.replace(/^\/+/, '')
   return `${MANUAL_REPO_URL}/blob/${ref}/docs/${cleanPath}${anchor ? `#${anchor}` : ''}`
 }
+
+/** Path prefix of the standalone manual window (served by `fastapi_app/main.py`, rendered by `app/src/manual.js`) */
+export const MANUAL_WINDOW_PATH = '/manual/'
+
+/**
+ * A page and section of the standalone manual window
+ * @typedef {object} ManualWindowTarget
+ * @property {string} path - Path of the Markdown file relative to `docs/` ("index.md" for the start page), or the
+ *   virtual path `plugins/<plugin id>/<file>` of a plugin page
+ * @property {string} anchor - Heading anchor without "#", or "" for the top of the page
+ * @property {string} lang - Language requested with `?lang=`, or ""
+ */
+
+/**
+ * Builds the URL of a page in the standalone manual window, e.g.
+ * `/manual/user-manual/review-workflow#unit-review`. The path loses its `.md` extension and `index.md` is the
+ * start page `/manual/`.
+ * @param {string} path - Path relative to `docs/` or virtual plugin page path, with or without leading "/"
+ * @param {string} [anchor] - Heading anchor without "#"
+ * @param {{lang?: string, origin?: string}} [options] - `lang`: language of plugin pages; `origin`: prefix for an
+ *   absolute URL, e.g. `location.origin`
+ * @returns {string}
+ */
+export function manualWindowUrl(path, anchor = '', { lang = '', origin = '' } = {}) {
+  let clean = path.replace(/^\/+/, '').replace(/\.md$/i, '')
+  if (clean === 'index') clean = ''
+  const encoded = clean.split('/').map(encodeURIComponent).join('/')
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : ''
+  return `${origin}${MANUAL_WINDOW_PATH}${encoded}${query}${anchor ? `#${encodeURIComponent(anchor)}` : ''}`
+}
+
+/**
+ * Parses the URL of a page in the standalone manual window.
+ * @param {string} url - Absolute URL, or a path starting with "/"
+ * @param {string} [origin] - Origin the URL must have; any origin if omitted
+ * @returns {ManualWindowTarget | null} The target, or null if `url` is not a manual window URL
+ */
+export function parseManualWindowUrl(url, origin) {
+  let parsed
+  try {
+    parsed = new URL(url, 'http://localhost')
+  } catch {
+    return null
+  }
+  if (origin && /^[a-z][a-z0-9+.-]*:/i.test(url) && parsed.origin !== origin) return null
+  const prefix = MANUAL_WINDOW_PATH.slice(0, -1)
+  if (parsed.pathname !== prefix && !parsed.pathname.startsWith(MANUAL_WINDOW_PATH)) return null
+  let path = decodeURIComponent(parsed.pathname.slice(MANUAL_WINDOW_PATH.length)).replace(/\/+$/, '')
+  if (!path) path = 'index'
+  if (!/\.md$/i.test(path)) path = `${path}.md`
+  return {
+    path,
+    anchor: decodeURIComponent(parsed.hash.replace(/^#/, '')),
+    lang: parsed.searchParams.get('lang') || ''
+  }
+}

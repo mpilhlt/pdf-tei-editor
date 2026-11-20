@@ -5,7 +5,7 @@
  * the linked section in the user manual drawer instead of GitHub, that the
  * dialog comes back when the drawer closes, that the footer's "Contents"
  * drop-up lists and navigates the page's headings, and that a heading's
- * "Copy link" button copies the section's manual link.
+ * "Copy link" button copies the URL of the section in the manual window.
  *
  * @testCovers app/src/plugins/info.js
  * @testCovers app/src/templates/info-drawer.html
@@ -92,7 +92,7 @@ test.describe('User manual navigation', () => {
       await heading.hover();
       await heading.locator('sl-icon-button.heading-link').click();
       const copied = await page.evaluate(() => /** @type {any} */ (window).copiedText);
-      expect(copied).toMatch(/^https:\/\/github\.com\/mpilhlt\/pdf-tei-editor\/blob\/[^/]+\/docs\/development\/api-reference\.md#best-practices$/);
+      expect(copied).toBe(new URL('/manual/development/api-reference#best-practices', page.url()).toString());
 
       // the edit button is in the header, the version next to it
       await expect(drawer.locator('sl-icon-button[data-name="editGitHubBtn"]')).toBeVisible();

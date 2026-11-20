@@ -81,3 +81,39 @@ The floating panel allows navigation using XPath expressions:
 - **Default**: `//tei:biblStruct` to navigate between bibliographic entries
 - **Custom XPath**: Select "Custom XPath" to enter your own expression
 - **Navigation Buttons**: Use << and >> to move between matching nodes
+
+## The User Manual
+
+Open the manual with the <sl-icon name="question-circle"></sl-icon> help button in the lower right corner and **User Manual**. It opens in a drawer on the right. **Back**, **Home** and **Forward** in the footer move between the pages you visited, and **Contents** lists the headings of the page.
+
+![The header of the manual drawer: the title "User Manual", a search button, the version, the buttons "Open in new window" and "Edit on GitHub", and the close button](../images/user-manual-header.png)
+
+*The header of the manual drawer.*
+
+### Searching the manual
+
+Click <sl-icon name="search"></sl-icon> in the header of the drawer, or press `Ctrl+K` (`Cmd+K` on macOS) while the manual is open. The search field takes the place of the title. The search covers the text of all pages of the manual, including the pages that plugins add. Matches in page titles and headings come first. The results are grouped by page; a result whose heading does not contain the words you typed shows the text around the first match.
+
+![The search field with the word "disputed" and the list of results below it: "Review Workflow" with the sections "Disputed units" and "7. Approving", then "Document Editing" and "Unit Review", each with a snippet in which "disputed" is highlighted](../images/user-manual-search.png)
+
+*Results for "disputed".*
+
+- A result matches when every word you type is the start of a word in it, so `tok` finds "token". Upper and lower case and accents make no difference.
+- Put words in double quotes to find them as a phrase, e.g. `"review marks"`.
+- Use `↑` and `↓` to select a result and `Enter` to open it, or click it. The words you searched for are highlighted in the section you open.
+- `Esc` closes the search; a second `Esc` closes the drawer.
+- With an empty search field, the list shows all pages of the manual.
+
+### Sharing a link to a section
+
+Point at a heading and click the <sl-icon name="link-45deg"></sl-icon> button next to it to copy the link to that section. The link opens the section in the manual window of your installation, outside the editor, so you can send it to anyone who can reach the installation. Nobody needs to log in to read the manual.
+
+### The manual in its own window
+
+Click <sl-icon name="box-arrow-up-right"></sl-icon> **Open in new window** in the header of the drawer to show the current section in a separate browser window. The window shows the headings of the page on the left and has its own search field (press `/` or `Ctrl+K` to start typing). The address bar always holds the link to the section you are reading, and the browser's back and forward buttons move between the pages you visited.
+
+![The manual window: a header with the title "PDF-TEI Editor User Manual", the search field, the version and the GitHub button; the headings of the page "Personal Access Tokens" on the left and the section "Creating a token" on the right](../images/user-manual-window.png)
+
+*The manual window.*
+
+The window lists the pages that plugins add for all users, whatever their roles. In the drawer, you only see the plugin pages that concern your roles.
