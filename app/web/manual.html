@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light" />
+    <title>User Manual - PDF-TEI Editor</title>
+    <!-- Served by fastapi_app/main.py for every path below /manual/, rendered by app/src/manual.js -->
+    <link rel="stylesheet" href="/app.css">
+    <link rel="stylesheet" href="/github-markdown.css?v=light">
+    <link rel="stylesheet" href="/github-markdown-light.css">
+    <link rel="stylesheet" href="/highlight-light.css">
+    <link rel="stylesheet" href="/manual.css">
+    <script src="/highlight.js"></script>
+    <script src="/bootstrap.js" data-entry="manual"></script>
+  </head>
+  <body class="manual-window">
+    <header class="manual-window-header">
+      <a class="manual-window-home" href="/manual/" data-name="homeLink">
+        <img src="/favicon.svg" alt="" width="24" height="24">
+        <span>PDF-TEI Editor User Manual</span>
+      </a>
+      <div class="manual-window-search">
+        <sl-input data-name="searchInput" size="small" placeholder="Search the manual" clearable autocomplete="off">
+          <sl-icon name="search" slot="prefix"></sl-icon>
+        </sl-input>
+        <div data-name="searchResults"></div>
+      </div>
+      <span class="manual-window-version" data-name="versionInfo"></span>
+      <sl-tooltip content="Edit on GitHub">
+        <sl-icon-button data-name="editGitHubBtn" name="github" label="Edit on GitHub"></sl-icon-button>
+      </sl-tooltip>
+    </header>
+    <div class="manual-window-main">
+      <nav class="manual-window-toc" data-name="toc" aria-label="Contents of this page"></nav>
+      <main class="manual-window-page">
+        <div data-name="content" class="markdown-body" data-theme="light"></div>
+      </main>
+    </div>
+  </body>
+</html>

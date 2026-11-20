@@ -5,6 +5,7 @@ contributions and the file route.
 @testCovers fastapi_app/lib/plugins/plugin_manifest.py
 @testCovers fastapi_app/lib/plugins/plugin_manual.py
 @testCovers fastapi_app/routers/manual.py
+@testCovers fastapi_app/lib/utils/manual_pages.py
 """
 
 import json
@@ -22,6 +23,7 @@ from fastapi_app.lib.plugins.plugin_manifest import ManifestError, parse_manifes
 from fastapi_app.lib.plugins import plugin_manual
 from fastapi_app.lib.plugins.plugin_manual import ManualFileNotFound, list_contributions, resolve_manual_file
 from fastapi_app.lib.plugins.plugin_registry import PluginRecord, PluginRegistry
+from fastapi_app.lib.utils.manual_pages import list_manual_pages
 from fastapi_app.routers import manual as manual_router
 
 TUTORIAL = {
@@ -145,6 +147,15 @@ class TestContributions(RegistryTestCase):
             self.ids(None)
         self.assertIn("unknown slot 'nowhere'", logs.output[0])
 
+    def test_all_roles(self) -> None:
+        all_roles = [(c.page.id, c.active) for c in list_contributions(self.registry, None, all_roles=True)]
+        self.assertEqual(all_roles, [("llm-review", True), ("models", True), ("admin", True)])
+
+    def test_all_roles_without_inactive_plugins(self) -> None:
+        self.registry.set_disabled({"review"})
+        all_roles = [(c.page.id, c.active) for c in list_contributions(self.registry, {"roles": ["admin"]}, all_roles=True)]
+        self.assertEqual(all_roles, [("models", True), ("admin", True)])
+
     def test_failed_plugin_not_listed(self) -> None:
         self.registry._records["grobid"].load_status = "failed"
         self.assertEqual(self.ids({"roles": ["admin"]}), [])
@@ -183,6 +194,7 @@ class TestRouter(RegistryTestCase):
         app.dependency_overrides[manual_router.get_plugin_registry] = lambda: self.registry
         self.user: dict[str, Any] | None = {"username": "a", "roles": ["annotator"]}
         app.dependency_overrides[get_current_user] = lambda: self.user
+        self.app = app
         self.client = TestClient(app)
 
     def test_contributions(self) -> None:
@@ -194,6 +206,24 @@ class TestRouter(RegistryTestCase):
         self.assertEqual(item["files"], {"en": "docs/llm-review.md"})
         self.assertEqual(item["anchors"], {})
         self.assertTrue(item["active"])
+
+    def test_contributions_all_roles(self) -> None:
+        response = self.client.get("/api/v1/manual/contributions", params={"all_roles": "true"})
+        self.assertEqual([item["id"] for item in response.json()["contributions"]], ["llm-review", "models", "admin"])
+
+    def test_pages(self) -> None:
+        docs = self.tmp / "docs"
+        (docs / "user-manual").mkdir(parents=True)
+        (docs / "index.md").write_text("# Home\n\n- [B](user-manual/b.md)\n- [A](./user-manual/a.md#x)\n", encoding="utf-8")
+        (docs / "user-manual" / "a.md").write_text("# A\n", encoding="utf-8")
+        (docs / "user-manual" / "b.md").write_text("# B\n", encoding="utf-8")
+        self.app.dependency_overrides[manual_router.get_docs_root] = lambda: docs
+        response = self.client.get("/api/v1/manual/pages")
+        self.assertEqual(response.json()["pages"], [
+            {"path": "index.md", "title": "Home"},
+            {"path": "user-manual/b.md", "title": "B"},
+            {"path": "user-manual/a.md", "title": "A"},
+        ])
 
     def test_contribution_anchors(self) -> None:
         self.user = {"username": "admin", "roles": ["admin"]}
@@ -207,6 +237,38 @@ class TestRouter(RegistryTestCase):
         self.assertEqual(response.text, "# Tutorial\n")
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
         self.assertEqual(self.client.get("/api/v1/manual/plugins/grobid/plugin.py").status_code, 404)
+
+
+class TestManualPages(unittest.TestCase):
+    def setUp(self) -> None:
+        self.docs = Path(tempfile.mkdtemp())
+        (self.docs / "user-manual" / "sub").mkdir(parents=True)
+        (self.docs / "development").mkdir()
+        files = {
+            "index.md": "# Docs\n\n```markdown\n# Not a title\n[x](user-manual/z.md)\n```\n\n[Guide](user-manual/guide.md) [Dev](development/dev.md) [About](about.md)\n",
+            "about.md": "About without heading\n",
+            "user-manual/guide.md": "Intro\n\n# Guide #\n\nSee [Sub](sub/deep.md \"title\") and [web](https://example.org/x.md)\n",
+            "user-manual/sub/deep.md": "# Deep\n\n[Back](../guide.md) [Out](../../../x.md)\n",
+            "user-manual/z.md": "# Zed\n",
+            "user-manual/y.md": "# Why\n",
+            "development/dev.md": "# Dev\n",
+        }
+        for path, text in files.items():
+            (self.docs / path).write_text(text, encoding="utf-8")
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.docs)
+
+    def test_order_and_titles(self) -> None:
+        pages = [(p.path, p.title) for p in list_manual_pages(self.docs)]
+        self.assertEqual(pages, [
+            ("index.md", "Docs"),
+            ("user-manual/guide.md", "Guide"),
+            ("about.md", "about"),
+            ("user-manual/sub/deep.md", "Deep"),
+            ("user-manual/y.md", "Why"),
+            ("user-manual/z.md", "Zed"),
+        ])
 
 
 if __name__ == "__main__":

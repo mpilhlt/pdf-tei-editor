@@ -1,6 +1,7 @@
 # Build artifacts
 assets/
 app.js
+manual.js
 templates.json
 version.js
 sandbox-client.js

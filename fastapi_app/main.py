@@ -4,7 +4,7 @@ FastAPI main application with versioned API endpoints.
 
 from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -434,6 +434,22 @@ if is_dev_mode:
     tests_root = project_root / 'tests'
     if tests_root.exists():
         app.mount("/tests", StaticFiles(directory=str(tests_root)), name="tests")
+
+# Standalone user manual window: every path below /manual/ is resolved in the browser by
+# app/src/manual.js (shareable links such as /manual/user-manual/review-workflow#unit-review)
+
+@app.api_route("/manual", methods=["GET", "HEAD"], include_in_schema=False)
+async def manual_window_root(request: Request) -> RedirectResponse:
+    """Redirect /manual to /manual/, keeping the query string."""
+    query = f"?{request.url.query}" if request.url.query else ""
+    return RedirectResponse(url=f"/manual/{query}")
+
+
+@app.api_route("/manual/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def manual_window(path: str) -> FileResponse:
+    """The page of the standalone user manual window, for any manual path."""
+    return FileResponse(web_root / 'manual.html', media_type="text/html", headers={"Cache-Control": "no-cache"})
+
 
 # Mount docs
 docs_root = project_root / 'docs'

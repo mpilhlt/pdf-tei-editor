@@ -1,12 +1,15 @@
 /**
- * This implements a modal window with the end-user documentation taken from the "docs" folder
- * in the app root. The documentation is written in markdown and converted to HTML using
- * the markdown-it library. Links to local documentation are intercepted and loaded into the dialog.
- * Links to external resources are opened in a new browser tab.
+ * This implements a drawer with the end-user documentation taken from the "docs" folder
+ * in the app root. The pages are rendered by app/src/modules/manual-viewer.js, which is shared with the standalone
+ * manual window (app/src/manual.js, URL `/manual/<page>#<heading>`). Links to local documentation are loaded into
+ * the drawer, links to external resources open in a new browser tab.
  *
- * Clicks on manual links anywhere in the app (GitHub blob URLs of files in `docs/`, see
+ * Clicks on manual links anywhere in the app (GitHub blob URLs of files in `docs/` and manual window URLs, see
  * app/src/modules/manual-links.js) are intercepted and open the linked section in the drawer.
- * The footer has a table of contents drop-up, and each heading a button that copies its manual link.
+ * The footer has a table of contents drop-up, and each heading a button that copies the manual window URL of its
+ * section. The search button in the header replaces the title with a full-text search field
+ * (app/src/modules/manual-search-box.js); the "Open in new window" button shows the current section in the manual
+ * window.
  *
  * Slots in the manual pages (`<!-- plugin-docs: <slot> -->`) list the pages that plugins contribute
  * (see app/src/modules/manual-slots.js). These pages are shown under the virtual path
@@ -16,25 +19,28 @@
 /**
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
- * @import MarkdownIt from 'markdown-it'
  * @import { SlDrawer, SlMenuItem } from '../ui.js'
  * @import { MarkdownHeading } from '../modules/markdown-utils.js'
  * @import { infoDrawerPart } from '../templates/info-drawer.types.js'
  * @import { ManualContributionItem } from '../modules/api-client-v1.js'
+ * @import { ManualSearchTarget } from '../modules/manual-search-box.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
-import { createMarkdownRenderer, extractHeadings, resolveRelativeSources } from '../modules/markdown-utils.js'
 import { addHeadingLinkButtons, fitTocMenu, populateTocMenu, scrollToHeading } from '../modules/markdown-toc.js'
-import { manualUrl, parseManualUrl } from '../modules/manual-links.js'
+import { manualWindowUrl, parseManualUrl, parseManualWindowUrl } from '../modules/manual-links.js'
 import { notify } from '../modules/sl-utils.js'
-import { contributionPagePath, fillManualSlots, parsePluginPagePath, pluginPageUrl } from '../modules/manual-slots.js'
+import { ManualViewer, resolveManualPath } from '../modules/manual-viewer.js'
+import { ManualSearchBox, loadManualIndex, markSectionMatches } from '../modules/manual-search-box.js'
 
 // Register templates
 await registerTemplate('info-dialog', 'info-drawer.html');
 await registerTemplate('about-button', 'about-button.html');
 await registerTemplate('info-menu-item', 'info-menu-item.html');
+
+/** Name of the browser window the manual opens in, so that it is reused */
+export const MANUAL_WINDOW_NAME = 'pte-manual'
 
 class InfoPlugin extends Plugin {
   /** @param {PluginContext} context */
@@ -45,14 +51,11 @@ class InfoPlugin extends Plugin {
   /** @type {SlDrawer & infoDrawerPart} */
   #ui = null
 
-  /** @type {MarkdownIt | null} */
-  #md = null
+  /** @type {ManualViewer | null} */
+  #viewer = null
 
-  /**
-   * Renderer for the manual pages of plugins, which does not pass raw HTML through
-   * @type {MarkdownIt | null}
-   */
-  #pluginMd = null
+  /** @type {ManualSearchBox | null} */
+  #searchBox = null
 
   /**
    * Pages contributed by plugins, for the user they were loaded for
@@ -80,12 +83,6 @@ class InfoPlugin extends Plugin {
 
   #currentPage = 'index.md'
 
-  /**
-   * Git ref of the manual links copied from headings: the tag of the running version if known
-   * @type {string}
-   */
-  #docsRef = 'main'
-
   /** @type {MarkdownHeading[]} */
   #headings = []
 
@@ -99,6 +96,14 @@ class InfoPlugin extends Plugin {
 
     this.#ui = this.createUi(createSingleFromTemplate('info-dialog', document.body))
 
+    this.#viewer = new ManualViewer({
+      container: this.#ui.content,
+      getDocsBases: () => this.#getDocsBases(),
+      getContributions: () => this.#getContributions(),
+      onNavigate: target => this.load(target),
+      isCacheEnabled: () => this.#enableCache
+    })
+
     this.#ui.closeBtn.addEventListener('click', () => this.#ui.hide())
     this.#ui.backBtn.addEventListener('click', () => this.goBack())
     this.#ui.homeBtn.addEventListener('click', () => this.goHome())
@@ -111,11 +116,37 @@ class InfoPlugin extends Plugin {
         logger.warn(`Heading #${heading.anchor} not found in the user manual`)
       }
     })
-    this.#ui.content.addEventListener('click', event => this.#handleContentClick(event))
     document.addEventListener('click', event => this.#interceptManualLink(event), true)
     this.#ui.editGitHubBtn.addEventListener('click', () => {
       const githubUrl = `${this.#githubEditBasePath}/${this.#currentPage}`
       window.open(githubUrl, '_blank')
+    })
+    this.#ui.openWindowBtn.addEventListener('click', () => this.openInWindow())
+
+    this.#searchBox = new ManualSearchBox({
+      input: this.#ui.searchInput,
+      panel: this.#ui.searchResults,
+      loadIndex: async () => {
+        const viewer = /** @type {ManualViewer} */ (this.#viewer)
+        const { pages } = await this.getDependency('client').apiClient.manualPages()
+        return loadManualIndex(viewer, pages, await this.#getContributions())
+      },
+      onOpen: target => this.#openSearchResult(target),
+      onClose: () => this.#toggleSearch(false)
+    })
+    this.#ui.searchBtn.addEventListener('click', () => this.#toggleSearch(this.#ui.searchInput.hidden))
+    document.addEventListener('keydown', event => {
+      if (this.#ui.open && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        this.#toggleSearch(true)
+      }
+    })
+    // Esc closes the search, not the drawer
+    this.#ui.addEventListener('sl-request-close', event => {
+      if (event.detail.source === 'keyboard' && !this.#ui.searchInput.hidden) {
+        event.preventDefault()
+        this.#toggleSearch(false)
+      }
     })
 
     const aboutButton = createSingleFromTemplate('about-button')
@@ -126,7 +157,6 @@ class InfoPlugin extends Plugin {
       if (version) {
         this.#ui.versionInfo.textContent = `v${version}`
         const versionTag = `v${version}`
-        this.#docsRef = versionTag
         this.#remoteDocsBasePath = `https://raw.githubusercontent.com/mpilhlt/pdf-tei-editor/refs/tags/${versionTag}/docs`
         logger.debug(`Remote docs path: ${this.#remoteDocsBasePath}`)
       }
@@ -139,9 +169,6 @@ class InfoPlugin extends Plugin {
       'book',
       () => this.open()
     )
-
-    this.#md = createMarkdownRenderer()
-    this.#pluginMd = createMarkdownRenderer({ html: false })
 
     // @ts-ignore
     window.appInfo = this
@@ -165,23 +192,65 @@ class InfoPlugin extends Plugin {
 
   /**
    * Opens the user manual at the section a manual link points to.
-   * @param {string} url - A manual link (see app/src/modules/manual-links.js)
+   * @param {string} url - A manual link: a GitHub blob URL or a manual window URL (see app/src/modules/manual-links.js)
    * @returns {Promise<boolean>} Whether `url` is a manual link
    */
   async openUrl(url) {
-    const target = parseManualUrl(url)
+    const target = parseManualUrl(url) ?? parseManualWindowUrl(url, window.location.origin)
     if (!target) return false
     await this.open(target.anchor ? `${target.path}#${target.anchor}` : target.path)
     return true
   }
 
   /**
-   * The manual link of a section of the current page.
+   * The manual window URL of a section of the current page.
    * @param {string} [anchor] - Heading anchor without "#"
    * @returns {string}
    */
   linkTo(anchor) {
-    return manualUrl(this.#currentPage, anchor, this.#docsRef)
+    return manualWindowUrl(this.#currentPage, anchor, { origin: window.location.origin })
+  }
+
+  /**
+   * Shows the current page, at the heading nearest the top of the drawer, in the manual window.
+   */
+  openInWindow() {
+    let url = this.linkTo(this.#visibleAnchor())
+    // in development mode, the window loads the sources as well
+    if (new URLSearchParams(window.location.search).has('dev')) {
+      const [base, hash] = url.split('#')
+      url = `${base}${base.includes('?') ? '&' : '?'}dev${hash ? `#${hash}` : ''}`
+    }
+    window.open(url, MANUAL_WINDOW_NAME, 'popup,width=1100,height=900')
+  }
+
+  /**
+   * The anchor of the last heading at or above the top of the drawer's visible area.
+   * @returns {string} The anchor, or "" if no heading is above the top
+   */
+  #visibleAnchor() {
+    const body = this.#ui.shadowRoot?.querySelector('[part="body"]')
+    if (!body) return ''
+    const top = body.getBoundingClientRect().top + 8
+    let anchor = ''
+    for (const heading of this.#ui.content.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]')) {
+      if (heading.getBoundingClientRect().top > top) break
+      anchor = heading.id
+    }
+    return body.scrollTop > 0 ? anchor : ''
+  }
+
+  /**
+   * Where the core manual pages are fetched from: GitHub at the tag of the running version if configured and
+   * reachable, then the local docs.
+   * @returns {Promise<string[]>}
+   */
+  async #getDocsBases() {
+    const useGitHubDocs = await this.getDependency('config').get("docs.from-github", false)
+    if (useGitHubDocs && await this.#checkOnlineConnectivity()) {
+      return [this.#remoteDocsBasePath, this.#localDocsBasePath]
+    }
+    return [this.#localDocsBasePath]
   }
 
   /**
@@ -196,6 +265,7 @@ class InfoPlugin extends Plugin {
       try {
         const { contributions } = await this.getDependency('client').apiClient.manualContributions()
         this.#contributions = { username, contributions }
+        this.#searchBox?.invalidate()
       } catch (error) {
         this.getDependency('logger').warn(`Could not load the manual pages of plugins: ${error instanceof Error ? error.message : String(error)}`)
         return []
@@ -205,67 +275,51 @@ class InfoPlugin extends Plugin {
   }
 
   /**
-   * Replaces the slots of the current page with links to the pages contributed by plugins
+   * Shows or hides the search field in place of the title.
+   * @param {boolean} show
    */
-  async #fillSlots() {
-    const contributions = await this.#getContributions()
-    fillManualSlots(this.#ui.content, contributions, contribution => {
-      this.load(`/${contributionPagePath(contribution, navigator.languages)}`)
-    })
-  }
-
-  /**
-   * Makes the links of the rendered page work in the drawer: links to other manual pages load them in the
-   * drawer, links to other sites open in a new tab. Links to sections of the current page are handled by
-   * #handleContentClick.
-   */
-  #rewriteLinks() {
-    for (const link of this.#ui.content.querySelectorAll('a[href]')) {
-      const href = link.getAttribute('href') || ''
-      if (/^(https?:)?\/\//i.test(href)) {
-        link.setAttribute('target', '_blank')
-        link.setAttribute('rel', 'noopener')
-      } else if (href && !href.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
-        link.addEventListener('click', event => {
-          event.preventDefault()
-          this.load(href)
-        })
-      }
+  #toggleSearch(show) {
+    const input = this.#ui.searchInput
+    input.hidden = !show
+    this.#ui.titleText.hidden = show
+    if (show) {
+      setTimeout(() => input.focus(), 0)
+    } else {
+      input.value = ''
+      this.#searchBox?.hideResults()
     }
   }
 
   /**
-   * Loads markdown and converts it to HTML, replacing links to local content
-   * @param {string} mdPath The local path to the md file, relative to the "docs" dir
+   * Opens a search result and highlights the query words in its section.
+   * @param {ManualSearchTarget} target
+   */
+  async #openSearchResult(target) {
+    this.#toggleSearch(false)
+    await this.load(`/${target.path}`)
+    const heading = target.anchor
+      ? this.#ui.content.querySelectorAll(`[id="${CSS.escape(target.anchor)}"]`)[target.occurrence] ?? null
+      : null
+    markSectionMatches(this.#ui.content, heading, target.words)
+    if (heading) {
+      setTimeout(() => heading.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+    }
+  }
+
+  /**
+   * Loads a manual page into the drawer.
+   * @param {string} mdPath The path to the md file: relative to the current page, or relative to the "docs" dir
+   *   with a leading "/"; optionally with "#anchor"
    * @param {boolean} addToHistory Whether to add this page to navigation history (default: true)
    */
   async load(mdPath, addToHistory = true) {
-    const hashIndex = mdPath.indexOf('#')
-    const anchor = hashIndex === -1 ? '' : mdPath.slice(hashIndex + 1)
-    if (hashIndex !== -1) mdPath = mdPath.slice(0, hashIndex)
-    if (!mdPath) {
+    const { path, anchor } = resolveManualPath(this.#currentPage, mdPath)
+    if (mdPath.startsWith('#')) {
       // a link to a section of the current page
       this.#scrollToAnchor(anchor)
       return
     }
-    let resolvedPath = mdPath
-    if (addToHistory && !mdPath.startsWith('/') && !mdPath.startsWith('http') && this.#currentPage && this.#currentPage !== mdPath) {
-      const currentDir = this.#currentPage.substring(0, this.#currentPage.lastIndexOf('/'))
-      if (currentDir) {
-        const parts = currentDir.split('/').filter(p => p)
-        const pathParts = mdPath.split('/')
-        for (const part of pathParts) {
-          if (part === '..') {
-            parts.pop()
-          } else if (part !== '.') {
-            parts.push(part)
-          }
-        }
-        resolvedPath = parts.join('/')
-      }
-    }
-    resolvedPath = resolvedPath.replace(/^\/+/, '')
-    const historyEntry = anchor ? `${resolvedPath}#${anchor}` : resolvedPath
+    const historyEntry = anchor ? `${path}#${anchor}` : path
 
     if (addToHistory && (this.#navigationHistory.length === 0 || this.#navigationHistory[this.#navigationHistory.length - 1] !== historyEntry)) {
       this.#navigationHistory.push(historyEntry)
@@ -273,92 +327,21 @@ class InfoPlugin extends Plugin {
       this.#updateNavigationButtons()
     }
 
-    this.#currentPage = resolvedPath
-    mdPath = resolvedPath
-
-    this.#ui.content.innerHTML = ""
+    this.#currentPage = path
     this.#updateToc([])
 
-    const pluginPage = parsePluginPagePath(mdPath)
-    this.#ui.editGitHubBtn.style.display = pluginPage ? 'none' : ''
-    if (pluginPage) {
-      await this.#loadPluginPage(pluginPage, anchor)
-      return
-    }
-
-    let markdown
-    let isOnline = false
-    const fetchOptions = this.#enableCache ? {} : { cache: 'no-cache' }
-    const useGitHubDocs = await this.getDependency('config').get("docs.from-github", false)
-
-    if (!useGitHubDocs) {
-      try {
-        this.getDependency('logger').debug(`Loading documentation from local: ${mdPath}`)
-        markdown = await (await fetch(`${this.#localDocsBasePath}/${mdPath}`, fetchOptions)).text()
-      } catch(error) {
-        this.getDependency('dialog').error(`Failed to load local documentation: ${error.message}`)
-        return
-      }
-    } else {
-      try {
-        isOnline = await this.#checkOnlineConnectivity()
-        if (isOnline) {
-          this.getDependency('logger').debug(`Loading documentation from GitHub: ${mdPath}`)
-          markdown = await (await fetch(`${this.#remoteDocsBasePath}/${mdPath}`, fetchOptions)).text()
-        } else {
-          throw new Error("No online connectivity")
-        }
-      } catch(error) {
-        try {
-          this.getDependency('logger').debug(`Falling back to local documentation: ${mdPath}`)
-          markdown = await (await fetch(`${this.#localDocsBasePath}/${mdPath}`, fetchOptions)).text()
-        } catch(localError) {
-          this.getDependency('dialog').error(`Failed to load documentation: ${localError.message}`)
-          return
-        }
-      }
-    }
-
-    // relative image paths are relative to the markdown file, not to the app page
-    const pagePath = `${isOnline ? this.#remoteDocsBasePath : this.#localDocsBasePath}/${mdPath}`
-    const rendered = /** @type {MarkdownIt} */(this.#md).render(markdown)
-    this.#ui.content.innerHTML = resolveRelativeSources(rendered, pagePath)
-    this.#rewriteLinks()
-    await this.#fillSlots()
-    this.#updateToc(extractHeadings(/** @type {MarkdownIt} */(this.#md), markdown))
-    addHeadingLinkButtons(this.#ui.content, anchor => this.#copyLink(anchor))
-    this.#scrollAfterLoad(anchor)
-  }
-
-  /**
-   * Shows a page contributed by a plugin. Raw HTML in it is shown as text; relative images and links resolve
-   * against the plugin's files. Headings have no "Copy link" button, as manual links point to core pages only.
-   * @param {{pluginId: string, file: string}} page
-   * @param {string} anchor - Heading anchor to scroll to, or ""
-   */
-  async #loadPluginPage(page, anchor) {
-    const url = pluginPageUrl(page)
-    let markdown
+    const viewer = /** @type {ManualViewer} */ (this.#viewer)
+    let rendered
     try {
-      const response = await fetch(url, this.#enableCache ? {} : { cache: 'no-cache' })
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
-      markdown = await response.text()
+      rendered = await viewer.render(path)
     } catch (error) {
-      this.getDependency('dialog').error(`Failed to load the manual page of the plugin "${page.pluginId}": ${error instanceof Error ? error.message : String(error)}`)
+      this.getDependency('dialog').error(`Failed to load documentation: ${error instanceof Error ? error.message : String(error)}`)
       return
     }
-    const md = /** @type {MarkdownIt} */ (this.#pluginMd)
-    this.#ui.content.innerHTML = resolveRelativeSources(md.render(markdown), url)
-    this.#rewriteLinks()
-    const contribution = (await this.#getContributions()).find(c =>
-      c.plugin_id === page.pluginId && Object.values(c.files).includes(page.file))
-    const source = document.createElement('p')
-    source.className = 'plugin-docs-source'
-    source.textContent = contribution
-      ? `Provided by the ${contribution.plugin_name} plugin, version ${contribution.plugin_version}.`
-      : `Provided by the ${page.pluginId} plugin.`
-    this.#ui.content.prepend(source)
-    this.#updateToc(extractHeadings(md, markdown))
+    this.#currentPage = rendered.path
+    this.#ui.editGitHubBtn.style.display = rendered.pluginPage ? 'none' : ''
+    this.#updateToc(rendered.headings)
+    addHeadingLinkButtons(this.#ui.content, anchor => this.#copyLink(anchor))
     this.#scrollAfterLoad(anchor)
   }
 
@@ -390,16 +373,13 @@ class InfoPlugin extends Plugin {
    */
   #scrollToAnchor(anchor) {
     if (!anchor) return
-    const target = this.#ui.content.querySelector(`[id="${CSS.escape(anchor)}"]`)
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    } else {
+    if (!this.#viewer?.scrollToAnchor(anchor)) {
       this.getDependency('logger').warn(`Anchor #${anchor} not found in ${this.#currentPage}`)
     }
   }
 
   /**
-   * Copies the manual link of a heading of the current page to the clipboard
+   * Copies the manual window URL of a heading of the current page to the clipboard
    * @param {string} anchor - Heading anchor without "#"
    */
   async #copyLink(anchor) {
@@ -414,20 +394,6 @@ class InfoPlugin extends Plugin {
   }
 
   /**
-   * Keeps links to sections of the current page ("#anchor") inside the drawer
-   * instead of changing the location of the app.
-   * @param {MouseEvent} event
-   */
-  #handleContentClick(event) {
-    const link = /** @type {HTMLElement} */ (event.target).closest?.('a[href^="#"]')
-    if (!link) return
-    const anchor = decodeURIComponent((link.getAttribute('href') || '').slice(1))
-    if (!anchor) return
-    event.preventDefault()
-    this.#scrollToAnchor(anchor)
-  }
-
-  /**
    * Capturing click handler on the document: opens manual links (see
    * app/src/modules/manual-links.js) in the drawer instead of a new tab. Clicks with a
    * modifier key keep the browser's behaviour. A link in an open dialog closes the
@@ -438,7 +404,7 @@ class InfoPlugin extends Plugin {
     if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
     const path = event.composedPath()
     const link = /** @type {HTMLAnchorElement | undefined} */ (path.find(el => el instanceof HTMLAnchorElement && el.href))
-    if (!link || !parseManualUrl(link.href)) return
+    if (!link || !(parseManualUrl(link.href) || parseManualWindowUrl(link.href, window.location.origin))) return
     event.preventDefault()
     event.stopPropagation()
     const dialog = /** @type {(HTMLElement & {open: boolean, show: () => Promise<void>, hide: () => Promise<void>}) | undefined} */ (
@@ -484,8 +450,7 @@ class InfoPlugin extends Plugin {
    * Goes to the home page (index.md)
    */
   goHome() {
-    this.#currentPage = ''
-    this.load('index.md')
+    this.load('/index.md')
   }
 
   /**

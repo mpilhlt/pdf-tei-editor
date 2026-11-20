@@ -70,20 +70,25 @@ def _plugin_version(record: PluginRecord) -> str:
     return str(record.metadata.get("version", ""))
 
 
-def list_contributions(registry: PluginRegistry, user: dict[str, Any] | None) -> list[ManualContribution]:
+def list_contributions(registry: PluginRegistry, user: dict[str, Any] | None, all_roles: bool = False) -> list[ManualContribution]:
     """
     The manual pages the user can see, sorted by slot, order and title.
+
+    Roles only keep the manual in the app free of pages that do not concern the user; they do not protect the pages,
+    whose files are served without authentication.
 
     Args:
         registry: Plugin registry
         user: The current user, or None if not logged in
+        all_roles: List the pages of active plugins whatever their roles, and no pages of inactive plugins (the
+            standalone manual window)
 
     Returns:
         Pages of active plugins whose required plugins are active and whose roles match the user; for
         administrators also the pages of installed plugins that are not active (``active=False``)
     """
     roles: list[str] = list(user.get("roles", [])) if user else []
-    is_admin = "admin" in roles or "*" in roles
+    is_admin = ("admin" in roles or "*" in roles) and not all_roles
     result: list[ManualContribution] = []
     for record in registry.get_records():
         if record.manifest is None or not record.manifest.manual or record.directory is None:
@@ -97,7 +102,7 @@ def list_contributions(registry: PluginRegistry, user: dict[str, Any] | None) ->
                     _warned_slots.add((record.id, page.slot))
                     logger.warning(f"Plugin {record.id}: manual page '{page.id}' names the unknown slot '{page.slot}' and is not listed")
                 continue
-            if not _user_has_role(roles, page.roles):
+            if not all_roles and not _user_has_role(roles, page.roles):
                 continue
             active = registry.is_active(record.id) and all(registry.is_active(dep) for dep in page.requires)
             if not active and not is_admin:

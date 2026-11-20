@@ -1,15 +1,19 @@
 """
-User manual API: the pages that plugins contribute to the manual (see `fastapi_app/lib/plugins/plugin_manual.py`
-and docs/code-assistant/backend-plugins.md#manual-pages).
+User manual API: the pages of the core manual and the pages that plugins contribute to it (see
+`fastapi_app/lib/utils/manual_pages.py`, `fastapi_app/lib/plugins/plugin_manual.py` and
+docs/code-assistant/backend-plugins.md#manual-pages).
 """
 
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from ..config import get_settings
 from ..lib.core.dependencies import get_current_user
+from ..lib.utils.manual_pages import list_manual_pages
 from ..lib.plugins.plugin_manager import PluginManager
 from ..lib.plugins.plugin_manual import ManualFileNotFound, list_contributions, resolve_manual_file
 from ..lib.plugins.plugin_registry import PluginRegistry
@@ -39,6 +43,24 @@ class ManualContributionsResponse(BaseModel):
     contributions: list[ManualContributionItem]
 
 
+class ManualPageItem(BaseModel):
+    """A page of the core user manual."""
+
+    path: str = Field(description="Path relative to docs/, e.g. 'user-manual/review-workflow.md'")
+    title: str = Field(description="First level-1 heading of the page")
+
+
+class ManualPagesResponse(BaseModel):
+    """The pages of the core user manual in reading order."""
+
+    pages: list[ManualPageItem]
+
+
+def get_docs_root() -> Path:
+    """The docs/ directory (dependency, so tests can replace it)."""
+    return get_settings().project_root_dir / "docs"
+
+
 def get_plugin_registry() -> PluginRegistry:
     """The plugin registry (dependency, so tests can replace it)."""
     return PluginManager.get_instance().registry
@@ -46,6 +68,7 @@ def get_plugin_registry() -> PluginRegistry:
 
 @router.get("/contributions", response_model=ManualContributionsResponse)
 def manual_contributions(
+    all_roles: bool = Query(False, description="List the pages of all active plugins whatever their roles, and no pages of inactive plugins (the standalone manual window)"),
     current_user: dict[str, Any] | None = Depends(get_current_user),
     registry: PluginRegistry = Depends(get_plugin_registry),
 ) -> ManualContributionsResponse:
@@ -53,7 +76,8 @@ def manual_contributions(
 
     Pages of active plugins whose required plugins are active and whose roles match the user; administrators also get
     the pages of plugins that are not active, with `active: false`. Without a session, only pages without role
-    restriction are listed.
+    restriction are listed. Roles only keep the manual in the app free of pages that do not concern the user; with
+    `all_roles`, they are ignored.
     """
     return ManualContributionsResponse(contributions=[
         ManualContributionItem(
@@ -69,8 +93,14 @@ def manual_contributions(
             order=c.page.order,
             active=c.active,
         )
-        for c in list_contributions(registry, current_user)
+        for c in list_contributions(registry, current_user, all_roles)
     ])
+
+
+@router.get("/pages", response_model=ManualPagesResponse)
+def manual_pages(docs_root: Path = Depends(get_docs_root)) -> ManualPagesResponse:
+    """The pages of the core user manual (`index.md`, `about.md`, `user-manual/**`), in the order in which they are linked from `index.md`, then alphabetically. Served without authentication, like the manual."""
+    return ManualPagesResponse(pages=[ManualPageItem(path=p.path, title=p.title) for p in list_manual_pages(docs_root)])
 
 
 @router.get("/plugins/{plugin_id}/{path:path}", response_class=FileResponse)

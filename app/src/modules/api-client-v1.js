@@ -974,6 +974,17 @@
  */
 
 /**
+ * @typedef {Object} ManualPageItem
+ * @property {string} path - Path relative to docs/, e.g. "user-manual/review-workflow.md"
+ * @property {string} title - First level-1 heading of the page
+ */
+
+/**
+ * @typedef {Object} ManualPagesResponse
+ * @property {Array<ManualPageItem>} pages - The pages of the core manual in reading order
+ */
+
+/**
  * @typedef {Object} NavigationXpathItem
  * @property {string} value - XPath expression, e.g. `//tei:listBibl/tei:bibl`
  * @property {string} label - HTML-escaped label shown in the dropdown
@@ -2688,10 +2699,23 @@ export class ApiClientV1 {
    * pages of plugins that are not active (`active: false`). The files are served (without authentication) at
    * `/api/v1/manual/plugins/{plugin_id}/{file}`.
    *
+   * @param {{all_roles?: boolean}} [params] - `all_roles`: the pages of all active plugins whatever their roles, and
+   *   no pages of inactive plugins (as in the standalone manual window)
    * @returns {Promise<ManualContributionsResponse>}
    */
-  async manualContributions() {
+  async manualContributions(params = {}) {
     const endpoint = `/manual/contributions`
+    return this.callApi(endpoint, 'GET', params);
+  }
+
+  /**
+   * The pages of the core user manual (`index.md`, `about.md`, `user-manual/**`) in reading order. Served without
+   * authentication.
+   *
+   * @returns {Promise<ManualPagesResponse>}
+   */
+  async manualPages() {
+    const endpoint = `/manual/pages`
     return this.callApi(endpoint, 'GET');
   }
 

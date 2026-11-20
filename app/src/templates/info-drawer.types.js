@@ -3,8 +3,13 @@
 
 /**
  * @typedef {object} infoDrawerPart
+ * @property {HTMLSpanElement} titleText
+ * @property {import('../ui.js').SlInput} searchInput
+ * @property {import('../ui.js').SlIconButton} searchBtn
  * @property {HTMLSpanElement} versionInfo
+ * @property {import('../ui.js').SlIconButton} openWindowBtn
  * @property {import('../ui.js').SlIconButton} editGitHubBtn
+ * @property {HTMLDivElement} searchResults
  * @property {HTMLDivElement} content
  * @property {import('../ui.js').SlDropdown & tocDropdownPart} tocDropdown
  * @property {import('../ui.js').SlButton} backBtn

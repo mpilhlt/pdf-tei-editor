@@ -1,6 +1,11 @@
 /**
- * Script for bootstrapping the application
+ * Script for bootstrapping the application, or another entry point given by the `data-entry` attribute of the
+ * script tag (e.g. `<script src="/bootstrap.js" data-entry="manual">` for the manual window, app/web/manual.html).
+ * Pages other than the application are served below other paths, so their resources are loaded from absolute URLs.
  */
+
+const entry = document.currentScript?.dataset.entry || 'app'
+const root = entry === 'app' ? './' : '/'
 
 
 // check whether we are supposed to run the source or the built version
@@ -16,7 +21,7 @@ if (!svgIcon) {
   svgIcon.type = 'image/svg+xml'
   document.head.appendChild(svgIcon)
 }
-svgIcon.href = `${faviconBase}.svg`
+svgIcon.href = `${root}${faviconBase}.svg`
 
 let icoIcon = document.querySelector('link[rel="icon"][sizes="any"]')
 if (!icoIcon) {
@@ -25,13 +30,17 @@ if (!icoIcon) {
   icoIcon.sizes = 'any'
   document.head.appendChild(icoIcon)
 }
-icoIcon.href = `${faviconBase}.ico`
+icoIcon.href = `${root}${faviconBase}.ico`
 
 window.addEventListener('DOMContentLoaded', async () => {
   if (loadFromSource) {
     // add importmap 
-    let response = await fetch('./importmap.json')
+    let response = await fetch(`${root}importmap.json`)
     let importMap = await response.json()
+    if (entry !== 'app') {
+      // the paths in the importmap are relative to the application page at the root
+      importMap = JSON.parse(JSON.stringify(importMap).replaceAll('"../../', '"/'))
+    }
     const script = document.createElement('script');
     script.type = 'importmap';
     script.textContent = JSON.stringify(importMap, null, 2);
@@ -52,8 +61,16 @@ window.addEventListener('DOMContentLoaded', async () => {
   shoelaceCss.rel = 'stylesheet';
   shoelaceCss.href = loadFromSource
     ? '/node_modules/@shoelace-style/shoelace/dist/themes/light.css'
-    : 'light.css';
+    : `${root}light.css`;
   document.head.appendChild(shoelaceCss);
+
+  if (entry !== 'app') {
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = loadFromSource ? `/src/${entry}.js` : `/${entry}.js`;
+    document.body.appendChild(script);
+    return
+  }
 
   // add PDF.js viewer css
   const pdfjsCss = document.createElement('link');
