@@ -954,6 +954,25 @@
  */
 
 /**
+ * @typedef {Object} ManualContributionItem
+ * @property {string} plugin_id - Id of the contributing plugin
+ * @property {string} plugin_name - Name of the contributing plugin
+ * @property {string} plugin_version - Version of the contributing plugin
+ * @property {string} id - Id of the page, unique within the plugin
+ * @property {string} slot - Manual slot the page is listed in, e.g. 'tutorials'
+ * @property {string} title - Link text
+ * @property {string} description - One sentence shown after the link
+ * @property {Object<string, string>} files - Markdown file per language code, relative to the plugin directory; fetch it from /api/v1/manual/plugins/{plugin_id}/{file}
+ * @property {number} order - Sort key within the slot
+ * @property {boolean} active - False if the plugin or one of the plugins the page requires is not active (only listed for administrators)
+ */
+
+/**
+ * @typedef {Object} ManualContributionsResponse
+ * @property {Array<ManualContributionItem>} contributions - Sorted by slot, order and title
+ */
+
+/**
  * @typedef {Object} NavigationXpathItem
  * @property {string} value - XPath expression, e.g. `//tei:listBibl/tei:bibl`
  * @property {string} label - HTML-escaped label shown in the dropdown
@@ -2661,6 +2680,18 @@ export class ApiClientV1 {
   async navigationXpathSave(variant, requestBody) {
     const endpoint = `/navigation-xpath/${encodeURIComponent(variant)}`
     return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * The pages plugins contribute to the user manual that the current user can see. Administrators also get the
+   * pages of plugins that are not active (`active: false`). The files are served (without authentication) at
+   * `/api/v1/manual/plugins/{plugin_id}/{file}`.
+   *
+   * @returns {Promise<ManualContributionsResponse>}
+   */
+  async manualContributions() {
+    const endpoint = `/manual/contributions`
+    return this.callApi(endpoint, 'GET');
   }
 
   /**

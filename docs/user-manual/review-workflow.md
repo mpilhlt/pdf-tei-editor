@@ -254,6 +254,10 @@ The approved version replaces the annotator's version in the review queue (which
 
 *The approved document in the Annotation Progress view.*
 
+## Review with plugins
+
+<!-- plugin-docs: review hide-heading -->
+
 ## Rules of thumb
 
 **For annotators**

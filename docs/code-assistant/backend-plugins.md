@@ -102,8 +102,37 @@ Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/t
 - `readme`: http(s) URL of the plugin documentation. The plugin manager shows it as a "README" button (a `readme_url` in the plugin `metadata` takes precedence).
 - `engines.pte-plugin-api`: semver range of plugin API versions (`PLUGIN_API_VERSION`, see [Plugin API](#plugin-api)); a plugin outside the range is not loaded.
 - `engines.pte`: npm-style semver range of PDF-TEI-Editor versions (as `engines.node` in `package.json`): comparators (`>=0.75.0`, `<1.0.0`), caret (`^0.75.0`), tilde (`~0.75.1`), x-ranges (`0.75.x`, `*`), hyphen ranges, space for AND and `||` for OR. The editor version is the `version` in `package.json`; pre-release suffixes are ignored (`0.76.0-devel.2` counts as `0.76.0`).
+- `manual`: pages the plugin contributes to the user manual, see [Manual Pages](#manual-pages).
 - All fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
 - The manifest is read before `plugin.py` is imported. A plugin outside the declared range is not imported and shows as "Incompatible" in the plugin manager, with the required and the actual version. A manifest that is not valid JSON, or has an invalid `version` or range, marks the plugin as "Failed".
+
+### Manual Pages
+
+A plugin can add Markdown pages, such as tutorials, to the user manual. It declares them in the `manual` list of its manifest:
+
+```json
+{
+  "manual": [
+    {
+      "id": "llm-review-tutorial",
+      "slot": "tutorials",
+      "title": "How to use the LLM Reviewer with GROBID",
+      "description": "Review GROBID training documents part by part.",
+      "file": "docs/llm-review-tutorial.md",
+      "requires": ["annotation-review"],
+      "roles": ["annotator", "reviewer"],
+      "order": 100
+    }
+  ]
+}
+```
+
+- `slot`: where the page is listed. Core manual pages contain slots as HTML comments (`<!-- plugin-docs: <slot> -->`, optionally with `hide-heading` to remove the heading before an empty slot), which the manual drawer replaces with a list of links. The slots are fixed in `MANUAL_SLOTS` (`fastapi_app/lib/plugins/plugin_manual.py`): `tutorials` (start page and Plugins page), `extraction` (Extraction Workflow), `review` (Review Workflow), `admin` (Admin Guide). A page for another slot is not listed and logged as a warning.
+- `file`: path of the Markdown file relative to the plugin directory (for packages, the package directory), or an object with one file per language code (`{"en": "docs/en/a.md", "de": "docs/de/a.md"}`); the drawer picks the browser language and falls back to `en`. Images and links in a page are relative to its file. Include the files as package data.
+- `requires`: further plugins that must be active for the page to be listed; the plugin itself must always be active. `roles`: the page is listed only for users with one of these roles (empty: everyone). `order`: sort key within the slot (default 500), then the title. `description`: one sentence after the link. `id`: lowercase letters, digits and hyphens, unique within the plugin.
+- Administrators also see the pages of plugins that are not active, marked as not enabled.
+- `GET /api/v1/manual/contributions` lists the pages the user can see; `GET /api/v1/manual/plugins/{plugin_id}/{path}` serves the files without authentication, like `docs/`. Only Markdown and PNG, JPEG, GIF and WebP images are served, and only from the directories that contain the declared Markdown files (and their subdirectories).
+- The drawer shows a page under the virtual path `plugins/<plugin id>/<file>` (`app/src/modules/manual-slots.js`). Plugin pages are rendered without raw HTML (`createMarkdownRenderer({ html: false })`), so `<sl-icon>` and other tags appear as text, and their headings have no "Copy link" button. Link to core manual pages with manual links (GitHub blob URLs, see [Links to the User Manual](architecture-frontend.md#links-to-the-user-manual)).
 
 ### Developing an External Plugin in Its Own Repository
 

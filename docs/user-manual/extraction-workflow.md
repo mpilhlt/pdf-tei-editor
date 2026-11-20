@@ -115,4 +115,6 @@ Once annotators have finished their work:
 
 When a batch of training data has been corrected, the "gold" standard can be downloaded and used to retrain the extraction models. 
 
+### Extraction with plugins
 
+<!-- plugin-docs: extraction hide-heading -->

@@ -138,4 +138,6 @@ To link to a section of the user manual from a description, dialog or rendered M
 - In code, open a section with `InfoPlugin.open('<path>#<anchor>')` or `InfoPlugin.openUrl(url)`, and build a link with `manualUrl(path, anchor, ref)`.
 - Users get the link of a section from the "Copy link" button shown when hovering a heading in the manual; it uses the tag of the running version as ref.
 
+Manual pages can contain slots (`<!-- plugin-docs: <slot> -->`) that the drawer fills with links to pages contributed by plugins; see [Backend Plugins - Manual Pages](backend-plugins.md#manual-pages).
+
 The table of contents drop-up and the heading link buttons of the user manual and the annotation guide drawers come from `app/src/modules/markdown-toc.js`.

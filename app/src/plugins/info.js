@@ -7,6 +7,10 @@
  * Clicks on manual links anywhere in the app (GitHub blob URLs of files in `docs/`, see
  * app/src/modules/manual-links.js) are intercepted and open the linked section in the drawer.
  * The footer has a table of contents drop-up, and each heading a button that copies its manual link.
+ *
+ * Slots in the manual pages (`<!-- plugin-docs: <slot> -->`) list the pages that plugins contribute
+ * (see app/src/modules/manual-slots.js). These pages are shown under the virtual path
+ * `plugins/<plugin id>/<file>` and rendered without raw HTML.
  */
 
 /**
@@ -16,6 +20,7 @@
  * @import { SlDrawer, SlMenuItem } from '../ui.js'
  * @import { MarkdownHeading } from '../modules/markdown-utils.js'
  * @import { infoDrawerPart } from '../templates/info-drawer.types.js'
+ * @import { ManualContributionItem } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -24,6 +29,7 @@ import { createMarkdownRenderer, extractHeadings, resolveRelativeSources } from 
 import { addHeadingLinkButtons, fitTocMenu, populateTocMenu, scrollToHeading } from '../modules/markdown-toc.js'
 import { manualUrl, parseManualUrl } from '../modules/manual-links.js'
 import { notify } from '../modules/sl-utils.js'
+import { fillManualSlots, parsePluginPagePath, pickManualFile, pluginPagePath, pluginPageUrl } from '../modules/manual-slots.js'
 
 // Register templates
 await registerTemplate('info-dialog', 'info-drawer.html');
@@ -33,7 +39,7 @@ await registerTemplate('info-menu-item', 'info-menu-item.html');
 class InfoPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'info', deps: ['authentication', 'toolbar', 'help', 'logger', 'config', 'dialog'] })
+    super(context, { name: 'info', deps: ['authentication', 'client', 'toolbar', 'help', 'logger', 'config', 'dialog'] })
   }
 
   /** @type {SlDrawer & infoDrawerPart} */
@@ -41,6 +47,18 @@ class InfoPlugin extends Plugin {
 
   /** @type {MarkdownIt | null} */
   #md = null
+
+  /**
+   * Renderer for the manual pages of plugins, which does not pass raw HTML through
+   * @type {MarkdownIt | null}
+   */
+  #pluginMd = null
+
+  /**
+   * Pages contributed by plugins, for the user they were loaded for
+   * @type {{username: string, contributions: ManualContributionItem[]} | null}
+   */
+  #contributions = null
 
   #localDocsBasePath = "../../docs"
 
@@ -123,6 +141,7 @@ class InfoPlugin extends Plugin {
     )
 
     this.#md = createMarkdownRenderer()
+    this.#pluginMd = createMarkdownRenderer({ html: false })
 
     // @ts-ignore
     window.appInfo = this
@@ -163,6 +182,57 @@ class InfoPlugin extends Plugin {
    */
   linkTo(anchor) {
     return manualUrl(this.#currentPage, anchor, this.#docsRef)
+  }
+
+  /**
+   * The pages plugins contribute to the manual that the current user can see; none if nobody is logged in.
+   * Loaded once per user.
+   * @returns {Promise<ManualContributionItem[]>}
+   */
+  async #getContributions() {
+    const username = this.state?.user?.username
+    if (!username) return []
+    if (this.#contributions?.username !== username) {
+      try {
+        const { contributions } = await this.getDependency('client').apiClient.manualContributions()
+        this.#contributions = { username, contributions }
+      } catch (error) {
+        this.getDependency('logger').warn(`Could not load the manual pages of plugins: ${error instanceof Error ? error.message : String(error)}`)
+        return []
+      }
+    }
+    return this.#contributions.contributions
+  }
+
+  /**
+   * Replaces the slots of the current page with links to the pages contributed by plugins
+   */
+  async #fillSlots() {
+    const contributions = await this.#getContributions()
+    fillManualSlots(this.#ui.content, contributions, contribution => {
+      const file = pickManualFile(contribution.files, navigator.languages)
+      this.load(`/${pluginPagePath(contribution.plugin_id, file)}`)
+    })
+  }
+
+  /**
+   * Makes the links of the rendered page work in the drawer: links to other manual pages load them in the
+   * drawer, links to other sites open in a new tab. Links to sections of the current page are handled by
+   * #handleContentClick.
+   */
+  #rewriteLinks() {
+    for (const link of this.#ui.content.querySelectorAll('a[href]')) {
+      const href = link.getAttribute('href') || ''
+      if (/^(https?:)?\/\//i.test(href)) {
+        link.setAttribute('target', '_blank')
+        link.setAttribute('rel', 'noopener')
+      } else if (href && !href.startsWith('#') && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+        link.addEventListener('click', event => {
+          event.preventDefault()
+          this.load(href)
+        })
+      }
+    }
   }
 
   /**
@@ -210,6 +280,13 @@ class InfoPlugin extends Plugin {
     this.#ui.content.innerHTML = ""
     this.#updateToc([])
 
+    const pluginPage = parsePluginPagePath(mdPath)
+    this.#ui.editGitHubBtn.style.display = pluginPage ? 'none' : ''
+    if (pluginPage) {
+      await this.#loadPluginPage(pluginPage, anchor)
+      return
+    }
+
     let markdown
     let isOnline = false
     const fetchOptions = this.#enableCache ? {} : { cache: 'no-cache' }
@@ -246,16 +323,51 @@ class InfoPlugin extends Plugin {
     // relative image paths are relative to the markdown file, not to the app page
     const pagePath = `${isOnline ? this.#remoteDocsBasePath : this.#localDocsBasePath}/${mdPath}`
     const rendered = /** @type {MarkdownIt} */(this.#md).render(markdown)
-    const html = resolveRelativeSources(rendered, pagePath)
-      .replaceAll(
-        /(<a\s+.*?)href=(["'])((?!https?:\/\/|\/\/|#).*?)\2(.*?>)/g,
-        `$1href="#" onclick="appInfo.load('$3'); return false"$4`
-      )
-      .replaceAll(/(href="http)/g, `target="_blank" $1`)
-
-    this.#ui.content.innerHTML = html
+    this.#ui.content.innerHTML = resolveRelativeSources(rendered, pagePath)
+    this.#rewriteLinks()
+    await this.#fillSlots()
     this.#updateToc(extractHeadings(/** @type {MarkdownIt} */(this.#md), markdown))
     addHeadingLinkButtons(this.#ui.content, anchor => this.#copyLink(anchor))
+    this.#scrollAfterLoad(anchor)
+  }
+
+  /**
+   * Shows a page contributed by a plugin. Raw HTML in it is shown as text; relative images and links resolve
+   * against the plugin's files. Headings have no "Copy link" button, as manual links point to core pages only.
+   * @param {{pluginId: string, file: string}} page
+   * @param {string} anchor - Heading anchor to scroll to, or ""
+   */
+  async #loadPluginPage(page, anchor) {
+    const url = pluginPageUrl(page)
+    let markdown
+    try {
+      const response = await fetch(url, this.#enableCache ? {} : { cache: 'no-cache' })
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      markdown = await response.text()
+    } catch (error) {
+      this.getDependency('dialog').error(`Failed to load the manual page of the plugin "${page.pluginId}": ${error instanceof Error ? error.message : String(error)}`)
+      return
+    }
+    const md = /** @type {MarkdownIt} */ (this.#pluginMd)
+    this.#ui.content.innerHTML = resolveRelativeSources(md.render(markdown), url)
+    this.#rewriteLinks()
+    const contribution = (await this.#getContributions()).find(c =>
+      c.plugin_id === page.pluginId && Object.values(c.files).includes(page.file))
+    const source = document.createElement('p')
+    source.className = 'plugin-docs-source'
+    source.textContent = contribution
+      ? `Provided by the ${contribution.plugin_name} plugin, version ${contribution.plugin_version}.`
+      : `Provided by the ${page.pluginId} plugin.`
+    this.#ui.content.prepend(source)
+    this.#updateToc(extractHeadings(md, markdown))
+    this.#scrollAfterLoad(anchor)
+  }
+
+  /**
+   * Scrolls to a heading of the page just loaded, or to the top
+   * @param {string} anchor - Heading anchor, or "" for the top
+   */
+  #scrollAfterLoad(anchor) {
     if (anchor) {
       setTimeout(() => this.#scrollToAnchor(anchor), 100)
     } else {
