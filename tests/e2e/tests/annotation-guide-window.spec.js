@@ -47,6 +47,9 @@ function guide(version) {
 
 Version ${version}. Footnote<sup>1</sup> <img src="x.png" onerror="window.guideXss = true">
 
+> [!TIP]
+> Study the training documents first.
+
 ${filler}
 
 ## Data correction
@@ -119,6 +122,11 @@ test.describe('Annotation guide search and window', () => {
       await expect(drawer.locator('[name="content"] sup')).toHaveText('1');
       expect(await drawer.locator('[name="content"] img[onerror]').count()).toBe(0);
       expect(await page.evaluate(() => /** @type {any} */ (window).guideXss)).toBeUndefined();
+      // GitHub alerts are admonitions with their icon, without the marker
+      const tip = drawer.locator('[name="content"] .admonition-tip');
+      await expect(tip).toContainText('Study the training documents first.');
+      await expect(tip).not.toContainText('[!TIP]');
+      await expect(tip.locator('sl-icon[name="lightbulb"]')).toBeAttached();
       // relative images resolve against the raw URL of the guide
       expect(await drawer.locator('[name="content"] img').getAttribute('src')).toBe('https://raw.githubusercontent.com/e2e-org/e2e-guides/main/x.png');
 

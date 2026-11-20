@@ -26,4 +26,7 @@ Give the annotation guide drawer the pattern of the user manual: full-text searc
 ## Not done
 
 - Searching several guides at once (there is one guide file today).
-- Admonitions such as `> [!NOTE]` are rendered as plain blockquotes, as before.
+
+## Follow-up: GitHub alerts
+
+`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` and `[!CAUTION]` blockquotes showed the marker as text: the renderer stripped it from the inline token's `content` after the inline children had been parsed. A core rule (`markGithubAlerts()` in `markdown-utils.js`) now removes the marker from the children and marks the blockquote, also for nested blockquotes; the sanitizer keeps the admonition's `<sl-icon name>`.

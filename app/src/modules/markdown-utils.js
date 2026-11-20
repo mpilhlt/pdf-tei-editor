@@ -4,6 +4,7 @@
 
 /**
  * @import MarkdownIt from 'markdown-it'
+ * @import Token from 'markdown-it/lib/token.mjs'
  */
 import markdownit from 'markdown-it'
 import markdownItContainer from 'markdown-it-container'
@@ -58,6 +59,44 @@ function renderAdmonitionClose() {
   return '</div></div>\n'
 }
 
+/** GitHub alert marker at the start of the first paragraph of a blockquote, e.g. "[!NOTE]" */
+const GITHUB_ALERT_MARKER = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*/i
+
+/**
+ * Finds blockquotes that start with a GitHub alert marker (`> [!NOTE]`), removes the marker (and the line break
+ * after it, if it is on a line of its own) and stores the admonition type in `meta.alertType` of the blockquote's
+ * opening and closing tokens. Runs as a core rule after inline parsing, so the marker is removed from the inline
+ * children that are rendered.
+ * @param {Token[]} tokens
+ */
+function markGithubAlerts(tokens) {
+  /** @type {Token[]} */
+  const open = []
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]
+    if (token.type === 'blockquote_open') {
+      open.push(token)
+      const inline = tokens[i + 2]
+      if (tokens[i + 1]?.type !== 'paragraph_open' || inline?.type !== 'inline') continue
+      const match = inline.content.match(GITHUB_ALERT_MARKER)
+      const first = inline.children?.[0]
+      if (!match || !first || first.type !== 'text' || !GITHUB_ALERT_MARKER.test(first.content)) continue
+      const gfmType = match[1].toUpperCase()
+      token.meta = { ...token.meta, alertType: Object.keys(admonitionConfig).find(key => admonitionConfig[key].gfmType === gfmType) || 'info' }
+      inline.content = inline.content.replace(GITHUB_ALERT_MARKER, '').replace(/^\n/, '')
+      first.content = first.content.replace(GITHUB_ALERT_MARKER, '')
+      const children = /** @type {Token[]} */ (inline.children)
+      if (!first.content) {
+        children.shift()
+        if (children[0]?.type === 'softbreak' || children[0]?.type === 'hardbreak') children.shift()
+      }
+    } else if (token.type === 'blockquote_close') {
+      const opening = open.pop()
+      if (opening?.meta?.alertType) token.meta = { ...token.meta, alertType: opening.meta.alertType }
+    }
+  }
+}
+
 /**
  * Creates a configured markdown-it instance with admonitions, TOC support, and syntax highlighting
  * @param {{html?: boolean}} [config] - `html`: whether raw HTML in the Markdown is passed through (default: true);
@@ -100,49 +139,22 @@ export function createMarkdownRenderer({ html = true } = {}) {
     })
   })
 
-  // Add support for GitHub-style alerts (> [!NOTE])
+  // Add support for GitHub-style alerts (> [!NOTE]): the marker is removed, the type shows in the styling
+  md.core.ruler.push('github_alerts', state => markGithubAlerts(state.tokens))
+
   const defaultBlockquoteRender = md.renderer.rules.blockquote_open || function(tokens, idx, options, _env, self) {
     return self.renderToken(tokens, idx, options)
   }
-
   md.renderer.rules.blockquote_open = (tokens, idx, options, _env, self) => {
-    // Check if next token is a paragraph containing a GFM alert marker
-    const nextToken = tokens[idx + 1]
-    if (nextToken && nextToken.type === 'paragraph_open') {
-      const contentToken = tokens[idx + 2]
-      if (contentToken && contentToken.type === 'inline') {
-        const alertMatch = contentToken.content.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/)
-        if (alertMatch) {
-          const gfmType = alertMatch[1]
-          // Find matching admonition type
-          const type = Object.keys(admonitionConfig).find(
-            key => admonitionConfig[key].gfmType === gfmType
-          ) || 'info'
-
-          // Remove the alert marker from content
-          contentToken.content = contentToken.content.replace(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/, '')
-
-          // Mark this blockquote as an alert for closing
-          tokens[idx].attrSet('data-alert-type', type)
-
-          return renderAdmonitionOpen(type)
-        }
-      }
-    }
-    return defaultBlockquoteRender(tokens, idx, options, _env, self)
+    const type = tokens[idx].meta?.alertType
+    return type ? renderAdmonitionOpen(type) : defaultBlockquoteRender(tokens, idx, options, _env, self)
   }
 
   const defaultBlockquoteCloseRender = md.renderer.rules.blockquote_close || function(tokens, idx, options, _env, self) {
     return self.renderToken(tokens, idx, options)
   }
-
   md.renderer.rules.blockquote_close = (tokens, idx, options, _env, self) => {
-    // Check if this is closing an alert blockquote
-    const openToken = tokens.slice(0, idx).reverse().find(t => t.type === 'blockquote_open')
-    if (openToken && openToken.attrGet('data-alert-type')) {
-      return renderAdmonitionClose()
-    }
-    return defaultBlockquoteCloseRender(tokens, idx, options, _env, self)
+    return tokens[idx].meta?.alertType ? renderAdmonitionClose() : defaultBlockquoteCloseRender(tokens, idx, options, _env, self)
   }
 
   // Add automatic heading IDs for TOC links
