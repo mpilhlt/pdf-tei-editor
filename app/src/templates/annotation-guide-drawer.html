@@ -1,4 +1,19 @@
-<sl-drawer name="annotationGuideDrawer" label="Annotation Guide" placement="start" style="--size: 60ch;">
+<sl-drawer name="annotationGuideDrawer" placement="start" style="--size: 60ch;">
+  <div slot="label" class="manual-drawer-label">
+    <span name="titleText">Annotation Guide</span>
+    <sl-input name="searchInput" size="small" placeholder="Search the guide" clearable autocomplete="off" hidden>
+      <sl-icon name="search" slot="prefix"></sl-icon>
+    </sl-input>
+  </div>
+  <div slot="header-actions" style="display: flex; align-items: center; gap: 4px;">
+    <sl-tooltip content="Search the guide (Ctrl+K)">
+      <sl-icon-button data-name="searchBtn" name="search" label="Search the guide" style="font-size: 1.1rem;"></sl-icon-button>
+    </sl-tooltip>
+    <sl-tooltip content="Open in new window">
+      <sl-icon-button data-name="openWindowBtn" name="box-arrow-up-right" label="Open in new window" style="font-size: 1.1rem;"></sl-icon-button>
+    </sl-tooltip>
+  </div>
+  <div class="manual-search-anchor"><div name="searchResults"></div></div>
   <div name="content" class="markdown-body" data-theme="light" style="color-scheme: light !important;">
     <!-- content will be dynamically updated-->
   </div>
@@ -12,7 +27,6 @@
       <sl-menu name="tocMenu" style="overflow-y: auto; text-align: left;"></sl-menu>
     </sl-dropdown>
     <div style="display: flex; gap: 8px; margin-left: auto;">
-      <sl-button name="openInNewWindowBtn" variant="default">Open in new window</sl-button>
       <sl-button name="closeBtn" variant="primary">Close</sl-button>
     </div>
   </div>

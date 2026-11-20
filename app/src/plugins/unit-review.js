@@ -15,6 +15,11 @@
  * Other plugins (e.g. the LLM Reviewer) record reviews with {@link UnitReviewPlugin#setMarks} and
  * read the units with {@link UnitReviewPlugin#getUnits}.
  *
+ * Zone documents (variants whose extractor declares `zoneLabels` and the unit path `pages`) are
+ * reviewed by page: the pages come from the document's line layout
+ * (`GET /api/v1/files/{stable_id}/layout`), which is loaded with the document. Without a layout,
+ * the document has no units and the meter shows a warning.
+ *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { EditorView, BlockInfo, ViewUpdate } from '@codemirror/view'
@@ -25,6 +30,7 @@
  * @import { LineMark, LineMarkState } from '../modules/codemirror/unit-review-gutter.js'
  * @import { PopoverReview } from '../modules/unit-review-popover.js'
  * @import { MentionCandidate } from '../modules/mention-autocomplete.js'
+ * @import { ZoneLabel } from '../modules/zone-lines.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -39,8 +45,8 @@ import * as tei_utils from '../modules/tei-utils.js'
 import { readStandOffList, writeStandOffList, ensureUserRespStmt, TEI_NS } from '../modules/standoff-list.js'
 import { applyMergedDiagnostics, collectDiagnostics, replacesDiagnostics, drawerOnlyDiagnostics, markClassGutterLines, appliedFixRange, addDismissListener, addDeleteListener } from '../modules/lint-utils.js'
 import {
-  LIST_TYPE, DEFAULT_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
-  setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint
+  LIST_TYPE, DEFAULT_UNIT_PATH, PAGES_UNIT_PATH, findUnits, readReviewData, serializeReviewData, combineReviews,
+  setMark, reconcileReviewData, emptyReviewData, renumberMarks, baseFingerprint, findUnitElements
 } from '../modules/unit-review.js'
 import { unitReviewGutter, buildUnitReviewMarkers, setUnitReviewMarkersEffect } from '../modules/codemirror/unit-review-gutter.js'
 import { openReviewPopover, openCommentPrompt, closePopover, formatWhen } from '../modules/unit-review-popover.js'
@@ -129,6 +135,15 @@ class UnitReviewPlugin extends Plugin {
   /** @type {Record<string, string>} Unit path by variant id, from the extractors */
   #variantPaths = {}
 
+  /** @type {Record<string, ZoneLabel[]>} Zone labels by variant id, from the extractors */
+  #zoneLabels = {}
+
+  /**
+   * @type {{stableId: string, linePages: number[]|null, message: string, loading: boolean}|null} Line
+   *   layout of the loaded zone document (null while none is loaded); linePages is null if it has none
+   */
+  #layout = null
+
   /** @type {UnitScan} */
   #scan = { units: [], looseText: [], complete: true, path: null }
 
@@ -152,6 +167,11 @@ class UnitReviewPlugin extends Plugin {
 
   /** @type {Map<string, string>} Original fingerprint by fingerprint of a unit edited in this session */
   #carry = new Map()
+  /**
+   * @type {Set<string>} Fingerprints of units that an edit in this session changed or removed: their
+   *   marks are kept, so that undoing the edit restores them
+   */
+  #gone = new Set()
 
   /** @type {ReturnType<typeof setTimeout>|undefined} */
   #timer = undefined
@@ -251,6 +271,23 @@ class UnitReviewPlugin extends Plugin {
     this.#refresh()
   }
 
+  /**
+   * Loads the line layout of a newly selected document that is reviewed by page; the editor may
+   * have loaded it before the document's id and variant reached the state.
+   * @param {string|null} xml
+   */
+  async onXmlChange(xml) {
+    if (xml) await this.#loadLayout()
+  }
+
+  /**
+   * See {@link UnitReviewPlugin#onXmlChange}.
+   * @param {string|null} variant
+   */
+  async onVariantChange(variant) {
+    if (variant) await this.#loadLayout()
+  }
+
   // ── Public API ──────────────────────────────────────────────────────
 
   /**
@@ -267,6 +304,7 @@ class UnitReviewPlugin extends Plugin {
     this.#slot?.reconfigure(enabled ? this.#extensions() : [])
     if (!enabled) closePopover()
     this.#refresh()
+    if (enabled && remember) this.#warnMissingLayout()
     testLog('UNIT_REVIEW_MODE', { enabled })
   }
 
@@ -362,6 +400,7 @@ class UnitReviewPlugin extends Plugin {
       this.#pendingChanges = null
       this.#carryPending = false
       this.#carry = new Map()
+      this.#gone = new Set()
       this.#scan = { units: [], looseText: [], complete: true, path: null }
       clearTimeout(this.#timer)
       this.#timer = setTimeout(() => this.#refresh(), REFRESH_DELAY_MS)
@@ -418,8 +457,10 @@ class UnitReviewPlugin extends Plugin {
     this.#pendingChanges = null
     this.#carryPending = false
     this.#carry = new Map()
+    this.#gone = new Set()
     this.#scan = { units: [], looseText: [], complete: true, path: null }
     this.#fpCache = new Map()
+    this.#loadLayout()
     this.#refresh()
     // a document with units marked not OK opens in review mode, to show the reviewers' feedback;
     // the next document without such units closes it again
@@ -447,10 +488,102 @@ class UnitReviewPlugin extends Plugin {
       const extractors = this.getDependency('extraction').extractorInfo() ?? await /** @type {any} */ (this.getDependency('client')).getExtractorList()
       /** @type {Record<string, string>} */
       const paths = {}
-      for (const ext of extractors ?? []) Object.assign(paths, /** @type {any} */ (ext).reviewUnits ?? {})
+      /** @type {Record<string, ZoneLabel[]>} */
+      const zoneLabels = {}
+      for (const ext of extractors ?? []) {
+        Object.assign(paths, /** @type {any} */ (ext).reviewUnits ?? {})
+        Object.assign(zoneLabels, /** @type {any} */ (ext).zoneLabels ?? {})
+      }
       this.#variantPaths = paths
+      this.#zoneLabels = zoneLabels
     } catch (e) {
       this.#logger.debug('[unit-review] extractor info not available: ' + String(e))
+    }
+  }
+
+  /**
+   * Loads the line layout of the loaded document if its variant is reviewed by page, and refreshes
+   * the units once it is there.
+   */
+  async #loadLayout() {
+    const stableId = this.state?.xml ?? null
+    if (!stableId || this.#variantPaths[this.#documentVariant() ?? ''] !== PAGES_UNIT_PATH) {
+      this.#layout = null
+      return
+    }
+    if (this.#layout?.stableId === stableId) return
+    this.#layout = { stableId, linePages: null, message: 'Loading the page layout…', loading: true }
+    let layout
+    try {
+      const response = await this.getDependency('client').apiClient.filesGetLayout(stableId)
+      layout = {
+        stableId,
+        linePages: response.status === 'ok' ? response.pages : null,
+        message: response.message || 'The layout information of this document is missing.',
+        loading: false
+      }
+    } catch (e) {
+      layout = { stableId, linePages: null, message: `The page layout could not be loaded: ${String(e)}`, loading: false }
+    }
+    if (this.state?.xml !== stableId) return
+    this.#layout = layout
+    this.#refresh()
+    if (this.#enabled) this.#warnMissingLayout()
+    testLog('UNIT_REVIEW_LAYOUT', { stableId, pages: layout.linePages ? new Set(layout.linePages).size : 0 })
+  }
+
+  /**
+   * Tells the user that the loaded document cannot be reviewed by page, once its layout was loaded
+   * and found missing.
+   */
+  #warnMissingLayout() {
+    const message = this.getMissingLayoutMessage()
+    if (message && this.#layout && !this.#layout.loading) {
+      notify(`This document cannot be reviewed by page: ${message}`, 'warning', 'exclamation-triangle')
+    }
+  }
+
+  /**
+   * Returns why the loaded document has no units because it is reviewed by page and has no line
+   * layout, or null if it has a layout or is not reviewed by page.
+   * @returns {string|null}
+   */
+  getMissingLayoutMessage() {
+    return this.#scan.layoutMissing ? (this.#layout?.message ?? 'The layout information of this document is missing.') : null
+  }
+
+  /**
+   * Returns the variant id of the loaded document: its extractor's `variant-id` label, else the
+   * variant filter of the application state.
+   * @returns {string|null}
+   */
+  getVariant() {
+    return this.#documentVariant()
+  }
+
+  /**
+   * Returns the review unit path configured for the variant of the loaded document by the
+   * extractors (`reviewUnits`), without the unit path stored with the document's marks.
+   * @returns {string|null} Null if the variant has no configured path or uses the `auto` default
+   */
+  getUnitPath() {
+    const path = this.#variantPaths[this.#documentVariant() ?? '']
+    return path && path !== DEFAULT_UNIT_PATH ? path : null
+  }
+
+  /**
+   * Returns the review unit elements of a DOM document by a unit path, see the module's
+   * `findUnitElements()`. Without units for the path (`auto`, `pages`, no match), returns none.
+   * @param {Document} xmlDoc
+   * @param {string|null} [unitPath] - Default: the path configured for the loaded document's variant
+   * @returns {Element[]}
+   */
+  findUnitElements(xmlDoc, unitPath = this.getUnitPath()) {
+    try {
+      return findUnitElements(xmlDoc, unitPath)
+    } catch (e) {
+      this.#logger.warn('[unit-review] ' + String(e))
+      return []
     }
   }
 
@@ -486,11 +619,16 @@ class UnitReviewPlugin extends Plugin {
     if (!view) return
     const state = view.state
     const data = this.#readData(state)
-    const variantPath = this.#variantPaths[this.#documentVariant() ?? ''] ?? DEFAULT_UNIT_PATH
-    this.#unitPath = data.unitPath ?? variantPath
+    const variant = this.#documentVariant() ?? ''
+    const variantPath = this.#variantPaths[variant] ?? DEFAULT_UNIT_PATH
+    // a zone document is always reviewed by page; marks stored with another unit path are ignored
+    this.#unitPath = variantPath === PAGES_UNIT_PATH ? PAGES_UNIT_PATH : data.unitPath ?? variantPath
+    // the variant is known only once the document is parsed, which may be after it was loaded
+    if (this.#unitPath === PAGES_UNIT_PATH && this.state?.xml && this.#layout?.stableId !== this.state.xml) this.#loadLayout()
+    const linePages = this.#layout?.stableId === this.state?.xml ? this.#layout?.linePages ?? null : null
     let scan
     try {
-      scan = findUnits(state, this.#unitPath, this.#fpCache)
+      scan = findUnits(state, this.#unitPath, this.#fpCache, { labels: this.#zoneLabels[variant] ?? [], linePages })
     } catch (e) {
       this.#logger.warn('[unit-review] ' + String(e))
       scan = { units: [], looseText: [], complete: true, path: null }
@@ -517,7 +655,7 @@ class UnitReviewPlugin extends Plugin {
     } else if (this.#carryPending && this.#canWrite(true)) {
       this.#carryPending = false
       const copy = this.#readData(state)
-      if (reconcileReviewData(copy, scan.units, this.#carry)) this.#write(copy, false)
+      if (reconcileReviewData(copy, scan.units, this.#carry, this.#gone)) this.#write(copy, false)
     }
     this.#acceptAppliedFixes()
   }
@@ -575,7 +713,7 @@ class UnitReviewPlugin extends Plugin {
     const overlaps = (/** @type {{from: number, to: number}} */ r, /** @type {Unit} */ u) => r.from < u.to && r.to > u.from || r.from === r.to && u.from <= r.from && r.from <= u.to
     // with the marks of the edited units carried over, which may not be written yet
     const data = this.#readData(state)
-    reconcileReviewData(data, this.#scan.units, this.#carry)
+    reconcileReviewData(data, this.#scan.units, this.#carry, this.#gone)
     const { byFingerprint } = combineReviews(this.#scan.units, data, { mode: this.#mode, llmVote: this.#llmVote })
     const fps = this.#scan.units
       .filter(u => ranges.some(r => overlaps(r, u)) && needsRecheck(byFingerprint.get(u.fingerprint)) && !open.some(d => overlaps(d, u)))
@@ -620,6 +758,18 @@ class UnitReviewPlugin extends Plugin {
       const root = this.#carry.get(old.fingerprint) ?? old.fingerprint
       if (root !== unit.fingerprint) this.#carry.set(unit.fingerprint, root)
     }
+    // units that disappeared, also those merged into another unit, which carries the marks of only
+    // one of them over: their marks stay until the document is loaded again. Units created by an
+    // edit in this session hold only carried-over marks, which go with them.
+    const current = new Set(scan.units.map(u => u.fingerprint))
+    for (const old of this.#scan.units) {
+      const fp = old.fingerprint
+      if (!current.has(fp) && !renames.has(fp) && !this.#carry.has(fp)) this.#gone.add(fp)
+    }
+    // a unit back in an earlier state (e.g. after undo) has its own marks again
+    for (const fp of current) {
+      if (this.#gone.delete(fp)) this.#carry.delete(fp)
+    }
     return renames
   }
 
@@ -659,9 +809,9 @@ class UnitReviewPlugin extends Plugin {
    * @param {boolean} addToHistory - False for automatic changes the user should not undo separately
    */
   #write(data, addToHistory) {
-    reconcileReviewData(data, this.#scan.units, this.#carry)
+    reconcileReviewData(data, this.#scan.units, this.#carry, this.#gone)
     // record the path the units were found with, so that the units stay the same for all reviewers
-    if (!data.unitPath || data.unitPath === DEFAULT_UNIT_PATH) data.unitPath = this.#scan.path ?? this.#unitPath
+    if (!data.unitPath || data.unitPath === DEFAULT_UNIT_PATH || this.#unitPath === PAGES_UNIT_PATH) data.unitPath = this.#scan.path ?? this.#unitPath
     const { summary } = combineReviews(this.#scan.units, data, { mode: this.#mode, llmVote: this.#llmVote })
     this.#writing = true
     try {
@@ -933,7 +1083,7 @@ class UnitReviewPlugin extends Plugin {
   #unitTitle(unit) {
     const combined = this.#combined.get(unit.fingerprint)
     if (!combined) return ''
-    const lines = [`<${unit.name}> · ${this.#describe(combined)}`]
+    const lines = [`${unit.label ?? `<${unit.name}>`} · ${this.#describe(combined)}`]
     for (const { reviewer, mark } of combined.reviews) {
       const sign = mark.state === 'ok' ? '✓' : '✕'
       lines.push(`${sign} ${this.#reviewerName(reviewer)}${mark.final ? ' (final)' : ''} · ${formatWhen(reviewer.when)}${mark.comment ? `: ${mark.comment}` : ''}`)
@@ -1121,7 +1271,7 @@ class UnitReviewPlugin extends Plugin {
     meter.dataset.revealsDiagnostics = '' // clicking it expands the diagnostics drawer
     meter.style.cssText = 'display:none;align-items:center;cursor:pointer;padding:4px 6px'
     // The bar alone shows the progress; the counts are in the tooltip shown on hover
-    meter.innerHTML = '<sl-tooltip hoist placement="top"><div slot="content"><span class="ur-text"></span><br><small>Click to show the diagnostics drawer.</small></div><span class="ur-bar" style="display:inline-flex;width:90px;height:7px;border-radius:4px;overflow:hidden;background:var(--sl-color-neutral-200,#e4e6ea)"><i style="background:#2f9e57"></i><i style="background:#d64545"></i><i style="background:#e0a020"></i></span></sl-tooltip>'
+    meter.innerHTML = '<sl-tooltip hoist placement="top"><div slot="content"><span class="ur-text"></span><br><small>Click to show the diagnostics drawer.</small></div><sl-icon class="ur-warning" name="exclamation-triangle" style="display:none;margin-right:4px;color:var(--sl-color-warning-600)"></sl-icon><span class="ur-bar" style="display:inline-flex;width:90px;height:7px;border-radius:4px;overflow:hidden;background:var(--sl-color-neutral-200,#e4e6ea)"><i style="background:#2f9e57"></i><i style="background:#d64545"></i><i style="background:#e0a020"></i></span></sl-tooltip>'
     return meter
   }
 
@@ -1129,9 +1279,16 @@ class UnitReviewPlugin extends Plugin {
     const meter = this.#meter
     if (!meter) return
     const s = this.#summary
-    const visible = this.#enabled && s.units > 0
+    const missingLayout = this.getMissingLayoutMessage()
+    const visible = this.#enabled && (s.units > 0 || missingLayout !== null)
     meter.style.display = visible ? 'inline-flex' : 'none'
+    ;/** @type {HTMLElement} */ (meter.querySelector('.ur-warning')).style.display = missingLayout !== null ? '' : 'none'
     if (!visible) return
+    if (missingLayout !== null) {
+      ;/** @type {HTMLElement} */ (meter.querySelector('.ur-text')).textContent = `No pages to review: ${missingLayout}`
+      for (const bar of /** @type {HTMLElement[]} */ (Array.from(meter.querySelectorAll('.ur-bar i')))) bar.style.width = '0'
+      return
+    }
     const bars = /** @type {HTMLElement[]} */ (Array.from(meter.querySelectorAll('.ur-bar i')))
     const pct = (/** @type {number} */ n) => `${(n / s.units) * 100}%`
     ;/** @type {HTMLElement} */ (bars[0]).style.width = pct(s.ok)

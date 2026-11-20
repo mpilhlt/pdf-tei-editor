@@ -1,10 +1,13 @@
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 
-export default {
-  input: 'app/src/app.js',
+/**
+ * @param {string} name - Entry point in app/src, bundled to app/web/<name>.js
+ */
+const bundle = (name) => ({
+  input: `app/src/${name}.js`,
   output: {
-    file: 'app/web/app.js',
+    file: `app/web/${name}.js`,
     format: 'es',
     inlineDynamicImports: true
   },
@@ -20,4 +23,7 @@ export default {
   external: (id) => {
     return id.startsWith('http://') || id.startsWith('https://');
   }
-};
+})
+
+// the application, the standalone user manual window (app/web/manual.html) and annotation guide window (app/web/guide.html)
+export default [bundle('app'), bundle('manual'), bundle('guide')];

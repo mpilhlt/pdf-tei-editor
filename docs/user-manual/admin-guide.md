@@ -1,7 +1,7 @@
 # Admin Guide
 
-- [Installation](./development/installation.md)
-- [User Management](user-manual/user-management.md)
+- [Installation](../development/installation.md)
+- [User Management](./user-management.md)
 - [Personal Access Tokens](./access-tokens.md)
 - [Config Editor](./app-config.md)
 - [Plugin Manager](./plugin-manager.md)
@@ -12,3 +12,7 @@ Administrators reach the administration tools in the **Tools** menu of the toolb
 ![The open Tools menu with the sections Administration (Garbage Collection, Manage Access & Projects, Configuration Editor, Manage Plugins), Inference, Document rules and Annotation](../images/admin-tools-menu.png)
 
 *The Tools menu of an administrator.*
+
+## Configuring plugins
+
+<!-- plugin-docs: admin hide-heading -->

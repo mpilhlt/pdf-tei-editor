@@ -9,7 +9,7 @@ import assert from 'node:assert'
 import { JSDOM } from 'jsdom'
 
 const { document } = new JSDOM('<!DOCTYPE html>').window
-const { checkNavigationXpath, namespacePrefixes, labelToText } = await import('../../../app/src/modules/navigation-xpath-utils.js')
+const { checkNavigationXpath, namespacePrefixes, labelToText, indexAtOrAfterNode } = await import('../../../app/src/modules/navigation-xpath-utils.js')
 
 describe('checkNavigationXpath', () => {
   it('accepts absolute expressions that select elements', () => {
@@ -48,5 +48,63 @@ describe('namespacePrefixes', () => {
 describe('labelToText', () => {
   it('decodes HTML entities', () => {
     assert.strictEqual(labelToText('&lt;bibl&gt; &amp; co', document), '<bibl> & co')
+  })
+})
+
+describe('indexAtOrAfterNode', () => {
+  const { window } = new JSDOM('')
+  const xml = new window.DOMParser().parseFromString(
+    '<text><front><p/></front><listBibl><bibl/><bibl/></listBibl><page/><listBibl><bibl/></listBibl><back/></text>', 'application/xml')
+  const text = /** @type {Element} */ (xml.documentElement)
+  const children = Array.from(text.children)
+  const [front, listBibl1, page, listBibl2] = children
+  const bibls = Array.from(xml.getElementsByTagName('bibl'))
+  const listBibls = [listBibl1, listBibl2]
+
+  it('stays on the current node if the new expression selects it', () => {
+    assert.strictEqual(indexAtOrAfterNode(children, listBibl2), 4)
+  })
+
+  it('selects the node that contains the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode(listBibls, bibls[1]), 1)
+    assert.strictEqual(indexAtOrAfterNode(children, bibls[2]), 4)
+  })
+
+  it('selects the innermost of several nodes that contain the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode([text, listBibl1, bibls[0]], bibls[1]), 2)
+  })
+
+  it('selects the first descendant or following node', () => {
+    assert.strictEqual(indexAtOrAfterNode(bibls, listBibl1), 1)
+    assert.strictEqual(indexAtOrAfterNode(bibls, page), 3)
+    assert.strictEqual(indexAtOrAfterNode(listBibls, front), 1)
+    assert.strictEqual(indexAtOrAfterNode(listBibls, page), 2)
+  })
+
+  it('wraps around to the first node when no node follows', () => {
+    assert.strictEqual(indexAtOrAfterNode(bibls, children[4]), 1)
+  })
+
+  it('returns 0 without nodes', () => {
+    assert.strictEqual(indexAtOrAfterNode([], page), 0)
+  })
+})
+
+describe('indexAtOrAfterNode with milestones', () => {
+  const { window } = new JSDOM('')
+  const xml = new window.DOMParser().parseFromString(
+    '<text><pb n="1"/><front>A<lb/></front><body>B<lb/><pb n="2"/>C<lb/></body><pb n="3"/><page>3</page></text>', 'application/xml')
+  const pbs = Array.from(xml.getElementsByTagName('pb'))
+  const [front, body, page] = ['front', 'body', 'page'].map(name => /** @type {Element} */ (xml.getElementsByTagName(name)[0]))
+
+  it('selects the last milestone at or before the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode(pbs, front), 1)
+    assert.strictEqual(indexAtOrAfterNode(pbs, body), 1)
+    assert.strictEqual(indexAtOrAfterNode(pbs, pbs[1]), 2)
+    assert.strictEqual(indexAtOrAfterNode(pbs, page), 3)
+  })
+
+  it('selects the first milestone if none precedes the current node', () => {
+    assert.strictEqual(indexAtOrAfterNode(pbs.slice(1), front), 1)
   })
 })

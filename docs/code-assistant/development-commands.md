@@ -32,6 +32,10 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 ```bash
 # Full build process
 npm run build
+
+# Generate the plugin and module registries, the importmap and the highlight.js bundle
+# (run by npm install and npm run start:dev)
+npm run generate
 ```
 
 The API client (`app/src/modules/api-client-v1.js`) is hand-maintained, not generated — see [docs/code-assistant/api-client.md](api-client.md).
@@ -85,7 +89,7 @@ npm run manage-remote -- config set <key> <json_value>
 2. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode
 3. **Backend changes**: Server auto-reloads automatically (FastAPI dev server detects changes), including changes to plugins installed as editable packages from a pte-plugins checkout (`npm run dev:install` there) and to `FASTAPI_PLUGIN_PATHS` plugins
 4. **Schema updates**: Delete `schema/cache/` to refresh XSD cache
-5. **Building is only needed for production** and is handled by pre-push git hooks
+5. **Building is only needed for production**. The production bundle (templates, version file, PDF.js, Rollup bundle, icons) is built inside the Docker image, both in CI and for releases, so there is no git hook for it. The files that loading the frontend from source needs (`app/src/plugin-registry.js`, `app/src/module-registry.js`, `app/web/importmap.json`, `app/web/highlight.js`) are generated and not under version control. `npm run generate` creates them; `npm install` and `npm run start:dev` run it. After adding or removing a frontend plugin, a `@registerModule` module or an npm dependency while the dev server runs, run `npm run generate`.
 
 ## Critical Reminders
 

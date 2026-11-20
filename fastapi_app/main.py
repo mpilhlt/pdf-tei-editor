@@ -4,7 +4,7 @@ FastAPI main application with versioned API endpoints.
 
 from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -285,9 +285,11 @@ from .routers import (
     files_export,
     files_import,
     files_metadata,
+    files_layout,
     files_permissions,
     validation,
     extraction,
+    ocr,
     document_rules,
     llm,
     secrets,
@@ -301,6 +303,8 @@ from .routers import (
     messages,
     bookmarks,
     navigation_xpath,
+    manual,
+    annotation_guides,
     files_comments
 )
 
@@ -317,6 +321,7 @@ api_v1.include_router(groups.router)
 api_v1.include_router(roles.router)
 api_v1.include_router(validation.router)
 api_v1.include_router(extraction.router)
+api_v1.include_router(ocr.router)
 api_v1.include_router(document_rules.router)
 api_v1.include_router(llm.router)  # LLM provider registry
 api_v1.include_router(secrets.router)  # Per-user API keys
@@ -333,11 +338,14 @@ api_v1.include_router(files_heartbeat.router)  # Before files_serve (catch-all)
 api_v1.include_router(files_export.router)  # Export endpoint
 api_v1.include_router(files_import.router)  # Import endpoint
 api_v1.include_router(files_metadata.router)  # Metadata update endpoint
+api_v1.include_router(files_layout.router)  # Line layout of zone documents; before files_serve (catch-all)
 api_v1.include_router(files_permissions.router)  # Document permissions (granular mode)
 api_v1.include_router(files_comments.router)  # Replies to comment threads; before files_serve (catch-all)
 api_v1.include_router(messages.router)  # Messages for reviews and comments
 api_v1.include_router(bookmarks.router)  # Private bookmarks of the current user
 api_v1.include_router(navigation_xpath.router)  # XPath expressions of the node navigation
+api_v1.include_router(manual.router)  # Pages that plugins contribute to the user manual
+api_v1.include_router(annotation_guides.router)  # Annotation guide files of the extractors (guide window)
 api_v1.include_router(sse.router)  # SSE stream
 api_v1.include_router(maintenance.router)  # Admin maintenance controls
 api_v1.include_router(plugins_admin.router)  # Plugin management (admin); before plugins router
@@ -428,6 +436,37 @@ if is_dev_mode:
     tests_root = project_root / 'tests'
     if tests_root.exists():
         app.mount("/tests", StaticFiles(directory=str(tests_root)), name="tests")
+
+# Standalone user manual window: every path below /manual/ is resolved in the browser by
+# app/src/manual.js (shareable links such as /manual/user-manual/review-workflow#unit-review)
+
+@app.api_route("/manual", methods=["GET", "HEAD"], include_in_schema=False)
+async def manual_window_root(request: Request) -> RedirectResponse:
+    """Redirect /manual to /manual/, keeping the query string."""
+    query = f"?{request.url.query}" if request.url.query else ""
+    return RedirectResponse(url=f"/manual/{query}")
+
+
+@app.api_route("/manual/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def manual_window(path: str) -> FileResponse:
+    """The page of the standalone user manual window, for any manual path."""
+    return FileResponse(web_root / 'manual.html', media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+
+# Standalone annotation guide window: /guide/<guide id>#<heading>, resolved in the browser by app/src/guide.js
+
+@app.api_route("/guide", methods=["GET", "HEAD"], include_in_schema=False)
+async def guide_window_root(request: Request) -> RedirectResponse:
+    """Redirect /guide to /guide/, keeping the query string."""
+    query = f"?{request.url.query}" if request.url.query else ""
+    return RedirectResponse(url=f"/guide/{query}")
+
+
+@app.api_route("/guide/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def guide_window(path: str) -> FileResponse:
+    """The page of the standalone annotation guide window, for any guide id."""
+    return FileResponse(web_root / 'guide.html', media_type="text/html", headers={"Cache-Control": "no-cache"})
+
 
 # Mount docs
 docs_root = project_root / 'docs'

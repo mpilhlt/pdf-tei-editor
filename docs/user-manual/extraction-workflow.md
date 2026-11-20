@@ -31,9 +31,34 @@ Choose the extractor, which in most cases will be "Grobid" or "Llamore". This wi
 
 - The "Grobid" extractor has different extraction models ("segmentation", "reference", etc.), which each constitute a variant. You can also select a custom "flavour", tied to a particular type of training data.
 - the "LLamore" extractor lets you select "Instructions" which are added to th prompt and can be edited by clicking on the third button in the button group. 
-- The "LLamore" extractor uses the LLM model shown in the dialog, which is the one selected under Tools > Default Model. Administrators set the default model for everyone (the app asks them to confirm this); other users can pick another permitted model for their session. Administrators also see a clipboard button next to each model, which copies its full id (`<provider>/<model>`, e.g. `kisski/llama-3.3-70b-instruct`) for use in scripts such as the auto-annotation model probe (`--model`).
+- The "LLamore" extractor uses the LLM model shown in the dialog, which is the one selected under Tools > Inference > Default Model (see [Choosing a language model](language-models.md)). Administrators set the default model for everyone (the app asks them to confirm this); other users can pick another permitted model for their session. Administrators also see a clipboard button next to each model, which copies its full id (`<provider>/<model>`, e.g. `kisski/llama-3.3-70b-instruct`) for use in scripts such as the auto-annotation model probe (`--model`).
 
 Then, click on "Extract", this starts the extraction and produces a first version of the "gold" file, which refers to the "gold standard" dataset with the corrected and reviewed annotation data.
+
+#### Text recognition (OCR)
+
+Extractors read the text layer of the PDF. Scanned PDFs have no text layer, and older scans often have one of poor quality. Digital PDFs can have a broken text layer too: the characters can be garbled, or the text can be stored at other places or in another order than it is shown on the page. Below the extractor options, the dialog shows the result of a check of the text layer and the option "Apply text recognition before extraction":
+
+- If the PDF has no text layer, the option is checked and cannot be unchecked.
+- If the text layer is of poor quality, the option is checked, with the problems listed below it. You can uncheck it. Problems are garbled characters, many implausible words, text that does not read as natural language, scanned pages without text, and text that does not match the page (see below).
+- If the text layer looks fine, the option is unchecked. If you check it anyway, the text layer is replaced, since the check cannot find all problems.
+
+The check runs in two steps. The first looks at the characters of the text layer and takes a moment. If it finds no problem, the text recognition engine reads up to three sample pages and compares the words it finds with the text layer: whether they are the same words, at the same places and in the same order. This takes a few more seconds; the dialog shows "Comparing the text layer with the page images…" meanwhile.
+
+Choose the text recognition engine and click "Configure OCR options" to choose the languages of the document and the engine parameters. By default, the language declared in the document or the language detected in the text layer is used. The parameters are remembered for the next extraction.
+
+The OCRmyPDF engine has these parameters:
+
+- **Mode**: "auto" chooses from the state of the text layer:
+  - "skip" recognizes only pages without text
+  - "redo" replaces an existing OCR text layer
+  - "vectorize" replaces a digital text layer and keeps the pages as they are: the text is converted to vector outlines, which look the same but contain no text, and the pages are recognized again. This is used for broken digital text layers, PDFs with some scanned pages, and when you ask for text recognition although the text layer looks fine.
+  - "force" turns all pages into images and recognizes them again.
+- **Rasterize if needed**: if "vectorize" is not possible, turn the pages into images instead ("force"). This happens if the PDF is encrypted, if the conversion would change how the pages look, or makes the file too large. The pages then lose their vector graphics, and the file is usually much larger. A message tells you when this happened, and the text layer check of the PDF mentions it later. Uncheck the option to get an error instead.
+- **Straighten skewed pages**: rotates crooked scans by small angles before recognition. It is not applied when the pages are kept as vector graphics.
+- **Fix page orientation**: turns pages that are upside down or sideways. This changes the page orientation, so coordinates in existing annotations may no longer match.
+
+Text recognition replaces the stored PDF with the result. The PDF keeps its identifier, so the existing TEI documents stay linked to it, and the improved text layer is also used by the PDF viewer, for example by Autosearch. The original PDF is not kept. Text recognition can take a minute or more for long documents.
 
 ### 2. Versions, corrections and revisions
 
@@ -55,7 +80,7 @@ Edits are always be done in copies, which merged by the reviewers into the "gold
 
 - Work on this document as instructed by the annotation rules until you are ready to submit it to a reviewer. 
 
-- By toggling "Autosearch" (![The Autosearch switch, turned on](../images/extraction-workflow-autosearch.png)) in the footer of the PDF Viewer, you can search the contents of the current entry (e.g. a `<bibl>` or `<biblStruct>`) in the PDF automatically, for any extraction. It works well in most documents; results can be off if the PDF's underlying text extraction is poor (e.g. scanned pages, unusual column layouts, or heavy OCR artifacts), so treat the highlighted region as a starting point and verify it against the page.
+- By toggling "Autosearch" (![The Autosearch switch, turned on](../images/extraction-workflow-autosearch.png)) in the footer of the PDF Viewer, you can search the contents of the current entry (e.g. a `<bibl>` or `<biblStruct>`) in the PDF automatically, for any extraction. It works well in most documents; results can be off if the PDF's underlying text extraction is poor (e.g. scanned pages, unusual column layouts, or heavy OCR artifacts), so treat the highlighted region as a starting point and verify it against the page. If no sufficiently similar text is found, a message next to the switch says so for five seconds, or until a later search finds a match.
 
 ![The PDF viewer with footnote 5 highlighted in yellow, next to the XML editor with the cursor in the matching bibl element](../images/extraction-workflow-autosearch-result.png)
 
@@ -90,4 +115,6 @@ Once annotators have finished their work:
 
 When a batch of training data has been corrected, the "gold" standard can be downloaded and used to retrain the extraction models. 
 
+### Extraction with plugins
 
+<!-- plugin-docs: extraction hide-heading -->

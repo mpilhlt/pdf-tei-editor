@@ -10,6 +10,9 @@ FROM python:${PYTHON_VERSION}-slim AS base
 
 # Re-declare ARG variables for this stage
 ARG NODE_VERSION=24.21.0
+# Tesseract language models for text recognition (OCRmyPDF plugin), as Debian package suffixes
+# (tesseract-ocr-<lang>). Example: --build-arg TESSERACT_LANGS="eng deu fra"
+ARG TESSERACT_LANGS="eng deu fra ita spa por nld lat grc ell rus pol ces"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -22,6 +25,10 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     poppler-utils \
+    # Ghostscript: replaces broken text layers while keeping vector graphics (OCRmyPDF plugin)
+    ghostscript \
+    tesseract-ocr \
+    $(for lang in ${TESSERACT_LANGS}; do echo "tesseract-ocr-${lang}"; done) \
     # Clean up package cache
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -80,7 +87,7 @@ COPY . .
 
 # Run the build and cleanup in one layer
 RUN uv run python scripts/build/compile-sl-icons.py \
-    && node scripts/build/build.js --steps=templates,version,pdfjs,bundle \
+    && node scripts/build/build.js --steps=plugins,modules,highlight,templates,version,pdfjs,bundle \
     && uv run python scripts/build/generate-sandbox-client-script.py \
     # Remove dev dependencies immediately after build
     && npm prune --omit=dev \

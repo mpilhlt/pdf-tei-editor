@@ -40,6 +40,7 @@
 /**
  * @typedef {object} availablePanelPart
  * @property {import('../ui.js').SlInput} availableSearch
+ * @property {import('../ui.js').SlButton} upgradeAllBtn
  * @property {import('../ui.js').SlButton} refreshBtn
  * @property {HTMLDivElement} availableNote
  * @property {HTMLDivElement} availableList

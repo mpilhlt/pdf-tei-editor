@@ -6,6 +6,8 @@
  * enabled runtime install (PTE_PLUGIN_INSTALL), the "Available" tab lists the plugins
  * of the plugin repositories for installation and upgrade; upgrades and removals
  * take effect after the server processes restart ("Apply plugin changes").
+ * When an administrator logs in, it checks the plugin repositories for updates of the
+ * installed plugins and offers to open the dialog, where "Upgrade installed" applies them all.
  */
 
 /**
@@ -14,6 +16,7 @@
  * @import { SlDialog } from '../ui.js'
  * @import { pluginAdminDialogPart } from '../templates/plugin-admin-dialog.types.js'
  * @import { pluginAdminConfirmDialogPart } from '../templates/plugin-admin-confirm-dialog.types.js'
+ * @import { pluginUpdateAlertPart } from '../templates/plugin-admin-update-alert.types.js'
  * @import { AvailablePlugin, AvailablePluginsResponse, ChangeResult, InstallErrorDetail, PluginAdminInfo, PropagationInfo } from '../modules/api-client-v1.js'
  */
 
@@ -26,6 +29,7 @@ import { notify } from '../modules/sl-utils.js'
 await registerTemplate('plugin-admin-dialog', 'plugin-admin-dialog.html')
 await registerTemplate('plugin-admin-confirm-dialog', 'plugin-admin-confirm-dialog.html')
 await registerTemplate('plugin-admin-menu-item', 'plugin-admin-menu-item.html')
+await registerTemplate('plugin-admin-update-alert', 'plugin-admin-update-alert.html')
 
 // Icons used in plugin-admin templates (needed for build system to include them)
 // <sl-icon name="plug"></sl-icon>
@@ -36,6 +40,7 @@ await registerTemplate('plugin-admin-menu-item', 'plugin-admin-menu-item.html')
 // <sl-icon name="arrow-clockwise"></sl-icon>
 // <sl-icon name="trash"></sl-icon>
 // <sl-icon name="download"></sl-icon>
+// <sl-icon name="arrow-up-circle"></sl-icon>
 
 /** @type {Record<string, string>} */
 const STATUS_LABELS = { active: 'Active', disabled: 'Disabled', inactive: 'Inactive', unavailable: 'Unavailable', incompatible: 'Incompatible', failed: 'Failed' }
@@ -67,6 +72,15 @@ function esc(s) {
  */
 function installKey(p) {
   return `${p.repository}#${p.id}`
+}
+
+/**
+ * The installed plugins that can be upgraded to a newer release
+ * @param {AvailablePluginsResponse | null} available
+ * @returns {AvailablePlugin[]}
+ */
+function upgradablePlugins(available) {
+  return available ? available.plugins.filter(p => p.update_available && p.installable && p.installed_version && p.latest_version) : []
 }
 
 class PluginAdminPlugin extends Plugin {
@@ -118,6 +132,15 @@ class PluginAdminPlugin extends Plugin {
 
   /** Whether the server can restart its worker processes itself */
   #restartSupported = false
+
+  /** Whether "Upgrade installed" is running */
+  #upgradingAll = false
+
+  /**
+   * Name of the admin user for whom the plugin updates were checked in this page
+   * @type {string | null}
+   */
+  #updatesCheckedFor = null
 
   /** @returns {pluginAdminDialogPart['tabs']['installedPanel']} */
   get #installedUi() { return this.#dialogUi.tabs.installedPanel }
@@ -172,6 +195,7 @@ class PluginAdminPlugin extends Plugin {
     })
     this.#availableUi.availableSearch.addEventListener('sl-input', () => this.#renderAvailable())
     this.#availableUi.refreshBtn.addEventListener('click', () => this.#loadAvailable(true))
+    this.#availableUi.upgradeAllBtn.addEventListener('click', () => this.#confirmUpgradeAll())
     this.#availableUi.availableList.addEventListener('click', e => {
       const button = /** @type {HTMLElement} */ (e.target).closest('[data-install]')
       if (button instanceof HTMLElement && !button.hasAttribute('disabled')) this.#confirmInstall(button.dataset.repo, button.dataset.install)
@@ -198,6 +222,7 @@ class PluginAdminPlugin extends Plugin {
     this.getDependency('tools').addMenuItems([this.#menuItem], 'administration')
     this.#menuItem.addEventListener('click', () => this.#open())
     this.#menuItem.style.display = userIsAdmin(this.state.user) ? '' : 'none'
+    this.#checkForUpdates(this.state.user)
   }
 
   /**
@@ -207,14 +232,66 @@ class PluginAdminPlugin extends Plugin {
     if (this.#menuItem) {
       this.#menuItem.style.display = userIsAdmin(newUser) ? '' : 'none'
     }
+    this.#checkForUpdates(newUser)
   }
 
-  /** Load the plugin list and open the dialog */
-  async #open() {
+  /**
+   * Once per page and admin user: if runtime install is enabled, read the plugin repositories
+   * (the server caches them for an hour) and tell the admin about updates of installed plugins.
+   * Runs in the background; failures are only logged.
+   * @param {any} user
+   */
+  async #checkForUpdates(user) {
+    if (!userIsAdmin(user)) {
+      this.#updatesCheckedFor = null
+      return
+    }
+    if (this.#updatesCheckedFor === user.username) return
+    this.#updatesCheckedFor = user.username
+    try {
+      await this.#load()
+      if (!this.#installEnabled) return
+      this.#available = await this.#api.pluginsAdminAvailable({ refresh: false })
+    } catch (error) {
+      this.#logger.warn('Could not check for plugin updates: ' + String(error))
+      return
+    }
+    this.#renderAvailable()
+    const updates = upgradablePlugins(this.#available)
+    if (updates.length) this.#showUpdateAlert(updates)
+  }
+
+  /**
+   * Show a toast listing the plugin updates, with a button that opens the "Available" tab
+   * @param {AvailablePlugin[]} updates
+   */
+  #showUpdateAlert(updates) {
+    /** @type {HTMLElement & pluginUpdateAlertPart & { toast: () => Promise<void>, hide: () => Promise<void> }} */
+    const alert = this.createUi(createSingleFromTemplate('plugin-admin-update-alert', document.body))
+    const names = updates.map(p => `${p.id} (v${p.installed_version} → v${p.latest_version})`).join(', ')
+    alert.updateText.textContent = updates.length === 1
+      ? `A plugin update is available: ${names}.`
+      : `${updates.length} plugin updates are available: ${names}.`
+    alert.openBtn.addEventListener('click', () => {
+      alert.hide()
+      this.#open('available')
+    })
+    alert.toast()
+  }
+
+  /**
+   * Load the plugin list and open the dialog
+   * @param {'installed' | 'available'} [tab] - Tab to show
+   */
+  async #open(tab) {
     try {
       await this.#load()
       this.#render()
       this.#dialogUi.show()
+      if (tab === 'available' && this.#installEnabled) {
+        this.#dialogUi.tabs.show('available')
+        this.#renderAvailable()
+      }
     } catch (error) {
       this.#logger.error('Failed to open plugin manager: ' + String(error))
       notify('Failed to load plugins', 'danger', 'exclamation-octagon')
@@ -327,6 +404,11 @@ class PluginAdminPlugin extends Plugin {
     ui.availableList.innerHTML = rows.length
       ? rows.map(p => this.#availableRowHtml(p)).join('')
       : '<div style="padding: 1.5rem; text-align: center; color: var(--sl-color-neutral-600);">No installable plugins found.</div>'
+    const upgradable = upgradablePlugins(data).length
+    ui.upgradeAllBtn.style.display = upgradable || this.#upgradingAll ? '' : 'none'
+    ui.upgradeAllBtn.loading = this.#upgradingAll
+    ui.upgradeAllBtn.disabled = this.#upgradingAll || this.#installing.size > 0
+    ui.upgradeAllBtn.title = upgradable ? `Upgrade ${upgradable} installed plugin${upgradable === 1 ? '' : 's'} to the latest release` : ''
   }
 
   /**
@@ -570,23 +652,11 @@ class PluginAdminPlugin extends Plugin {
     if (this.#installing.has(key)) return
     this.#installing.add(key)
     this.#renderAvailable()
-    /** @type {[string, 'success' | 'danger', string, number]} */
-    let message
-    try {
-      const result = await this.#api.pluginsAdminInstall({
-        repository: p.repository, id: p.id, version, confirm: p.trusted ? undefined : p.repository
-      })
-      message = [`${result.action === 'upgrade' ? 'Upgraded' : 'Installed'} ${p.id} v${result.version}`
-        + (result.packages?.length ? ` with ${result.packages.length} package${result.packages.length === 1 ? '' : 's'}` : '')
-        + (result.restart_required ? '; apply the plugin changes to use the new version' : result.action === 'install' ? '; enable it in the "Installed" tab' : ''),
-      'success', 'check-circle', 6000]
-    } catch (error) {
-      this.#logger.error('Plugin install failed: ' + String(error))
-      /** @type {InstallErrorDetail | undefined} */
-      const detail = /** @type {any} */ (error)?.detail
-      const unmet = detail?.unmet?.length ? ` Missing: ${detail.unmet.join(', ')}` : ''
-      message = [`Could not install ${p.id}: ${error instanceof Error ? error.message : error}.${unmet}`, 'danger', 'exclamation-octagon', 12000]
-    }
+    const outcome = await this.#runInstall(p, version)
+    if (outcome.ok) this.#markInstalled(p, version)
+    const message = outcome.ok
+      ? [outcome.text, 'success', 'check-circle', 6000]
+      : [outcome.text, 'danger', 'exclamation-octagon', 12000]
     // Keep the spinner until the lists show the outcome, then report it
     try {
       await this.#refreshAll()
@@ -594,7 +664,111 @@ class PluginAdminPlugin extends Plugin {
       this.#installing.delete(key)
       this.#renderAvailable()
     }
-    notify(...message)
+    notify(.../** @type {[string, 'success' | 'danger', string, number]} */ (message))
+  }
+
+  /**
+   * Install or upgrade a plugin through the API
+   * @param {AvailablePlugin} p
+   * @param {string} version
+   * @returns {Promise<{ok: boolean, restartRequired: boolean, text: string}>} Outcome and the message describing it
+   */
+  async #runInstall(p, version) {
+    try {
+      const result = await this.#api.pluginsAdminInstall({
+        repository: p.repository, id: p.id, version, confirm: p.trusted ? undefined : p.repository
+      })
+      return {
+        ok: true,
+        restartRequired: result.restart_required,
+        text: `${result.action === 'upgrade' ? 'Upgraded' : 'Installed'} ${p.id} v${result.version}`
+          + (result.packages?.length ? ` with ${result.packages.length} package${result.packages.length === 1 ? '' : 's'}` : '')
+          + (result.restart_required ? '; apply the plugin changes to use the new version' : result.action === 'install' ? '; enable it in the "Installed" tab' : '')
+      }
+    } catch (error) {
+      this.#logger.error('Plugin install failed: ' + String(error))
+      /** @type {InstallErrorDetail | undefined} */
+      const detail = /** @type {any} */ (error)?.detail
+      const unmet = detail?.unmet?.length ? ` Missing: ${detail.unmet.join(', ')}` : ''
+      return { ok: false, restartRequired: false, text: `Could not install ${p.id}: ${error instanceof Error ? error.message : error}.${unmet}` }
+    }
+  }
+
+  /**
+   * Ask for confirmation and upgrade all installed plugins that have a newer release.
+   * Upgrades of plugins of untrusted owners require typing "upgrade".
+   */
+  #confirmUpgradeAll() {
+    const updates = upgradablePlugins(this.#available)
+    if (!updates.length || this.#upgradingAll) return
+    const untrusted = updates.filter(p => !p.trusted)
+    const versions = updates.map(p => `${p.id} v${p.installed_version} → v${p.latest_version}`).join(', ')
+    const packages = [...new Set(updates.flatMap(p => p.install_packages ?? []))]
+    const text = `Upgrade ${updates.length === 1 ? 'this plugin' : `these ${updates.length} plugins`} to the latest release (${versions})?`
+      + (this.#restartSupported
+        ? ' Plugins in use take the new version when the server processes restart, which happens once after all upgrades are installed. Jobs running in a restarting process (for example a batch extraction) are interrupted.'
+        : ' Plugins in use take the new version after the server is restarted.')
+      + (packages.length ? ` The packages ${packages.join(', ')} and their dependencies are installed from PyPI with them.` : '')
+      + (untrusted.length ? ` ${untrusted.map(p => p.repository).join(', ')} ${untrusted.length === 1 ? 'does' : 'do'} not belong to a trusted owner. Type "upgrade" to confirm.` : '')
+    this.#confirm(`Upgrade ${updates.length} plugin${updates.length === 1 ? '' : 's'}?`, text, updates.map(p => p.id),
+      'Upgrade all', untrusted.length ? 'danger' : 'primary', () => this.#upgradeAll(updates), untrusted.length ? 'upgrade' : null)
+  }
+
+  /**
+   * Show a plugin as installed in the given version in the "Available" tab, before the list is
+   * reloaded from the server
+   * @param {AvailablePlugin} p
+   * @param {string} version
+   */
+  #markInstalled(p, version) {
+    p.installed_version = version
+    p.update_available = false
+  }
+
+  /**
+   * Upgrade the plugins one after the other, restart the server processes once if an upgraded
+   * plugin is in use, and report the outcome in one message
+   * @param {AvailablePlugin[]} updates
+   */
+  async #upgradeAll(updates) {
+    if (this.#upgradingAll) return
+    this.#upgradingAll = true
+    for (const p of updates) this.#installing.add(installKey(p))
+    this.#renderAvailable()
+    /** @type {string[]} */
+    const upgraded = []
+    /** @type {string[]} */
+    const failures = []
+    let restartRequired = false
+    try {
+      for (const p of updates) {
+        const outcome = await this.#runInstall(p, /** @type {string} */ (p.latest_version))
+        this.#installing.delete(installKey(p))
+        if (outcome.ok) {
+          this.#markInstalled(p, /** @type {string} */ (p.latest_version))
+          upgraded.push(`${p.id} v${p.latest_version}`)
+          restartRequired ||= outcome.restartRequired
+        } else {
+          failures.push(outcome.text)
+        }
+        this.#renderAvailable()
+      }
+      await this.#refreshAll()
+    } finally {
+      for (const p of updates) this.#installing.delete(installKey(p))
+      this.#upgradingAll = false
+      this.#renderAvailable()
+    }
+    const restartNow = restartRequired && this.#restartSupported
+    if (upgraded.length) {
+      notify(`Upgraded ${upgraded.join(', ')}`
+        + (restartNow ? '; restarting the server processes to use the new versions' : restartRequired ? '; restart the server to use the new versions' : ''),
+      'success', 'check-circle', 8000)
+    }
+    if (failures.length) {
+      notify(failures.join(' '), 'danger', 'exclamation-octagon', 12000)
+    }
+    if (restartNow) await this.#restart()
   }
 
   /**

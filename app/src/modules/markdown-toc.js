@@ -88,3 +88,22 @@ export function addHeadingLinkButtons(container, onCopy) {
     })
   })
 }
+
+/**
+ * The anchor of the last heading at or above the top of a drawer's visible area, for opening the section that is
+ * shown in another window.
+ * @param {SlDrawer} drawer
+ * @param {HTMLElement} container - The element containing the rendered Markdown
+ * @returns {string} The anchor, or "" if the drawer is scrolled to the top or no heading is above the top
+ */
+export function visibleHeadingAnchor(drawer, container) {
+  const body = drawer.shadowRoot?.querySelector('[part="body"]')
+  if (!body) return ''
+  const top = body.getBoundingClientRect().top + 8
+  let anchor = ''
+  for (const heading of container.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]')) {
+    if (heading.getBoundingClientRect().top > top) break
+    anchor = heading.id
+  }
+  return body.scrollTop > 0 ? anchor : ''
+}

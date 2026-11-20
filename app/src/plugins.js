@@ -26,6 +26,7 @@ import {
   DocumentActionsPlugin,
   DocumentRulesPlugin,
   ExtractionPlugin,
+  OcrPlugin,
   FiledataPlugin,
   FileSelectionDrawerPlugin,
   FileSelectionPlugin,
@@ -109,6 +110,7 @@ const plugins = [
   FileSelectionDrawerPlugin,
   DocumentActionsPlugin,
   ServicesPlugin,
+  OcrPlugin,              // text recognition (OCR) engines and options dialog, used by ExtractionPlugin
   ExtractionPlugin,
   ToolsPlugin,
   InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)

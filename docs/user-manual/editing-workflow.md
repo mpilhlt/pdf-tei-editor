@@ -57,13 +57,27 @@ Plugins can add further buttons to the right-hand section of the toolbar, for ex
 
 | Button | Plugin | What it does |
 | --- | --- | --- |
-| TEI Wizard (wand icon) | TEI Wizard (ships with the application) | Run TEI-specific utilities (e.g. pretty-print, convert XML comments into [unit comments](unit-comments.md)) |
+| TEI Wizard (wand icon) | TEI Wizard (ships with the application) | Menu of the TEI enhancements that apply to the document, see [Enhancing the TEI](#enhancing-the-tei) |
 
 The XSL transformations listed by the XSL viewer are also provided by plugins (for example the GROBID plugin).
 
 Saving a revision and deleting documents are done with the **Document** buttons in the main toolbar, not in the editor toolbar.
 
 Buttons that are greyed out are disabled for the current document state or your role.
+
+### Enhancing the TEI
+
+The **TEI Wizard** (wand icon) opens a menu of enhancements that change the whole document. It lists only the enhancements that apply to the document's variant. Choose one to run it: the result is shown in the [merge view](#merge-view-comparing-versions), where you accept or reject the changes.
+
+![The TEI Wizard menu in the XML editor toolbar](../images/editing-workflow-tei-wizard.png)
+
+*The TEI Wizard menu.*
+
+- **Pretty Print XML** (ships with the application) indents the document. If the document's variant has [review units](unit-review.md) (for example the references of a reference list), each unit is put on its own line, and its content is left as it is. In the TEI header, `<desc>` elements and elements that mix text and markup are left as they are.
+- **Convert XML comments** (ships with the application) turns the XML comments in `<text>` into [unit comments](unit-comments.md#converting-xml-comments), after asking for confirmation.
+- Plugins add further enhancements, for example **Enrich TEI Header from PDF Metadata** (metadata extraction plugin).
+
+The button is disabled if you cannot edit the document or no enhancement applies to it.
 
 ---
 
@@ -117,17 +131,19 @@ Some entries of the context menu have a variant that is shown instead while you 
 
 The center of the statusbar contains node navigation controls. These are only shown once a document is loaded and the active variant has navigation XPath expressions. Annotators, reviewers and administrators also see the dropdown for variants without expressions, so that they can add some.
 
-1. Use the dropdown to select an XPath expression (the list is variant-specific).
+1. Use the dropdown to select an XPath expression (the list is variant-specific). Switching to another expression keeps your place in the document. It starts from the element at the cursor: if the new expression matches it or an element that contains it, that one stays selected, otherwise the next node of the new expression after the cursor is selected (for milestones such as `<pb/>`, the one whose page holds the cursor). If there is none after it, the first node of the document is selected.
 2. Use the **‹** / **›** buttons to move between matching nodes; the counter (e.g. `3/15`) shows the current position.
 3. Click the counter to jump to a specific node by number.
 
 Each time you navigate, the node is scrolled to the vertical center of the editor and highlighted. Your XPath selection is remembered per-variant across sessions.
 
+An expression that selects milestones, empty TEI elements that mark a position instead of enclosing text (`<pb/>`, `<cb/>`, `<gb/>`, `<lb/>`, `<milestone/>`), navigates by the text from one milestone to the next one of the same name, or to the end of `<text>` after the last one. With `//tei:pb` (**Page (`<pb>`)** for GROBID segmentation documents), you move from page to page, focus mode focuses the whole page, and **LLM Review** reviews that page. Moving the cursor selects the page it is on.
+
 Node navigation is on while an XPath expression is selected in the dropdown. The **×** button at the end of the navigation group turns it off: the node loses its highlight or focus, the XPath selection is cleared, the **‹** / **›** buttons and the focus toggle are disabled, and the node is removed from the URL. Selecting an XPath expression in the dropdown turns navigation on again.
 
 **Tools → Review document annotations** always reviews the whole document with the model selected in **Tools → Inference**. To review only the current node, use the **LLM Review** button in the bottom right corner of the focused node in focus mode. The suggestions of a review are kept for the browser tab: after an accidental reload, or when you return to the document, they are shown again without a new review, except those whose text you have changed in the meantime.
 
-The current node is part of the page URL (as the `xpath` parameter, next to the open document). After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
+The current node is part of the page URL, as the `xpath` parameter next to the open document, in the form `(expression)[n]` for the n-th node of the expression, e.g. `xpath=(//tei:listBibl/tei:bibl)[3]`. After reloading the page you continue at the same node, and a copied URL opens the same document at the same node once the recipient has logged in.
 
 ### Editing the Navigation XPaths
 
@@ -158,6 +174,7 @@ The magnifier button (**Focus**) next to the navigation controls, available whil
 - The focused node gets extra space above and below it.
 - Line wrapping is turned on when focus mode is switched on. You can turn it off again with the **Wrap** switch; this does not change your saved wrapping preference.
 - Moving the cursor into another node (for example by clicking) moves the focus to that node.
+- In the XML mode, the **↑** and **↓** arrow keys move the focus to the previous or next node and center it. Within a node that spans several lines, they move the cursor line by line first; from the first or last line of the node they move on to the neighbouring node. At the first and last node they stop. This also works when the keyboard focus is not in the editor text, for example after clicking **‹** or **›**. In the Visual annotation mode, the arrow keys always go to the previous or next node, see [Activating annotation mode](#activating-annotation-mode).
 
 Turn focus mode off by clicking the button again or by pressing **Esc**. The button is only available while the navigation controls are shown. Focus mode is on by default; whether you turned it on or off is remembered in your browser, so the choice is kept after reloading the page. Turning navigation off disables the focus toggle without changing this setting; focus mode applies again when navigation is turned back on.
 
@@ -221,7 +238,7 @@ Only one window can edit a document at a time. When the document is already open
 - *You have this document open for editing in another window or session*: you have it open yourself, in another tab, browser or after logging in again.
 - A notice of a plugin, e.g. while a background job changes the document.
 
-When the other window closes the document, it becomes editable here and *You can now edit this document* appears.
+When the other window closes the document, or its user logs out, it becomes editable here and *You can now edit this document* appears.
 
 ### Superseded versions
 
@@ -307,6 +324,7 @@ Click the **XML / Visual** toggle switch in the bottom-left of the XML editor st
 
 - Raw XML tags are replaced by colored inline badges (e.g. `AUTHOR`, `TITLE[A]`).
 - Direct text editing is disabled — the editor is read-only for free-form changes. The cursor and the keyboard shortcuts that do not change the text, such as the [review shortcuts](unit-review.md#marking-units), still work.
+- While node navigation is on, the **↑** and **↓** arrow keys go to the previous or next node, like **‹** and **›**, with or without focus mode, instead of moving the cursor.
 - The XPath navigation header is hidden to keep the view clean.
 - The editor scrolls to the start of the `<text>` element.
 
@@ -336,7 +354,7 @@ Click any colored badge in the annotation view to open an attribute popup:
 - Attributes with a fixed list of values (e.g. `level` on `<title>`) appear as dropdown selects.
 - Free-form attributes (e.g. `when` on `<date>`) appear as text inputs.
 
-Changes are applied to the underlying XML as you make them. Click outside the popup or press **Escape** to dismiss it.
+Changes are applied to the underlying XML as you make them. Click outside the popup or press **Escape** to dismiss it. Clicking a badge does not move the cursor or select its element; to select an element, click its text.
 
 ### Changing a tag
 

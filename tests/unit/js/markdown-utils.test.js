@@ -162,3 +162,34 @@ describe('resolveRelativeSources', () => {
     assert.strictEqual(resolveRelativeSources(html, base), html);
   });
 });
+
+describe('GitHub alerts', () => {
+  const md = createMarkdownRenderer();
+
+  it('renders the alert as an admonition of its type without the marker', () => {
+    const html = md.render('> [!TIP] It is *highly* recommended.\n');
+    assert.ok(html.includes('admonition-tip'));
+    assert.ok(html.includes('<sl-icon name="lightbulb">'));
+    assert.ok(html.includes('<p>It is <em>highly</em> recommended.</p>'));
+    assert.ok(!html.includes('[!TIP]'));
+  });
+
+  it('removes a marker on a line of its own with the line break', () => {
+    const html = md.render('> [!WARNING]\n> Check the `date`.\n');
+    assert.ok(html.includes('admonition-warning'));
+    assert.ok(html.includes('<p>Check the <code>date</code>.</p>'));
+    assert.ok(!html.includes('[!WARNING]'));
+  });
+
+  it('keeps plain and nested blockquotes', () => {
+    const html = md.render('> plain\n\n> [!NOTE]\n> outer\n>\n> > inner\n');
+    assert.ok(html.includes('<blockquote>\n<p>plain</p>\n</blockquote>'));
+    assert.ok(html.includes('<blockquote>\n<p>inner</p>\n</blockquote>\n</div></div>'));
+  });
+
+  it('leaves a marker that is not at the start of the quote', () => {
+    const html = md.render('> See [!NOTE] here.\n');
+    assert.ok(html.includes('<blockquote>'));
+    assert.ok(html.includes('[!NOTE]'));
+  });
+});

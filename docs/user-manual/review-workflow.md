@@ -58,7 +58,7 @@ Upload the PDFs and extract them into the collection, either one by one in the e
 
 *The extraction, read-only for annotators.*
 
-Before you hand the documents over, you can clean up the extraction, for example with the **TEI Wizard** (wand icon in the editor toolbar): *Pretty Print XML* puts each unit on its own line, which makes the review easier, and *Fix Common Extraction Issues* corrects errors that extractors typically make. Do this now and not later: every change that you make after the annotators have made their copies has to be made in each copy.
+Before you hand the documents over, you can clean up the extraction, for example with the **TEI Wizard** (wand icon in the editor toolbar): *Pretty Print XML* puts each unit on its own line, which makes the review easier. Do this now and not later: every change that you make after the annotators have made their copies has to be made in each copy.
 
 Keep the clean-up mechanical. Anything that requires a decision about the content is the annotators' work.
 
@@ -84,11 +84,23 @@ With b), agree on how annotators claim a document. The simplest rule is: whoever
 
 ### Before you start: get to know the annotation guide
 
-Before your first document, read the annotation guide of the variant you work on. Open a document of the variant, click the help icon (**?**) in the lower right corner and choose **Annotation Guide**. The guide opens in a drawer next to the PDF; **Contents** lists its sections, and **Open in new window** shows it in a window of its own, which you can keep open next to the editor.
+Before your first document, read the annotation guide of the variant you work on. Open a document of the variant, click the help icon (**?**) in the lower right corner and choose **Annotation Guide**. The guide opens in a drawer next to the PDF at the section for the variant; **Contents** lists its sections.
 
-![The annotation guide with its table of contents](../images/review-workflow-02b-annotation-guide.png)
+![The annotation guide drawer with the Contents list opened from the footer](../images/review-workflow-02b-annotation-guide.png)
 
 *The annotation guide.*
+
+To find a rule, click the search icon in the header of the drawer (or press `Ctrl+K`) and type a few words. The results list the sections that contain all of them; `↑`/`↓` select a section, `Enter` opens it and highlights the words, `Esc` closes the search.
+
+![The search field in the header of the annotation guide drawer, with matching sections and highlighted words](../images/annotation-guide-search.png)
+
+*Searching the annotation guide.*
+
+The icon next to it opens the section you are reading in a window of its own, which you can keep open next to the editor. The window has the same search and a table of contents, and its address links to the section shown: share it to point someone to a rule. The window needs no login. It shows the version of the guide the document refers to, but not the personal versions of sections that reviewers write for themselves (see [Adjusting the rules the model uses](unit-review.md#adjusting-the-rules-the-model-uses)); those are shown in the drawer only. Hovering a heading in the drawer shows a button that copies the link of its section.
+
+![The annotation guide window with the table of contents on the left and the search field in the header](../images/annotation-guide-window.png)
+
+*The annotation guide window.*
 
 Nobody remembers all the rules after one reading, and you do not have to. The goal of this first reading is an overview: which rules exist, which cases they cover and where to find them again. When you are unsure later, look the rule up instead of guessing. The reviewers will refer to the same guide in their comments.
 
@@ -106,7 +118,7 @@ You are now editing your own copy. The extraction is superseded by your copy and
 
 ### Annotate
 
-Work in your copy as described in [Document Editing](editing-workflow.md). Your changes are saved automatically. Use **Save revision** only for milestones that you want to see in the revision history, for example at the end of a working day, with status *draft*. Do not make a new personal version for each session: one annotator, one version.
+Work in your copy as described in [Document Editing](editing-workflow.md). Your changes are saved automatically. Use **Save revision** for milestones that you want to see in the revision history, for example at the end of a working day, with status *draft*. Before a larger step that you may want to undo, such as inserting page breaks or applying the suggestions of the LLM Reviewer to a range of pages, save a new personal version instead (check *Save to a new personal version*). The older version stays unchanged, so you can go back to it. A new working session does not need a new version. Once you have set the document *in-review*, keep working in that version (see [step 5](#5-correcting)).
 
 **Work unit by unit in focus mode.** Choose the unit element (for example `<bibl>`) in the XPath dropdown in the status bar of the editor, and step through the units with **‹** and **›**. Focus mode (magnifier button next to the counter) is on by default: the current unit is centred and everything else is dimmed, so you can concentrate on one unit at a time. `Esc` turns focus mode off. See [Node Navigation](editing-workflow.md#xpath-navigation) and [Focus Mode](editing-workflow.md#focus-mode).
 
@@ -254,13 +266,17 @@ The approved version replaces the annotator's version in the review queue (which
 
 *The approved document in the Annotation Progress view.*
 
+## Review with plugins
+
+<!-- plugin-docs: review hide-heading -->
+
 ## Rules of thumb
 
 **For annotators**
 
 - When in doubt, look the rule up in the annotation guide. If the guide does not answer your question, ask in a comment on the unit and mention a reviewer.
 - LLM suggestions are drafts. Accept a fix only after you have checked it against the PDF and the guide.
-- One document, one personal version. Make it once, at the start, and do all your work in it, including the corrections after the review.
+- Save a new personal version before each larger step, so that you can go back if it goes wrong. Submit only the newest one, and make the corrections after the review in the version you submitted.
 - Set *in-review* only when you have finished the whole document.
 - Do not leave a not-OK mark unanswered: either correct the unit or explain in a comment why it is correct.
 - Check your inbox when you start working. The badge on the user menu tells you if there is something new.

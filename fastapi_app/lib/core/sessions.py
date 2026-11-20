@@ -6,6 +6,7 @@ No Flask or FastAPI dependencies - all parameters are explicitly passed.
 """
 
 import hashlib
+import logging
 import secrets
 import sqlite3
 import time
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Optional, TypedDict
 
 from fastapi_app.lib.core.db_utils import get_connection, init_database, transaction
+from fastapi_app.lib.core.locking import release_session_locks
 
 
 class SessionDict(TypedDict):
@@ -102,6 +104,39 @@ class SessionManager:
         run_migrations_if_needed(db_path=self.db_path, migrations=SESSIONS_MIGRATIONS, logger=self.logger)
         # Needs the token_id column, which databases created before migration 012 only have afterwards
         init_database(self.db_path, "CREATE INDEX IF NOT EXISTS idx_token_id ON sessions(token_id);", self.logger)
+
+    def _release_locks(self, session_ids: list[str]) -> list[str]:
+        """
+        Release the file locks of ended sessions, which nobody could refresh or release otherwise.
+
+        Args:
+            session_ids: Ids of the deleted sessions
+
+        Returns:
+            The stable_ids of the files whose locks were released
+        """
+        if not session_ids:
+            return []
+        logger = self.logger or logging.getLogger(__name__)
+        try:
+            return release_session_locks(session_ids, self.db_dir, logger)
+        except RuntimeError as e:
+            logger.error(f"Could not release the locks of ended sessions: {e}")
+            return []
+
+    def _session_ids_where(self, conn: sqlite3.Connection, where: str, params: tuple[str | float, ...]) -> list[str]:
+        """
+        Return the ids of the sessions matching a WHERE clause, before they are deleted.
+
+        Args:
+            conn: Connection to the sessions database
+            where: SQL condition on the sessions table
+            params: Parameters of the condition
+
+        Returns:
+            The matching session ids
+        """
+        return [row['session_id'] for row in conn.execute(f"SELECT session_id FROM sessions WHERE {where}", params).fetchall()]
 
     def create_session(
         self,
@@ -252,6 +287,7 @@ class SessionManager:
         if cursor.rowcount > 0:
             if self.logger:
                 self.logger.info(f"Deleted session {session_id} for user {username}")
+            self._release_locks([session_id])
             return True
 
         return False
@@ -267,11 +303,13 @@ class SessionManager:
             Number of sessions deleted
         """
         conn = get_connection(self.db_path)
+        session_ids = self._session_ids_where(conn, "username = ?", (username,))
         cursor = conn.execute(
             "DELETE FROM sessions WHERE username = ?",
             (username,)
         )
         conn.commit()
+        self._release_locks(session_ids)
 
         count = cursor.rowcount
 
@@ -307,8 +345,10 @@ class SessionManager:
             Number of sessions deleted
         """
         conn = get_connection(self.db_path)
+        session_ids = self._session_ids_where(conn, "token_id = ?", (token_id,))
         cursor = conn.execute("DELETE FROM sessions WHERE token_id = ?", (token_id,))
         conn.commit()
+        self._release_locks(session_ids)
 
         count = cursor.rowcount
         if count > 0 and self.logger:
@@ -330,18 +370,17 @@ class SessionManager:
 
         conn = get_connection(self.db_path)
 
-        # Get expired sessions for logging
-        if self.logger:
-            cursor = conn.execute(
-                """
-                SELECT session_id, username
-                FROM sessions
-                WHERE last_access < ? OR (expires_at IS NOT NULL AND expires_at <= ?)
-                """,
-                (expiry_time, current_time)
-            )
-            expired_sessions = cursor.fetchall()
+        cursor = conn.execute(
+            """
+            SELECT session_id, username
+            FROM sessions
+            WHERE last_access < ? OR (expires_at IS NOT NULL AND expires_at <= ?)
+            """,
+            (expiry_time, current_time)
+        )
+        expired_sessions = cursor.fetchall()
 
+        if self.logger:
             for row in expired_sessions:
                 self.logger.info(
                     f"Cleaning up expired session {row['session_id']} for user {row['username']}"
@@ -353,6 +392,7 @@ class SessionManager:
             (expiry_time, current_time)
         )
         conn.commit()
+        self._release_locks([row['session_id'] for row in expired_sessions])
 
         return cursor.rowcount
 

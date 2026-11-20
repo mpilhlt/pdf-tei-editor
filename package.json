@@ -8,7 +8,8 @@
     "scripts": {
         "ci": "uv sync && npm install",
         "build": "node scripts/build/build.js",
-        "prepare": "husky",
+        "prepare": "husky && npm run generate",
+        "generate": "node scripts/build/build.js --steps=plugins,modules,importmap,highlight",
         "test": "npm run test:all:bail",
         "postinstall": "npm run build",
         "build:ui-types": "node scripts/build/generate-ui-types.js",
@@ -72,6 +73,7 @@
         "codemirror": "^6.0.2",
         "commander": "^15.1.0",
         "diff": "^9.0.0",
+        "dompurify": "^3.4.18",
         "dotenv": "^18.0.10",
         "entities": "^9.0.0",
         "glob": "^14.0.6",

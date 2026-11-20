@@ -4,7 +4,7 @@
  * Switches on review mode for an editable copy of a document whose <text> holds three
  * <bibl> units, marks them with the keyboard, the comment prompt and the review popover,
  * checks the stand-off storage, the status bar meter, the diagnostics and undo, the
- * carry-over of marks of an edited unit, and the "Clear reviews" option of the Save Revision
+ * carry-over of marks of an edited unit and their return when the edit is undone, and the "Clear reviews" option of the Save Revision
  * dialog, the automatic review mode for documents with not-OK units, and the reload of a
  * read-only document after another user saved it, the keyboard shortcuts in visual mode, and
  * the OK mark of units in which a reviewer applied an LLM fix (removing the LLM mark), and the
@@ -559,6 +559,46 @@ test.describe('Unit review', () => {
       // its stripe is dotted grey, like the stale unit in the review gutter
       await expect(page.locator('.diagnostics-drawer-item.cm-unit-review-changed')).toHaveCount(1);
       await expect(page.locator('.diagnostics-drawer-list')).not.toContainText('Marked not OK');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('restores the marks of two units when an edit across both is undone', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      const loadResult = await selectFirstDocuments(page);
+      expect(loadResult.success).toBe(true);
+      await loadReviewDocument(page, STAND_OFF);
+      // not-OK marks with comments on all units, as recorded by the annotation transfer
+      await page.evaluate(async () => {
+        const review = (/** @type {any} */ (window)).app.getDependency('unit-review');
+        const marks = review.getUnits().map((/** @type {any} */ u, /** @type {number} */ i) => ({ fingerprint: u.fingerprint, state: 'not-ok', comment: `Doubt ${i + 1}` }));
+        await review.setMarks({ id: 'llm-probe', name: 'Probe LLM' }, marks);
+      });
+      expect((await summary(page)).notOk).toBe(3);
+
+      // replacing a selection from Alpha into Beta merges the two units into one
+      await page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        const doc = view.state.doc.toString();
+        const from = doc.indexOf('ha 2001');
+        view.dispatch({ changes: { from, to: doc.indexOf('ta 2002'), insert: 'x' }, selection: { anchor: from + 1 } });
+      });
+      await expect.poll(async () => editorText(page)).toMatch(/<note type="was-not-ok" n="[0-9a-f]{8}">/);
+      expect((await summary(page)).units).toBe(2);
+
+      await cursorTo(page, 'Alpx');
+      await page.keyboard.press('ControlOrMeta+z');
+      await expect.poll(async () => (await summary(page)).notOk, { timeout: 5000 }).toBe(3);
+      const text = await editorText(page);
+      for (const comment of ['Doubt 1', 'Doubt 2', 'Doubt 3']) expect(text).toContain(`>${comment}</note>`);
+      expect(text).not.toContain('type="was-not-ok"');
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);

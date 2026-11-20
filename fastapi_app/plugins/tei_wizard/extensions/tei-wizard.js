@@ -1,18 +1,28 @@
 /**
  * @file Frontend Extension: TEI Wizard
  *
- * Adds the "Enhance TEI" button to the XML editor toolbar. It opens a dialog listing the
- * TEI enhancements registered with the tei-wizard backend plugin (its own and those of
- * dependent plugins, served as /api/plugins/tei-wizard/enhancements.js), runs the selected
- * ones on the current document and shows the result in the merge view.
+ * Adds the "Enhance TEI" dropdown to the XML editor toolbar. Its menu lists the TEI enhancements
+ * registered with the tei-wizard backend plugin (its own and those of dependent plugins, served as
+ * /api/plugins/tei-wizard/enhancements.js) that apply to the current document: those whose
+ * `variants` include the document's variant and whose `appliesTo` test passes. Choosing an item
+ * runs the enhancement on the current document and shows the result in the merge view.
  *
  * @import { PluginContext } from '../../../../app/src/modules/plugin-context.js'
  * @import { ApplicationState } from '../../../../app/src/state.js'
+ * @import { XslAppliesTo } from '../../../../app/src/modules/xsl-applicability.js'
+ */
+
+/**
+ * The execution environment passed to an enhancement as fourth argument
+ * @typedef {object} EnhancementEnv
+ * @property {string|null} variant - Variant id of the document
+ * @property {string|null} unitPath - Review unit path configured for the variant, null if none or "auto"
+ * @property {(doc: Document) => Element[]} findUnits - The review unit elements of a document ([] without a unit path)
  */
 
 /**
  * Enhancement execute function signature
- * @typedef {function(Document, ApplicationState, Map<string, any>): (Document|Promise<Document>)} EnhancementExecuteFunction
+ * @typedef {function(Document, ApplicationState, Map<string, any>, EnhancementEnv): (Document|Promise<Document>)} EnhancementExecuteFunction
  */
 
 /**
@@ -22,56 +32,80 @@
  * @property {string} description - A brief description
  * @property {string} [pluginId] - The backend plugin that provided this enhancement
  * @property {EnhancementExecuteFunction} execute - The function to execute
+ * @property {string[]} [variants] - Variant ids the enhancement is offered for (a trailing `*` matches a prefix); all if missing
+ * @property {XslAppliesTo} [appliesTo] - Further test: an XPath expression or a function of the document
+ * @property {string} [confirmation] - Question the user has to confirm before the enhancement runs
  */
 
 const ENHANCEMENTS_URL = '/api/plugins/tei-wizard/enhancements.js';
 
-/** Priority of the button in the plugin section of the XML editor toolbar (left of the XSL viewer, 50.5) */
+const TEI_NS = 'http://www.tei-c.org/ns/1.0';
+
+/** Priority of the dropdown in the plugin section of the XML editor toolbar (left of the XSL viewer, 50.5) */
 const TOOLBAR_PRIORITY = 51.5;
 
 export default class TeiWizardExtension extends FrontendExtensionPlugin {
   constructor(/** @type {PluginContext} */ context) {
-    super(context, { name: 'tei-wizard', deps: ['logger', 'xmleditor', 'config', 'acl-utils', 'sl-utils', 'tei-utils', 'ui'] });
+    super(context, {
+      name: 'tei-wizard',
+      deps: ['logger', 'xmleditor', 'config', 'acl-utils', 'sl-utils', 'tei-utils', 'ui', 'xsl-applicability', 'unit-review', 'dialog']
+    });
   }
 
   /** @type {EnhancementDef[]} */
   _enhancements = [];
 
-  /** @type {HTMLElement|null} status-button in the XML editor toolbar */
+  /** @type {any} sl-button that opens the menu */
   _button = null;
 
-  /** @type {any} sl-dialog */
-  _dialog = null;
+  /** @type {any} sl-menu */
+  _menu = null;
 
-  /** @type {HTMLElement|null} */
-  _list = null;
+  /** @type {any} sl-tooltip around the dropdown */
+  _tooltip = null;
 
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state);
     await this._loadEnhancements();
 
-    this._button = document.createElement('status-button');
-    this._button.setAttribute('name', 'teiWizardBtn');
-    this._button.setAttribute('icon', 'magic');
-    this._button.setAttribute('tooltip', 'Enhance TEI');
-    this._button.setAttribute('action', 'tei-wizard');
-    this._button.addEventListener('widget-click', () => this._runTeiWizard());
-    this.getDependency('xmleditor').addToolbarWidget(this._button, TOOLBAR_PRIORITY, 'plugins');
+    const tooltip = document.createElement('sl-tooltip');
+    tooltip.setAttribute('content', 'Enhance TEI');
+    tooltip.innerHTML = `
+      <sl-dropdown name="teiWizardDropdown" placement="bottom-end">
+        <sl-button name="teiWizardBtn" variant="text" size="small" slot="trigger" disabled>
+          <sl-icon name="magic"></sl-icon>
+        </sl-button>
+        <sl-menu name="teiWizardMenu"></sl-menu>
+      </sl-dropdown>`;
+    this._tooltip = tooltip;
+    const dropdown = tooltip.querySelector('[name="teiWizardDropdown"]');
+    this._button = tooltip.querySelector('[name="teiWizardBtn"]');
+    this._menu = tooltip.querySelector('[name="teiWizardMenu"]');
 
-    this._dialog = this._createDialog();
-    document.body.appendChild(this._dialog);
-    this._populateEnhancementList();
+    dropdown?.addEventListener('sl-show', () => {
+      // the document may have changed since the menu was built
+      this._updateMenu();
+      dropdown.closest('tool-bar')?.classList.add('dropdown-open');
+      this._tooltip?.hide();
+    });
+    dropdown?.addEventListener('sl-hide', () => {
+      dropdown.closest('tool-bar')?.classList.remove('dropdown-open');
+    });
+    this._menu.addEventListener('sl-select', (/** @type {CustomEvent} */ event) => {
+      const name = /** @type {HTMLElement} */ (event.detail.item).dataset.enhancement;
+      if (name) this._runEnhancement(name);
+    });
+
+    const xmlEditor = this.getDependency('xmleditor');
+    xmlEditor.addToolbarWidget(tooltip, TOOLBAR_PRIORITY, 'plugins');
+    xmlEditor.on('editorAfterLoad', () => this._updateButtonState());
+    xmlEditor.on('editorXmlWellFormed', () => this._updateButtonState());
+    this._updateMenu();
   }
 
   async onStateUpdate() {
-    const state = this.state;
-    if (!this._button || !state) return;
-    const { userHasRole, isGoldFile } = this.getDependency('acl-utils');
-    const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator']);
-    const isReviewer = userHasRole(state.user, ['admin', 'reviewer']);
-    /** @type {any} */ (this._button).disabled =
-      !state.xml || state.editorReadOnly || !isAnnotator || (isGoldFile(state.xml) && !isReviewer);
+    this._updateButtonState();
   }
 
   /** Loads the enhancement bundle, which calls window.registerTeiEnhancement() for each enhancement */
@@ -100,72 +134,75 @@ export default class TeiWizardExtension extends FrontendExtensionPlugin {
     });
   }
 
-  /** @returns {any} sl-dialog */
-  _createDialog() {
-    const dialog = document.createElement('sl-dialog');
-    dialog.setAttribute('name', 'teiWizardDialog');
-    dialog.setAttribute('label', 'TEI Wizard');
-    dialog.classList.add('dialog-width');
-    dialog.style.setProperty('--width', '50vw');
-    dialog.innerHTML = `
-      <div name="enhancementList"></div>
-      <sl-button slot="footer" name="selectAll">Select All</sl-button>
-      <sl-button slot="footer" name="selectNone">Select None</sl-button>
-      <sl-button slot="footer" name="cancel" variant="neutral">Cancel</sl-button>
-      <sl-button slot="footer" name="executeBtn" variant="primary">Execute</sl-button>`;
-    this._list = dialog.querySelector('[name="enhancementList"]');
-    const setAll = (/** @type {boolean} */ checked) => {
-      this._list?.querySelectorAll('sl-checkbox').forEach(cb => { /** @type {any} */ (cb).checked = checked; });
-    };
-    dialog.querySelector('[name="selectAll"]')?.addEventListener('click', () => setAll(true));
-    dialog.querySelector('[name="selectNone"]')?.addEventListener('click', () => setAll(false));
-    return dialog;
+  /**
+   * Returns the enhancements that apply to the current document, sorted by name.
+   * @returns {EnhancementDef[]}
+   */
+  _applicableEnhancements() {
+    const xmlDoc = this.getDependency('xmleditor').getXmlTree();
+    if (!xmlDoc) return [];
+    const { stylesheetAppliesTo, variantMatches } = this.getDependency('xsl-applicability');
+    const variant = this.getDependency('unit-review').getVariant();
+    return this._enhancements
+      .filter(e => variantMatches(e.variants, variant))
+      .filter(e => stylesheetAppliesTo({ label: e.name, xmlns: TEI_NS, appliesTo: e.appliesTo }, xmlDoc))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  _populateEnhancementList() {
-    if (!this._list) return;
-    const { escapeXml } = this.getDependency('tei-utils');
-    this._list.innerHTML = '';
-    for (const enhancement of this._enhancements) {
-      const nameAttr = escapeXml(enhancement.name, { encodeQuotes: true });
-      const nameText = escapeXml(enhancement.name);
-      const description = escapeXml(enhancement.description || '', { encodeQuotes: true });
-      this._list.insertAdjacentHTML('beforeend', `
-    <sl-tooltip content="${description}" hoist placement="right">
-      <sl-checkbox data-enhancement="${nameAttr}" size="medium">${nameText}</sl-checkbox>
-    </sl-tooltip>
-    <br />`);
+  /** Whether the current user may change the current document */
+  _canEdit() {
+    const state = this.state;
+    if (!state?.xml || state.editorReadOnly) return false;
+    const { userHasRole, isGoldFile } = this.getDependency('acl-utils');
+    const isAnnotator = userHasRole(state.user, ['admin', 'reviewer', 'annotator']);
+    const isReviewer = userHasRole(state.user, ['admin', 'reviewer']);
+    return isAnnotator && !(isGoldFile(state.xml) && !isReviewer);
+  }
+
+  _updateButtonState() {
+    if (!this._button) return;
+    this._button.disabled = !this._canEdit() || this._applicableEnhancements().length === 0;
+  }
+
+  _updateMenu() {
+    if (!this._menu) return;
+    this._menu.innerHTML = '';
+    const applicable = this._applicableEnhancements();
+    if (applicable.length === 0) {
+      const item = document.createElement('sl-menu-item');
+      item.textContent = 'No enhancements for this document';
+      /** @type {any} */ (item).disabled = true;
+      this._menu.appendChild(item);
+      return;
+    }
+    for (const enhancement of applicable) {
+      const item = document.createElement('sl-menu-item');
+      item.dataset.enhancement = enhancement.name;
+      item.textContent = enhancement.name;
+      if (enhancement.description) item.setAttribute('title', enhancement.description);
+      this._menu.appendChild(item);
     }
   }
 
-  /** @returns {Promise<EnhancementDef[]>} The enhancements selected in the dialog, empty if cancelled */
-  _getSelectedEnhancements() {
-    const dialog = this._dialog;
-    dialog.show();
-    return new Promise((resolve) => {
-      const cancel = dialog.querySelector('[name="cancel"]');
-      const execute = dialog.querySelector('[name="executeBtn"]');
-      const finish = (/** @type {EnhancementDef[]} */ result) => {
-        cancel.removeEventListener('click', onCancel);
-        execute.removeEventListener('click', onExecute);
-        dialog.hide();
-        resolve(result);
-      };
-      const onCancel = () => finish([]);
-      const onExecute = () => {
-        const selected = Array.from(this._list?.querySelectorAll('sl-checkbox') || [])
-          .filter(cb => /** @type {any} */ (cb).checked)
-          .map(cb => this._enhancements.find(e => e.name === /** @type {HTMLElement} */ (cb).dataset.enhancement))
-          .filter(e => e !== undefined);
-        finish(/** @type {EnhancementDef[]} */ (selected));
-      };
-      cancel.addEventListener('click', onCancel);
-      execute.addEventListener('click', onExecute);
-    });
+  /**
+   * Returns the execution environment for the current document.
+   * @returns {EnhancementEnv}
+   */
+  _env() {
+    const unitReview = this.getDependency('unit-review');
+    const unitPath = unitReview.getUnitPath();
+    return {
+      variant: unitReview.getVariant(),
+      unitPath,
+      findUnits: (/** @type {Document} */ doc) => unitReview.findUnitElements(doc, unitPath)
+    };
   }
 
-  async _runTeiWizard() {
-    if (this.state?.editorReadOnly) return;
+  /**
+   * Runs an enhancement on the current document and shows the result in the merge view.
+   * @param {string} name
+   */
+  async _runEnhancement(name) {
     const logger = this.getDependency('logger');
     const xmlEditor = this.getDependency('xmleditor');
     const config = this.getDependency('config');
@@ -173,32 +210,38 @@ export default class TeiWizardExtension extends FrontendExtensionPlugin {
     const { encodeXmlEntities } = this.getDependency('tei-utils');
     const spinner = this.getDependency('ui').spinner;
 
+    if (!this._canEdit()) return;
+    // the document may have changed since the menu was opened
+    const enhancement = this._applicableEnhancements().find(e => e.name === name);
+    if (!enhancement) {
+      notify(`"${name}" does not apply to this document.`, 'warning', 'exclamation-triangle');
+      return;
+    }
+    if (enhancement.confirmation && !await this.getDependency('dialog').confirm(enhancement.confirmation, enhancement.name)) {
+      return;
+    }
     let teiDoc = xmlEditor.getXmlTree();
     if (!teiDoc) {
       logger.warn('TEI document not available.');
       return;
     }
 
-    const selectedEnhancements = await this._getSelectedEnhancements();
-    if (selectedEnhancements.length === 0) return;
-
-    const configMap = config.toMap();
-    for (const enhancement of selectedEnhancements) {
-      try {
-        const result = enhancement.execute(teiDoc, this.state, configMap);
-        if (result instanceof Promise) {
-          spinner.show(`Applying: ${enhancement.name}`);
+    try {
+      const result = enhancement.execute(teiDoc, this.state, config.toMap(), this._env());
+      if (result instanceof Promise) {
+        spinner.show(`Applying: ${enhancement.name}`);
+        try {
           teiDoc = await result;
+        } finally {
           spinner.hide();
-        } else {
-          teiDoc = result;
         }
-      } catch (error) {
-        spinner.hide();
-        logger.error(`Error during enhancement "${enhancement.name}": ${String(error)}`);
-        notify(`Enhancement "${enhancement.name}" failed: ${error.message}`, 'danger');
-        return;
+      } else {
+        teiDoc = result;
       }
+    } catch (error) {
+      logger.error(`Error during enhancement "${enhancement.name}": ${String(error)}`);
+      notify(`Enhancement "${enhancement.name}" failed: ${error.message}`, 'danger', 'exclamation-octagon');
+      return;
     }
 
     let xmlstring = (new XMLSerializer()).serializeToString(teiDoc);
@@ -210,6 +253,6 @@ export default class TeiWizardExtension extends FrontendExtensionPlugin {
     }
 
     xmlEditor.showMergeView(xmlstring);
-    notify(`${selectedEnhancements.length} TEI enhancements applied successfully.`, 'success');
+    notify(`"${enhancement.name}" applied. Review the changes in the merge view.`, 'success', 'check-circle');
   }
 }

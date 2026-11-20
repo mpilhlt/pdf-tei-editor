@@ -12,7 +12,7 @@ import { JSDOM } from 'jsdom';
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
 global.XPathResult = dom.window.XPathResult;
 
-const { stylesheetAppliesTo } = await import('../../../app/src/modules/xsl-applicability.js');
+const { stylesheetAppliesTo, variantMatches } = await import('../../../app/src/modules/xsl-applicability.js');
 
 const TEI_NS = 'http://www.tei-c.org/ns/1.0';
 
@@ -84,5 +84,25 @@ describe('stylesheetAppliesTo', () => {
     } finally {
       console.warn = originalWarn;
     }
+  });
+});
+
+describe('variantMatches', () => {
+  it('matches every variant without a list', () => {
+    assert.strictEqual(variantMatches(undefined, 'a'), true);
+    assert.strictEqual(variantMatches(null, null), true);
+  });
+
+  it('matches exact ids and prefixes ending in *', () => {
+    const variants = ['grobid.training.segmentation', 'grobid.training.references*'];
+    assert.strictEqual(variantMatches(variants, 'grobid.training.segmentation'), true);
+    assert.strictEqual(variantMatches(variants, 'grobid.training.references.referenceSegmenter'), true);
+    assert.strictEqual(variantMatches(variants, 'grobid.training.segmentation.x'), false);
+    assert.strictEqual(variantMatches(variants, 'grobid.training.header'), false);
+  });
+
+  it('does not match a document without a variant when there is a list', () => {
+    assert.strictEqual(variantMatches(['a'], null), false);
+    assert.strictEqual(variantMatches([], 'a'), false);
   });
 });

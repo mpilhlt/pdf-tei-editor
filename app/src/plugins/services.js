@@ -481,6 +481,7 @@ class ServicesPlugin extends Plugin {
       // pdfSearch.fallback handler may still know their page
       if (await this.#searchFallback(node)) {
         this.#logger.debug('PDF position of an element without text found by a pdfSearch.fallback handler')
+        this.#pdfViewer.clearStatusMessage()
       }
       return
     }
@@ -491,11 +492,13 @@ class ServicesPlugin extends Plugin {
     const match = await this.#pdfViewer.search(query)
     if (match) {
       this.#logger.debug(`PDF match: page ${match.page}, score ${match.score.toFixed(3)}`)
+      this.#pdfViewer.clearStatusMessage()
     } else if (await this.#searchFallback(node)) {
       this.#logger.debug('PDF position found by a pdfSearch.fallback handler')
+      this.#pdfViewer.clearStatusMessage()
     } else {
       this.#logger.debug(`No PDF match for query: ${query.slice(0, 80)}...`)
-      notify('No sufficiently similar text found in the PDF', 'warning', 'search')
+      this.#pdfViewer.showStatusMessage('No sufficiently similar text found in the PDF')
     }
   }
 

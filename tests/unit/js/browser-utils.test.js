@@ -99,15 +99,21 @@ describe('UrlHash.serialize', () => {
     assert.strictEqual(UrlHash.serialize(params), '#xml=abc123&xpath=//tei:listBibl/tei:bibl[3]')
   })
 
+  it('keeps brackets, quotes, spaces and = unencoded', () => {
+    const params = new URLSearchParams({ xpath: `(/tei:TEI/tei:text/*[normalize-space() and @type="a b"])[3]` })
+    assert.strictEqual(UrlHash.serialize(params), `#xpath=(/tei:TEI/tei:text/*[normalize-space() and @type="a b"])[3]`)
+  })
+
   it('still encodes characters that would break the parameter syntax', () => {
     const params = new URLSearchParams({ a: 'x&y=z#1 2%+"' })
-    assert.strictEqual(UrlHash.serialize(params), '#a=x%26y%3Dz%231%202%25%2B%22')
+    assert.strictEqual(UrlHash.serialize(params), '#a=x%26y=z%231 2%25%2B"')
   })
 
   it('round-trips through URLSearchParams', () => {
-    const value = `//tei:bibl[@type='a,b']/tei:title[2]`
-    const hash = UrlHash.serialize(new URLSearchParams({ xpath: value }))
-    assert.strictEqual(new URLSearchParams(hash.slice(1)).get('xpath'), value)
+    for (const value of [`(//tei:bibl[@type='a,b']/tei:title)[2]`, 'x&y=z#1 2%+"ä']) {
+      const hash = UrlHash.serialize(new URLSearchParams({ xpath: value }))
+      assert.strictEqual(new URLSearchParams(hash.slice(1)).get('xpath'), value)
+    }
   })
 
   it('returns a bare # for no parameters', () => {

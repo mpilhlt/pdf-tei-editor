@@ -19,16 +19,19 @@
  * @import { UserData } from './authentication.js'
  * @import { NavigationXpathItem } from '../modules/api-client-v1.js'
  * @import { xpathNavigationDialogPart } from '../templates/xpath-navigation-dialog.types.js'
+ * @import { EditorView } from '@codemirror/view'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
-import { updateUi } from '../ui.js'
+import ui, { updateUi } from '../ui.js'
+import { keymap } from '@codemirror/view'
+import { Prec } from '@codemirror/state'
+import { focusRangeField } from '../modules/codemirror/focus-mode.js'
 import { PanelUtils } from '../modules/panels/index.js'
-import { parseXPath } from '../modules/utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { notify } from '../modules/sl-utils.js'
-import { checkNavigationXpath, labelToText } from '../modules/navigation-xpath-utils.js'
+import { checkNavigationXpath, labelToText, indexAtOrAfterNode, navigationXpath, parseNavigationXpath } from '../modules/navigation-xpath-utils.js'
 
 await registerTemplate('xpath-navigation-dialog', 'xpath-navigation-dialog.html')
 
@@ -146,7 +149,7 @@ class XpathNavigationPlugin extends Plugin {
       if (this.#currentVariant) {
         this.#setXpathPreference(this.#currentVariant, baseXpath)
       }
-      await this.dispatchStateChange({ xpath: baseXpath ? `${baseXpath}[1]` : '' })
+      await this.dispatchStateChange({ xpath: baseXpath ? navigationXpath(baseXpath, this.#indexAtCurrentPosition(baseXpath)) : '' })
     })
     this.#xpathDropdown.addEventListener('widget-action', (evt) => {
       if (/** @type {CustomEvent} */ (evt).detail.action === EDIT_ACTION) this.showDialog()
@@ -170,6 +173,12 @@ class XpathNavigationPlugin extends Plugin {
     })
     // Esc leaves focus mode (the XML editor plugin leaves the visual diff mode only when focus mode is off)
     document.addEventListener('keydown', (evt) => this.#onEscapeKey(evt))
+    // In focus mode, the up/down arrow keys move the focus to the previous/next node
+    this.#xmlEditor.createExtensionSlot(Prec.high(keymap.of([
+      { key: 'ArrowUp', run: view => this.#onEditorArrowKey(view, -1) },
+      { key: 'ArrowDown', run: view => this.#onEditorArrowKey(view, +1) }
+    ])))
+    document.addEventListener('keydown', (evt) => this.#onDocumentArrowKey(evt))
 
     // selection => xpath state. setTimeout keeps the state change out of an active state-update propagation
     // cycle (e.g. when selectByXpath triggers CodeMirror's synchronous update).
@@ -185,7 +194,7 @@ class XpathNavigationPlugin extends Plugin {
         if (this.state?.xpath || !this.state?.variant) return
         const savedXpath = this.#getXpathPreference(this.state.variant)
         if (savedXpath && this.#selectableValues().includes(savedXpath)) {
-          await this.scheduleStateChange({ xpath: `${savedXpath}[1]` })
+          await this.scheduleStateChange({ xpath: navigationXpath(savedXpath, 1) })
         }
       }, 0))
     })
@@ -226,17 +235,17 @@ class XpathNavigationPlugin extends Plugin {
     const canEdit = this.#canEdit(state)
     this.#setWidgetsVisible(Boolean(state.xml) && (hasEntries || canEdit), Boolean(state.xml) && hasEntries)
 
-    // xpath state => dropdown selection and counter
-    if (state.xpath && !state.xpath.startsWith('/')) {
+    // xpath state => dropdown selection and counter. The state is `(path)[n]`, the n-th node of `path`
+    // in the document
+    const node = parseNavigationXpath(state.xpath)
+    if (state.xpath && !node) {
       this.#logger.warn(`Discarding invalid xpath state: "${state.xpath}"`)
       this.scheduleStateChange({ xpath: '' })
     }
-    if (state.xpath?.startsWith('/')) {
-      const { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
-      const nonIndexedPath = pathBeforePredicates + nonIndexPredicates
-      this.#xpathDropdown.selected = this.#selectableValues().includes(nonIndexedPath) ? nonIndexedPath : ''
-      this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(nonIndexedPath, index))
-    } else if (!state.xpath) {
+    if (node) {
+      this.#xpathDropdown.selected = this.#selectableValues().includes(node.path) ? node.path : ''
+      this.#xmlEditor.whenReady().then(() => this.#updateNodeCounter(node.path, node.index))
+    } else {
       // no node selected: navigation is off until an xpath is selected in the dropdown
       this.#xpathDropdown.selected = ''
       this.#nodeCounterWidget.text = '(0/0)'
@@ -245,18 +254,15 @@ class XpathNavigationPlugin extends Plugin {
 
     this.#updateNavigationActive(state)
 
-    // xpath state => editor selection. The navigation path keeps the predicates other than the index
-    // (e.g. `[normalize-space()]`), so that the index counts the same nodes as the counter.
-    if (this.#xmlEditor.isReady() && state.xpath?.startsWith('/') && state.xml) {
-      const { index, pathBeforePredicates, nonIndexPredicates } = parseXPath(state.xpath)
-      const navigationPath = pathBeforePredicates + nonIndexPredicates
+    // xpath state => editor selection
+    if (this.#xmlEditor.isReady() && node && state.xml) {
       try {
-        const size = this.#xmlEditor.countDomNodesByXpath(navigationPath)
-        const pathChanged = this.#xmlEditor.parentPath !== navigationPath
-        const indexChanged = index !== this.#xmlEditor.currentIndex
+        const size = this.#xmlEditor.countDomNodesByXpath(node.path)
+        const pathChanged = this.#xmlEditor.parentPath !== node.path
+        const indexChanged = node.index !== this.#xmlEditor.currentIndex
         if (size > 0 && (pathChanged || indexChanged)) {
-          this.#xmlEditor.parentPath = navigationPath
-          this.#xmlEditor.selectByIndex(index || 1)
+          this.#xmlEditor.parentPath = node.path
+          this.#xmlEditor.selectByIndex(Math.min(node.index, size))
         }
       } catch (e) {
         this.#logger.error(e)
@@ -396,15 +402,15 @@ class XpathNavigationPlugin extends Plugin {
     }
     // Only the index follows the cursor: the expression stays the one chosen in the dropdown. A
     // selection made for another expression (e.g. one that was active before) is ignored.
-    if (navigationPath !== this.#xpathDropdown.selected || !selectedXpath.startsWith(`${navigationPath}[`)) return
+    if (navigationPath !== this.#xpathDropdown.selected || parseNavigationXpath(selectedXpath)?.path !== navigationPath) return
     if (selectedXpath !== state.xpath) {
       await this.dispatchStateChange({ xpath: selectedXpath })
     }
   }
 
   /**
-   * @param {string} xpath
-   * @param {number|null} index
+   * @param {string} xpath - The navigation expression
+   * @param {number} index - 1-based
    */
   #updateNodeCounter(xpath, index) {
     let size
@@ -414,27 +420,67 @@ class XpathNavigationPlugin extends Plugin {
       this.#logger.warn('Cannot update counter: ' + String(e))
       size = 0
     }
-    index = index || 1
     this.#nodeCounterWidget.text = `(${size > 0 ? index : 0}/${size})`
     this.#nextNodeBtn.disabled = this.#prevNodeBtn.disabled = size < 2
+  }
+
+  /**
+   * The index of the node of `xpath` to select when the dropdown switches to it, so that the navigation
+   * keeps its position in the document (see {@link indexAtOrAfterNode}). The position is the element at
+   * the cursor (the start of the selection), as long as it is inside the current node, so that moving
+   * the cursor within a large node counts. Otherwise it is the current node.
+   * @param {string} xpath - The expression selected in the dropdown
+   * @returns {number} The 1-based index, 1 if the editor is not ready or the expression selects no node
+   */
+  #indexAtCurrentPosition(xpath) {
+    if (!this.#xmlEditor.isReady() || !this.#xmlEditor.getXmlTree()) return 1
+    try {
+      const currentNode = parseNavigationXpath(this.state?.xpath)
+        ? this.#xmlEditor.getDomNodeByXpath(/** @type {string} */ (this.state?.xpath))
+        : null
+      /** @type {Node|null} */
+      let atCursor = null
+      try {
+        atCursor = this.#xmlEditor.getDomNodeAt(this.#xmlEditor.getView().state.selection.main.from)
+      } catch {
+        // no element at the cursor
+      }
+      const position = atCursor && (!currentNode || currentNode.contains(atCursor)) ? atCursor : currentNode
+      if (!position) return 1
+      return indexAtOrAfterNode(this.#xmlEditor.getDomNodesByXpath(xpath), position) || 1
+    } catch (error) {
+      this.#logger.debug('Could not determine the node at the current position: ' + String(error))
+      return 1
+    }
   }
 
   /**
    * Navigate to previous/next node
    * @param {ApplicationState|null} state
    * @param {number} delta
+   * @param {{wrap?: boolean}} [options] - `wrap`: go from the last node to the first and vice versa
    */
-  async #changeNodeIndex(state, delta) {
-    if (!state?.xpath) return
-    let { pathBeforePredicates, nonIndexPredicates, index } = parseXPath(state.xpath)
-    const normativeXpath = pathBeforePredicates + nonIndexPredicates
-    const size = this.#xmlEditor.countDomNodesByXpath(normativeXpath)
-    if (size < 2) return
-    if (index === null) index = 1
-    index += delta
-    if (index < 1) index = size
-    if (index > size) index = 1
-    await this.dispatchStateChange({ xpath: normativeXpath + `[${index}]` })
+  async #changeNodeIndex(state, delta, options) {
+    const xpath = this.#adjacentXpath(state, delta, options)
+    if (xpath) await this.dispatchStateChange({ xpath })
+  }
+
+  /**
+   * Returns the xpath of the node `delta` positions from the current one, or null if there is none
+   * @param {ApplicationState|null} state
+   * @param {number} delta
+   * @param {{wrap?: boolean}} [options] - `wrap`: go from the last node to the first and vice versa
+   * @returns {string|null}
+   */
+  #adjacentXpath(state, delta, { wrap = true } = {}) {
+    const node = parseNavigationXpath(state?.xpath)
+    if (!node) return null
+    const size = this.#xmlEditor.countDomNodesByXpath(node.path)
+    if (size < 2) return null
+    let index = node.index + delta
+    if (index < 1) index = wrap ? size : 0
+    if (index > size) index = wrap ? 1 : 0
+    return index ? navigationXpath(node.path, index) : null
   }
 
   /** Called when the user clicks on the counter to enter the node index */
@@ -442,10 +488,10 @@ class XpathNavigationPlugin extends Plugin {
     const index = prompt('Enter node index')
     if (!index) return
     const parsedIndex = parseInt(index, 10)
-    if (isNaN(parsedIndex) || !this.state?.xpath) return
+    const node = parseNavigationXpath(this.state?.xpath)
+    if (isNaN(parsedIndex) || parsedIndex < 1 || !node) return
     try {
-      const { pathBeforePredicates, nonIndexPredicates } = parseXPath(this.state.xpath)
-      await this.dispatchStateChange({ xpath: `${pathBeforePredicates}${nonIndexPredicates}[${parsedIndex}]` })
+      await this.dispatchStateChange({ xpath: navigationXpath(node.path, parsedIndex) })
     } catch (error) {
       this.#logger.warn('Failed to select by index: ' + String(error))
     }
@@ -505,6 +551,90 @@ class XpathNavigationPlugin extends Plugin {
     if (this.#xmlEditor.isFocusMode()) {
       this.#setFocusMode(false)
     }
+  }
+
+  /**
+   * Whether the up/down arrow keys navigate between nodes: in focus mode, and in the visual annotation
+   * mode, where the cursor has no function. Both only while node navigation is on.
+   * @returns {boolean}
+   */
+  #arrowKeysNavigate() {
+    return this.#navigationActive && (this.#xmlEditor.isFocusMode() || this.#isVisualMode())
+  }
+
+  /** @returns {boolean} Whether the visual annotation mode is on */
+  #isVisualMode() {
+    return this.state?.view === 'annotation'
+  }
+
+  /**
+   * Handles the up/down arrow keys in the editor text. In the visual annotation mode, they always go to
+   * the previous/next node, like ‹ ›. In the XML mode with focus mode on, they move the cursor within
+   * the focused node as usual, and go to the previous/next node when the cursor would leave it (or is
+   * outside of it), without wrapping around at the first and last node.
+   * @param {EditorView} view
+   * @param {number} delta - -1 for up, +1 for down
+   * @returns {boolean} Whether the key was handled
+   */
+  #onEditorArrowKey(view, delta) {
+    if (!this.#arrowKeysNavigate()) return false
+    if (this.#isVisualMode()) {
+      this.#navigateByArrowKey(delta)
+      return true
+    }
+    const range = view.state.field(focusRangeField, false)
+    if (!range) return false
+    const selection = view.state.selection.main
+    const target = view.moveVertically(selection, delta > 0)
+    const insideBefore = selection.head >= range.from && selection.head <= range.to
+    const insideAfter = target.head >= range.from && target.head <= range.to
+    if (insideBefore && insideAfter && target.head !== selection.head) return false
+    return this.#navigateByArrowKey(delta)
+  }
+
+  /**
+   * Goes to the previous/next node with the up/down arrow keys while the keyboard focus is not in the
+   * editor text, e.g. after clicking ‹ ›. See {@link #onEditorArrowKey} for when the keys navigate.
+   * Only applies to keys pressed on the page itself or in the XML editor's toolbars and statusbar,
+   * not in form fields, overlays or other panels such as the PDF viewer.
+   * @param {KeyboardEvent} evt
+   */
+  #onDocumentArrowKey(evt) {
+    if (evt.key !== 'ArrowUp' && evt.key !== 'ArrowDown') return
+    if (evt.defaultPrevented || evt.altKey || evt.ctrlKey || evt.metaKey || evt.shiftKey) return
+    if (!this.#arrowKeysNavigate()) return
+    const target = evt.target
+    if (!(target instanceof HTMLElement)) return
+    // keys in the editor text are handled by the keymap (see #onEditorArrowKey)
+    if (this.#xmlEditor.getView().dom.contains(target)) return
+    if (target !== document.body && !ui.xmlEditor.contains(target)) return
+    const inField = evt.composedPath().some(el => el instanceof HTMLElement && (el.isContentEditable
+      || ['INPUT', 'TEXTAREA', 'SELECT', 'SL-INPUT', 'SL-TEXTAREA', 'SL-SELECT', 'SL-DROPDOWN', 'SL-MENU',
+        'SL-DIALOG', 'SL-DRAWER'].includes(el.tagName)))
+    if (inField) return
+    evt.preventDefault()
+    this.#navigateByArrowKey(evt.key === 'ArrowUp' ? -1 : +1)
+  }
+
+  /**
+   * Goes to the previous/next node for an arrow key. In the visual mode, this wraps around at the first
+   * and last node like ‹ ›, in the XML mode it does not. In focus mode, the node is focused right away,
+   * before the `xpath` state change reaches the other plugins, so that the editor responds at once.
+   * @param {number} delta - -1 for up, +1 for down
+   * @returns {boolean} Whether there is a node to go to
+   */
+  #navigateByArrowKey(delta) {
+    const xpath = this.#adjacentXpath(this.state, delta, { wrap: this.#isVisualMode() })
+    if (!xpath) return false
+    if (this.#xmlEditor.isFocusMode()) {
+      try {
+        this.#xmlEditor.focusByXpath(xpath)
+      } catch (error) {
+        this.#logger.warn(`Could not focus node: ${String(error)}`)
+      }
+    }
+    this.dispatchStateChange({ xpath })
+    return true
   }
 
   //
@@ -704,7 +834,7 @@ class XpathNavigationPlugin extends Plugin {
       // keep the navigation on an edited expression that is currently selected
       if (previousSelected && previous !== xpath) {
         this.#setXpathPreference(variant, xpath)
-        await this.dispatchStateChange({ xpath: `${xpath}[1]` })
+        await this.dispatchStateChange({ xpath: navigationXpath(xpath, 1) })
       }
     }
   }

@@ -82,6 +82,7 @@ Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/t
 - `register_gc_task(task_id, label, task, order=500, supports_dry_run=True)` (`lib/core/gc_registry.py`, plugin API 1.1): a garbage-collection task run by `POST /api/v1/files/garbage_collect`. Register it in `initialize()` with an id `plugin:<plugin id>` and remove it with `unregister_gc_task()` in `cleanup()`. The task receives a `GcContext` (`deleted_before`, `sync_status`, `is_admin`, `dry_run`, `file_repo`, `file_storage`, `db_dir`) and returns a `GcResult` (`items_deleted`, `bytes_freed`, `details: dict[str, int]`, `errors`); the result is shown as one row of the GC result dialog. A task that supports dry runs must not delete anything when `context.dry_run` is set. Use order 800-899 for caches; `register_directory_gc_task(task_id, label, get_dir)` empties a cache directory and reports its size. Exceptions are caught and reported as the task's error. The older `register_gc_handler(plugin_id, handler)` (handler returns the number of deleted items) is deprecated; it registers a task `plugin:<plugin_id>` without dry-run support, whose count still appears in the response's `plugin_items_deleted`.
 - `register_lock_holder(prefix, notice)` (`lib/core/locking.py`, plugin API 1.4): a plugin that locks files under its own holder id instead of a user session (e.g. a background job calling `acquire_lock(stable_id, f"auto-annotation:{job_id}", ...)`) registers the prefix of that id with the notice that users see when they open such a file, e.g. "This document is locked while its annotations are corrected automatically". `POST /api/v1/files/acquire_lock` returns it in the `message` of its 423 detail (`holder: "process"`). Remove it with `unregister_lock_holder(prefix)` in `cleanup()`.
 - Event bus events (`lib/sse/event_bus.py`): e.g. `file.lock_changed` (emitted after a lock is acquired or released, payload `stable_id`), `file.deleted`, `document.saved`, and `user.renamed`, `project.renamed`, `collection.renamed` (payload `old_id`, `new_id`; emitted after an admin renamed the id and the core stores were updated, see `lib/utils/rename_utils.py`). A plugin that stores usernames, project or collection ids in its own data subscribes to the rename events and replaces the old id. In the frontend, the RBAC manager invokes the extension points `rbac.userRenamed`, `rbac.projectRenamed`, `rbac.collectionRenamed` (`oldId`, `newId`) and `rbac.userRelabeled`, `rbac.projectRelabeled`, `rbac.collectionRelabeled` (`id`, new full name or name) after the change was saved; frontend extensions implement them to refresh their UI (see `app/src/extension-points.js`).
+- `register_layout_provider(variant, plugin_id, provider)` (`lib/tei/layout.py`, plugin API 1.5): the line layout of the documents of a variant whose `<text>` children are zones partitioning one text stream (zone documents, such as `grobid.training.segmentation`). `provider(xml, doc_id)` returns a `LineLayout` (page index and layout hints of every `<lb/>`-delimited line of `<text>`) or None if the layout is missing; exceptions are logged and count as missing. `get_line_layout(xml, doc_id, variant)` calls it; `GET /api/v1/files/{stable_id}/layout` serves it to the frontend (`status` `ok`, `missing` or `unsupported`, `MISSING_LAYOUT_MESSAGE`). Remove it with `unregister_layout_provider(variant)` in `cleanup()`. An extractor that produces zone documents declares `reviewUnits[variant] = "pages"` (`PAGES_UNIT_PATH`) and the zone labels in `zoneLabels[variant]` (`[{code, element, attributes}]`, read with `get_zone_labels(variant)`). The pure module `zone_lines` (`lib/tei/zone_lines.py`, also exported) reads zone documents as lines and pieces, computes pages, page windows and fingerprints (mirrored in `app/src/modules/zone-lines.js`, shared fixtures in `tests/unit/fixtures/zone-lines/`), formats the numbered line listing sent to models, parses and checks their label changes, and rebuilds the zones with `apply_labels()`. Since plugin API 1.6, zones and `<text>` may contain `<pb/>` page breaks, which carry no text: `ZoneDocument.page_breaks` lists them with the first line of their page, `line_pages_from_page_breaks()` gives the page index of every line from them (None without `<pb/>`), and `insert_page_breaks(xml, labels, line_pages)` inserts `<pb n="…"/>` at the page starts of a layout, except where an existing `<pb/>` lies within `PAGE_BREAK_VICINITY` lines.
 - `register_schema_config(url, timeout, reason)` (`lib/core/schema_validator.py`): a shorter validation timeout for complex schemas.
 - `ExtractorUnavailableError` (`lib/extraction`): raise it when an external dependency of an extractor is missing; the extraction router then falls back to the mock extractor if one is registered.
 
@@ -101,8 +102,37 @@ Core must not import, call or name any plugin (enforced by `tests/unit/fastapi/t
 - `readme`: http(s) URL of the plugin documentation. The plugin manager shows it as a "README" button (a `readme_url` in the plugin `metadata` takes precedence).
 - `engines.pte-plugin-api`: semver range of plugin API versions (`PLUGIN_API_VERSION`, see [Plugin API](#plugin-api)); a plugin outside the range is not loaded.
 - `engines.pte`: npm-style semver range of PDF-TEI-Editor versions (as `engines.node` in `package.json`): comparators (`>=0.75.0`, `<1.0.0`), caret (`^0.75.0`), tilde (`~0.75.1`), x-ranges (`0.75.x`, `*`), hyphen ranges, space for AND and `||` for OR. The editor version is the `version` in `package.json`; pre-release suffixes are ignored (`0.76.0-devel.2` counts as `0.76.0`).
+- `manual`: pages the plugin contributes to the user manual, see [Manual Pages](#manual-pages).
 - All fields are optional. An empty manifest, a manifest without fields and plugins without manifest (all built-in plugins) declare no constraints and load as before.
 - The manifest is read before `plugin.py` is imported. A plugin outside the declared range is not imported and shows as "Incompatible" in the plugin manager, with the required and the actual version. A manifest that is not valid JSON, or has an invalid `version` or range, marks the plugin as "Failed".
+
+### Manual Pages
+
+A plugin can add Markdown pages, such as tutorials, to the user manual. It declares them in the `manual` list of its manifest:
+
+```json
+{
+  "manual": [
+    {
+      "id": "llm-review-tutorial",
+      "slot": "tutorials",
+      "title": "How to use the LLM Reviewer with GROBID",
+      "description": "Review GROBID training documents part by part.",
+      "file": "docs/llm-review-tutorial.md",
+      "requires": ["annotation-review"],
+      "roles": ["annotator", "reviewer"],
+      "order": 100
+    }
+  ]
+}
+```
+
+- `slot`: where the page is listed. Core manual pages contain slots as HTML comments (`<!-- plugin-docs: <slot> -->`, optionally with `hide-heading` to remove the heading before an empty slot), which the manual drawer replaces with a list of links. The slots are fixed in `MANUAL_SLOTS` (`fastapi_app/lib/plugins/plugin_manual.py`): `tutorials` (start page and Plugins page), `extraction` (Extraction Workflow), `review` (Review Workflow), `inference` (Choosing a Language Model, `user-manual/language-models.md`), `admin` (Admin Guide). A page for another slot is not listed and logged as a warning.
+- `file`: path of the Markdown file relative to the plugin directory (for packages, the package directory), or an object with one file per language code (`{"en": "docs/en/a.md", "de": "docs/de/a.md"}`); the drawer picks the browser language and falls back to `en`. A path may end with `#<anchor>` (lowercase letters, digits, `_` and `-`, as the manual renderer creates heading ids): the page then opens at that heading, so one file can be listed in several slots and open at the section that belongs there. The contributions API returns the paths without the anchor in `files` and the anchors per language in `anchors`. Images and links in a page are relative to its file. Include the files as package data.
+- `requires`: further plugins that must be active for the page to be listed; the plugin itself must always be active. `roles`: the page is listed only for users with one of these roles (empty: everyone). `order`: sort key within the slot (default 500), then the title. `description`: one sentence after the link. `id`: lowercase letters, digits and hyphens, unique within the plugin.
+- Administrators also see the pages of plugins that are not active, marked as not enabled.
+- `GET /api/v1/manual/contributions` lists the pages the user can see (with `all_roles=true`: the pages of all active plugins whatever their roles, used by the manual window; roles only keep the drawer free of pages that do not concern the user, they do not protect pages); `GET /api/v1/manual/plugins/{plugin_id}/{path}` serves the files without authentication, like `docs/`. Only Markdown and PNG, JPEG, GIF and WebP images are served, and only from the directories that contain the declared Markdown files (and their subdirectories).
+- The drawer and the manual window show a page under the virtual path `plugins/<plugin id>/<file>` (`app/src/modules/manual-slots.js`). Plugin pages are rendered without raw HTML (`createMarkdownRenderer({ html: false })`), so `<sl-icon>` and other tags appear as text. They are part of the manual search and have manual window URLs (`/manual/plugins/<plugin id>/<file without .md>`, see [User Manual Window and Search](architecture-frontend.md#user-manual-window-and-search)). Link to core manual pages with manual links (GitHub blob URLs, see [Links to the User Manual](architecture-frontend.md#links-to-the-user-manual)).
 
 ### Developing an External Plugin in Its Own Repository
 
@@ -160,6 +190,43 @@ api_key = require_user_secret(options.get("username"), "anthropic")
 - The REST API (`GET /api/v1/secrets`, `PUT`/`DELETE /api/v1/secrets/{service}`) never returns values. Only registered services can be stored.
 - `unregister_secret_service(id)` removes a service that no longer exists (e.g. a deleted endpoint of the inference-endpoints plugin) from the API Keys dialog; stored keys are kept.
 - Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
+
+## OCR Engines
+
+Plugins provide text recognition by registering an `OcrEngine` (`fastapi_app/lib/ocr/base.py`) with the `OcrEngineRegistry` in `initialize()` and unregistering it in `cleanup()`. The core plugin `fastapi_app/plugins/ocrmypdf/` (OCRmyPDF/Tesseract) is the reference implementation.
+
+```python
+from fastapi_app.lib.ocr import OcrEngine, OcrEngineRegistry
+
+class MyEngine(OcrEngine):
+    id = "my-ocr"
+    name = "My OCR"
+    description = "..."
+
+    def get_options(self):  # parameters shown in the OCR dialog, apart from the languages
+        return {"mode": {"type": "string", "label": "Mode", "options": ["fast", "best"], "default": "fast"}}
+
+    def is_available(self): ...
+    def get_languages(self): ...  # normalized codes, e.g. ["de", "en", "zh-Hans"]
+
+    # runs in a worker thread; returns a message or an OcrResult(message, method, fallback_reason)
+    def recognize(self, input_path, output_path, languages, options, rebuild=False): ...
+
+    # optional: words on a page image, used by the text layer check
+    def supports_word_recognition(self): return True
+    def recognize_words(self, image_path, languages): ...  # list[OcrWord], coordinates 0-1 from the top left
+
+# in initialize():
+OcrEngineRegistry.get_instance().register(MyEngine())
+```
+
+- Languages are normalized BCP 47 tags as used in the teiHeader (`de`, `grc`, `zh-Hans`, `de-Latf`). Map engine codes with `normalize_ocr_language()` and `to_iso639_3()` from `fastapi_app/lib/ocr/languages.py`.
+- `recognize()` must write a PDF with the same page geometry, since annotation coordinates refer to it. Raise `ValueError` for invalid parameter combinations (HTTP 400); other exceptions become HTTP 500.
+- `rebuild=True` means the user explicitly asked for text recognition. An engine that chooses its method automatically should then replace a digital text layer even if the check found no problem.
+- Returning an `OcrResult` with `method` (`skip`, `redo`, `force`, `vectorize`) and `fallback_reason` records them in `file_metadata.ocr`; the extraction dialog warns when pages were rasterized (`force` with a `fallback_reason`).
+- Option types are `string` (a select box with `options`), `boolean` and `integer`. The router validates the values against `get_options()` before calling `recognize()`.
+- API (`fastapi_app/routers/ocr.py`): `GET /api/v1/ocr/engines`, `GET /api/v1/ocr/text-quality/{stable_id}` (text layer assessment, `fastapi_app/lib/ocr/text_quality.py`; with `?layout=true` also the comparison with the words recognized on sample pages, `fastapi_app/lib/ocr/layout_check.py`, by the first engine that supports word recognition), `POST /api/v1/ocr` (replaces the PDF content, keeps the `stable_id`, records the run in `file_metadata.ocr`). OCR runs are serialized.
+- Frontend: the `ocr` plugin (`app/src/plugins/ocr.js`) wraps the API and the options dialog; the generic language chooser is `app/src/modules/language-chooser.js`.
 
 ## Annotation Tags (Visual Mode)
 
@@ -389,7 +456,7 @@ With `PTE_PLUGIN_INSTALL=1` (operator setting, see [Runtime Plugin Install](../u
 - **Not imported until enabled.** A new plugin is installed disabled. Disabled runtime-installed plugins are listed from their state entry (`PluginRecord.deferred`), not imported, also at startup. Enabling one imports it (`PluginRegistry.load_deferred()`), registers its routes and static files live and runs `initialize()`, in every worker (`PluginManager.reconcile()`).
 - **Live routes.** `register_plugin_routes()` records the position after the startup plugin routes; `register_live_routes()` inserts the routes of a plugin loaded later at that position, before the catch-all compat router and static mounts, by replacing `app.router.routes` in one assignment, and resets `app.openapi_schema`.
 - **Precedence.** The version directories are put at the front of `sys.path` at startup, so a runtime-installed version replaces a version installed with `uv sync` (its entry point and package are found first). Built-in plugins and plugins from `FASTAPI_PLUGIN_PATHS` cannot be replaced. An editable install of the same distribution (`npm run dev:install` in a pte-plugins checkout, recognized by `dir_info.editable` in its `direct_url.json`) takes precedence over the runtime-installed version, which is then neither activated nor listed, and a warning is logged at startup (`plugin_site.without_editable()`).
-- **Upgrade and removal** of a plugin that is imported take effect only in worker processes started afterwards: the state records `restart_required_at` and `restart_plugins`, heartbeats carry each worker's start time, and `propagation.restart_pending` counts the workers still running old code. `POST /api/v1/plugins/admin/restart` sends `SIGHUP` to the uvicorn supervisor (only when `PTE_WORKER_RECYCLE=1`, set by `bin/start-prod`), which restarts the workers one after the other. Superseded version directories (`pending_removal`) are deleted at startup once no older worker runs. Entries of `installed` whose package directory no longer exists in the site directory (for example deleted by hand) are dropped from the state at startup (`PluginManager._prune_missing_installed()`), so the plugin can be installed again; its `disabled` entry is kept. Enabling a plugin with a pending restart is refused.
+- **Upgrade and removal** of a plugin that is imported take effect only in worker processes started afterwards: the state records `restart_required_at` and `restart_plugins`, heartbeats carry each worker's start time, and `propagation.restart_pending` counts the workers still running old code. `POST /api/v1/plugins/admin/restart` calls `recycle_workers()` (`fastapi_app/lib/core/worker_recycle.py`): with `PTE_WORKER_RECYCLE=1` (set by `bin/start-prod`) it sends `SIGHUP` to the uvicorn supervisor, which restarts the workers one after the other; with `PTE_DEV_RELOAD_TRIGGER` (set by `bin/start-dev` with auto-reload) it writes to that file (`data/plugins/dev-reload-trigger.py`), which makes the reloader restart the dev server. `bin/start-dev` excludes `data/plugins/site/` from the watched files, so unpacking a plugin does not reload the dev server in the middle of an "Upgrade installed", which upgrades all plugins first and then restarts once. Superseded version directories (`pending_removal`) are deleted at startup once no older worker runs. Entries of `installed` whose package directory no longer exists in the site directory (for example deleted by hand) are dropped from the state at startup (`PluginManager._prune_missing_installed()`), so the plugin can be installed again; its `disabled` entry is kept. Enabling a plugin with a pending restart is refused.
 - **Client reload**: after a worker applied a plugin change it calls the listeners of `PluginManager.add_change_listener()`; `fastapi_app/main.py` uses this to broadcast the SSE event `serverChanged` to the worker's clients. The clients compare `plugins_version` of `GET /api/v1/maintenance/status` (null while a restart is pending) with the value at page load and reload (`app/src/modules/server-change-monitor.js`).
 - **Trust.** Repositories of `PTE_PLUGIN_TRUSTED_OWNERS` are trusted; others need the repository name as `confirm`, and `PTE_PLUGIN_TRUSTED_ONLY=1` refuses them. Only repositories in the catalog (`PTE_PLUGIN_SOURCES` and the `pte-plugin` topic search) can be installed from.
 - **Audit.** Discover, install, upgrade, remove, enable, disable and restart are appended to `data/db/plugin-audit.jsonl` and logged.

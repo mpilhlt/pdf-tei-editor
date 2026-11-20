@@ -22,9 +22,25 @@ Only users with the *reviewer* or *admin* role can set marks; everyone else sees
 
 ## Review units
 
-A review unit is an element below `<text>`. Which elements are units depends on the document variant: for GROBID reference data, each `<bibl>`; for segmentation data, each section (`<front>`, `<body>`, `<listBibl>`, …). For other documents the editor steps down from `<text>` while there is only one non-empty child element (so `<front/><body/><back><listBibl>…` leads to the `<bibl>`s) and takes the children of the first element with several. The path used is recorded in the document the first time a mark is set, so the units stay the same for all reviewers.
+A review unit is an element below `<text>`. Which elements are units depends on the document variant: for GROBID reference data, each `<bibl>`; for segmentation data, each page (see below). For other documents the editor steps down from `<text>` while there is only one non-empty child element (so `<front/><body/><back><listBibl>…` leads to the `<bibl>`s) and takes the children of the first element with several. The path used is recorded in the document the first time a mark is set, so the units stay the same for all reviewers.
 
 When several units share a line, the strip shows the line striped in amber if their states differ. Pretty-print the document (TEI Wizard) to put each unit on its own line.
+
+### Pages of segmentation documents
+
+In a segmentation document (`grobid.training.segmentation`), the elements below `<text>` are zones such as `<front>`, `<body>`, `<listBibl>`, `<note place="headnote">` or `<page>`, which divide the text of the whole document between them. Correcting the document means moving text from one zone to another, so the zones cannot be review units. Instead, each page of the PDF is a unit. Where the pages begin is marked by the `<pb n="…"/>` elements that the GROBID plugin inserts at the start of every PDF page, or, in documents without them, taken from the layout information that GROBID writes with the extraction. Either way the page breaks do not depend on the zones: moving a running head into a `<note place="headnote">` does not move a page. Do not move or delete a `<pb/>`, since that moves the page start. A page is a range of lines (a line ends with `<lb/>`), so a page often begins inside an editor line; that line is then striped in amber when the two pages have different states. The tooltip of the strip names the page by its number.
+
+![The XML editor in review mode on a segmentation document: a red strip next to the second page, which is marked not OK, and an amber striped strip next to the line in which the third page begins](../images/unit-review-pages.png)
+
+*A segmentation document reviewed by page: the second page is marked not OK, and the third page, which is marked OK, begins inside the `<listBibl>` line.*
+
+A correction changes only the page it is on: that page's marks become marks of an edited unit (see [Edited units](#edited-units)), the marks of the other pages stay as they are.
+
+The layout information is kept by the GROBID plugin for every extraction. For a document without `<pb/>` elements, the TEI Wizard enhancement **Insert page breaks** adds them from it. If a document has neither `<pb/>` elements nor layout information, for example a document extracted before the plugin kept it, it has no units: the progress bar shows a warning, and hovering over it tells you that a fresh extraction of the document provides the layout. The LLM plugins are not available for such a document either.
+
+![The progress bar with a warning icon and its tooltip: "No pages to review: The layout information of this document is missing. A fresh extraction of the document provides it."](../images/unit-review-pages-missing-layout.png)
+
+*A segmentation document without layout information cannot be reviewed by page.*
 
 ## Marking units
 
@@ -87,6 +103,8 @@ The administrator sets the review mode in the configuration (`unit-review.mode`)
 
 When review mode is on and you run **Review document annotations** (Tools menu, LLM Reviewer plugin) in a document you can edit, the model records its result as a reviewer of its own: the units of each reviewed part are marked OK, or not OK with the model's rationale as comment. By default the model's marks count as votes; with `unit-review.llm-vote` set to `false` they are only shown for units no person has reviewed yet.
 
+In segmentation documents, the model is given whole pages, two at a time, as numbered lines with the zone of each line and hints on its layout (position on the page, font size, whether it repeats on other pages), and it answers which lines belong to another zone. Each answer is turned into a suggestion that moves the zone tags around the lines concerned, and the reviewed pages are marked. **LLM Review** in focus mode on a zone reviews the pages the zone lies on.
+
 The model's suggestions are listed in the diagnostics drawer, most of them with a fix. If you are a reviewer (or an admin) and apply such a fix, from the diagnostics drawer (**Apply fix** or **Apply**) or with **Propose fix** in the comparison view, you agree with the model: if the unit was marked not OK, it is marked OK in your name and the model's mark is removed, instead of the unit being listed as *Changed after a not-OK review*. A unit with other suggestions of the model that you have not applied keeps its marks. Fixes applied by annotators still need the reviewer to check the unit again.
 
 ### Adjusting the rules the model uses
@@ -110,11 +128,13 @@ When a category has both layers, a status line below the tabs shows whether the 
 
 The guide repository does not check the markers itself: the machine rules are kept in sync from here, with **Update from guide**, **Mark as in sync** and **Propose change upstream** (see below). If someone changes either file directly in the repository, the status line shows it.
 
+Overrides, **Update from guide**, **Mark as in sync** and **Propose change upstream** work in a read-only document too, since overrides are your own and do not change the document. Only **Update to upstream** needs a document you can edit.
+
 When the guide changed and the guide is on GitHub or GitLab, the line also names the commit of the guide that the machine rules were last synced with, e.g. "(last sync: a1b2c3d)". The line is refreshed when you switch tabs, select a version or save.
 
 Which override the LLM reviewer uses: if the category has a separate machine version, your selected override on **Machine rules**; otherwise your selected override on **Guide (human)**.
 
-If you select an override of the guide section, the Annotation Guide drawer shows your text for that section and marks it with a **Personal version** badge.
+If you select an override of the guide section, the Annotation Guide drawer shows your text for that section and marks it with a **Personal version** badge. The annotation guide window, which opens from the drawer, always shows the original.
 
 An override that was written against an older version of the original is marked with a warning when the original has changed since ("Based on an older version of the original"). Review it against the current original and save it again to clear the marker.
 
@@ -165,7 +185,7 @@ Once a proposal has been merged, the editor marks each of your overrides whose t
 
 ## Edited units
 
-A mark belongs to the exact content of a unit. When you edit a reviewed unit in the editor, its marks are kept as "before the last edit" and the unit is shown with grey dashes until it is reviewed again; undoing the edit restores the marks. If one of these marks was not OK, the unit is also listed in the diagnostics drawer. Marks of units that were changed outside the editor (for example by uploading a new file) are removed the next time a mark is set.
+A mark belongs to the exact content of a unit. When you edit a reviewed unit in the editor, its marks are kept as "before the last edit" and the unit is shown with grey dashes until it is reviewed again; undoing the edit restores the marks, also those of units the edit deleted or merged into another unit. If one of these marks was not OK, the unit is also listed in the diagnostics drawer. Marks of units that were changed outside the editor (for example by uploading a new file) are removed the next time a mark is set.
 
 ## Starting a version without reviews
 
@@ -179,7 +199,7 @@ When a revision is saved with the status *approved* and the document's review ha
 
 The `<standOff>` element holds no human-readable data (besides the review marks, it can hold [unit comments](unit-comments.md)). It is folded when a document is loaded, when it is created, and whenever the TEI header is folded; you can unfold it temporarily. Only admins can edit it by hand; the marks are changed through review mode.
 
-The marks are stored in the document in `TEI/standOff/listAnnotation[@type="unit-review"]`, with one `<annotation motivation="assessing">` per reviewer. Units are identified by a short fingerprint of their content, so `<text>` itself is not changed. The `<note type="summary">` of the list holds the counts shown in the progress meter.
+The marks are stored in the document in `TEI/standOff/listAnnotation[@type="unit-review"]`, with one `<annotation motivation="assessing">` per reviewer. Units are identified by a short fingerprint of their content, so `<text>` itself is not changed. The fingerprint of a page is computed from the text of its lines and their zones. The `<note type="unit-xpath">` holds the unit path, or `pages` for documents reviewed by page. The `<note type="summary">` of the list holds the counts shown in the progress meter.
 
 ```xml
 <standOff>

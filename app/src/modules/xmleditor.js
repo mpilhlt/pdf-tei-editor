@@ -44,7 +44,7 @@
  */
 
 import { EditorState, EditorSelection, Compartment, Transaction, StateEffect, Annotation } from "@codemirror/state";
-import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, rejectChunk, diff } from "@codemirror/merge"
+import { unifiedMergeView, goToNextChunk, goToPreviousChunk, getChunks, getOriginalDoc, diff } from "@codemirror/merge"
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, crosshairCursor, highlightActiveLine, rectangularSelection } from "@codemirror/view"
 import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldedRanges, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
@@ -62,6 +62,7 @@ import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
 import { normalizeXmlWhitespaceForDiff } from './diff-utils.js';
+import { isMilestone } from './navigation-xpath-utils.js';
 import { focusModeExtension, focusRangeField, setFocusRangeEffect, focusActionsFacet } from './codemirror/focus-mode.js';
 /**
  * @import {EditorTheme} from './codemirror/editor-themes.js'
@@ -891,30 +892,26 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Accept all remaining changes in the document
+   * Accept all remaining changes in the document, in one transaction (one undo step). Each chunk
+   * is replaced as the merge view's own per-chunk accept does it (`rejectChunk()` of
+   * @codemirror/merge, since the incoming document is the merge view's "original").
    */
   acceptAllDiffs() {
     if (!this.isMergeViewActive()) {
       throw new Error("Not in merge view")
     }
     const state = this.#view.state;
-    //const originalDocument = getOriginalDoc(state);
-    const { chunks } = getChunks(state) || {};
-    for (const chunk of chunks || []) {
-      //const originalChunkText = originalDocument.sliceString(chunk.fromB, chunk.toB);
-      rejectChunk(this.#view, chunk.fromA)
-      // changes.push({
-      //   from: chunk.fromA,
-      //   to: chunk.toA,
-      //   insert: originalChunkText
-      // });
+    const result = getChunks(state);
+    if (result && result.chunks.length > 0) {
+      const incoming = getOriginalDoc(state);
+      const changes = result.chunks.map(chunk => {
+        let insert = incoming.sliceString(chunk.fromA, Math.max(chunk.fromA, chunk.toA - 1));
+        if (chunk.fromA != chunk.toA && chunk.toB <= state.doc.length) insert += state.lineBreak;
+        return { from: chunk.fromB, to: Math.min(state.doc.length, chunk.toB), insert };
+      });
+      this.#view.dispatch({ changes, userEvent: "revert" });
     }
     this.hideMergeView()
-
-    // changes = changes.slice(0,3)
-    // console.log(changes)
-
-    // this.#view.dispatch({ changes });
   }
 
   /**
@@ -1286,21 +1283,87 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
+   * The range of a DOM node in the editor text. A milestone, an empty TEI milestone element such as
+   * `<pb/>` (see {@link isMilestone}), stands for the text that follows it: its range runs from its start to the next element of the
+   * same name in document order, or else to the end of the top-level element that holds it (e.g.
+   * `<text>`), without the whitespace before that end.
+   * @param {Node} domNode - A node in the XML DOM
+   * @returns {{from: number, to: number}}
+   * @throws {Error} If the DOM node has no attached syntax node
+   */
+  getNodeRange(domNode) {
+    const syntaxNode = this.getSyntaxNodeFromDomNode(domNode);
+    if (!isMilestone(domNode)) {
+      return { from: syntaxNode.from, to: syntaxNode.to };
+    }
+    const element = /** @type {Element} */ (domNode);
+    const xmlDoc = /** @type {Document} */ (element.ownerDocument);
+    const walker = xmlDoc.createTreeWalker(xmlDoc, 1 /* NodeFilter.SHOW_ELEMENT */);
+    walker.currentNode = element;
+    let next = /** @type {Element|null} */ (walker.nextNode());
+    while (next && (next.localName !== element.localName || next.namespaceURI !== element.namespaceURI)) {
+      next = /** @type {Element|null} */ (walker.nextNode());
+    }
+    let end;
+    if (next) {
+      end = this.getSyntaxNodeFromDomNode(next).from;
+    } else {
+      let top = element;
+      while (top.parentElement && top.parentElement !== xmlDoc.documentElement) top = top.parentElement;
+      const topNode = this.getSyntaxNodeFromDomNode(top);
+      end = topNode.getChild('CloseTag')?.from ?? topNode.to;
+    }
+    const text = this.#view.state.doc;
+    while (end > syntaxNode.to && /\s/.test(text.sliceString(end - 1, end))) end--;
+    return { from: syntaxNode.from, to: end };
+  }
+
+  /**
+   * The range of the node that a navigation xpath (`(path)[n]`: the n-th node of all that `path`
+   * selects) points to, see {@link XMLEditor#getNodeRange}.
+   * @param {string} xpath
+   * @returns {{from: number, to: number}}
+   * @throws {Error} If no node matches the XPath expression or it has no attached syntax node
+   */
+  getRangeByXpath(xpath) {
+    const node = this.getDomNodeByXpath(xpath);
+    if (!node) {
+      throw new Error(`No XML node found for XPath: ${xpath}`);
+    }
+    return this.getNodeRange(node);
+  }
+
+  /**
    * Selects the DOM node that matches the given XPath expression in the editor and scrolls it to the vertical center.
    * @param {string} xpath - The XPath expression to select.
    * @throws {Error} If the XML tree is not loaded, if no DOM node match the XPath expression, or no syntax node can be found for the DOM node.
    */
   selectByXpath(xpath) {
-    const { from, to } = this.getSyntaxNodeByXpath(xpath);
-    this.#selectRange(from, to);
+    const node = this.getDomNodeByXpath(xpath);
+    if (!node) {
+      throw new Error(`No XML node found for XPath: ${xpath}`);
+    }
+    this.selectDomNode(node);
   }
 
   /**
-   * Selects the given DOM node in the editor and scrolls it to the vertical center.
+   * Selects the given DOM node in the editor and scrolls it to the vertical center. For a milestone
+   * such as `<pb/>`, places the cursor after it and scrolls its range (see
+   * {@link XMLEditor#getNodeRange}) to the center instead.
    * @param {Node} domNode - A node in the XML DOM
    * @throws {Error} If the DOM node has no attached syntax node
    */
   selectDomNode(domNode) {
+    if (isMilestone(domNode)) {
+      // a milestone's range can be long (e.g. a page): place the cursor after it instead of selecting the range
+      const { from, to } = this.getNodeRange(domNode);
+      const cursor = this.getSyntaxNodeFromDomNode(domNode).to;
+      this.#view.dispatch({
+        selection: EditorSelection.cursor(cursor),
+        effects: EditorView.scrollIntoView(EditorSelection.range(to, from), { y: 'center' })
+      });
+      return;
+    }
     const { from, to } = this.getSyntaxNodeFromDomNode(domNode);
     this.#selectRange(from, to);
   }
@@ -1317,8 +1380,9 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Puts the given DOM node into visual focus: everything outside of it is dimmed, the cursor
-   * is placed after its opening tag, and the node is scrolled to the vertical center.
+   * Puts the given DOM node into visual focus: everything outside of its range (see
+   * {@link XMLEditor#getNodeRange}) is dimmed, the cursor is placed after its opening tag (after a
+   * milestone such as `<pb/>`), and the range is scrolled to the vertical center.
    * @param {Node} domNode - The DOM node to focus
    * @param {object} [options]
    * @param {boolean} [options.scroll=true] - Whether to move the cursor and scroll the node into the center
@@ -1326,13 +1390,13 @@ export class XMLEditor extends EventEmitter {
    */
   focusDomNode(domNode, { scroll = true } = {}) {
     const syntaxNode = this.getSyntaxNodeFromDomNode(domNode);
-    const { from, to } = syntaxNode;
+    const { from, to } = this.getNodeRange(domNode);
     const focusEffect = setFocusRangeEffect.of({ from, to });
     if (!scroll) {
       this.#view.dispatch({ effects: focusEffect });
       return;
     }
-    const cursor = syntaxNode.getChild('OpenTag')?.to ?? from;
+    const cursor = isMilestone(domNode) ? syntaxNode.to : syntaxNode.getChild('OpenTag')?.to ?? from;
     this.#view.dispatch({
       selection: EditorSelection.cursor(cursor),
       // anchor at the end so that the start of the node stays visible if it is taller than the viewport

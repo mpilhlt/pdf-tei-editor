@@ -104,15 +104,21 @@ export class CookieStorage {
 export class UrlHash {
 
   /**
-   * Serializes hash parameters, keeping characters that are valid in a URL fragment and make
-   * values like xpath expressions readable (`/`, `:`, `[`, `]`, `@`, `,`) unencoded.
+   * Serializes hash parameters without percent-encoding, so that values like xpath expressions stay
+   * readable in the address bar. Only the characters that would change how `URLSearchParams` parses
+   * the hash (`%`, `&`, `+`, `#`), and `=` in keys, are encoded, as well as control characters.
    * @param {URLSearchParams} params
    * @returns {string} The hash string including the leading `#`
    */
   static serialize(params) {
-    const encode = /** @param {string} str */ str => encodeURIComponent(str)
-      .replace(/%(2F|3A|5B|5D|40|2C)/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    return '#' + Array.from(params.entries()).map(([key, value]) => `${encode(key)}=${encode(value)}`).join('&')
+    /**
+     * @param {string} str
+     * @param {RegExp} reserved
+     */
+    const encode = (str, reserved) => str.replace(reserved, char => encodeURIComponent(char))
+    const value = /[%&+#\u0000-\u001f\u007f]/g
+    const key = /[%&+#=\u0000-\u001f\u007f]/g
+    return '#' + Array.from(params.entries()).map(([k, v]) => `${encode(k, key)}=${encode(v, value)}`).join('&')
   }
 
   /**

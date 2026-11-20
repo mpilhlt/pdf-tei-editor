@@ -83,6 +83,18 @@ from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.services.service_registry import BaseService, get_service_registry
 from fastapi_app.lib.sse.event_bus import EventBus, get_event_bus
 from fastapi_app.lib.storage.file_storage import FileStorage
+from fastapi_app.lib.tei import zone_lines
+from fastapi_app.lib.tei.layout import (
+    MISSING_LAYOUT_MESSAGE,
+    PAGES_UNIT_PATH,
+    LayoutProvider,
+    LineLayout,
+    get_line_layout,
+    get_zone_labels,
+    has_layout_provider,
+    register_layout_provider,
+    unregister_layout_provider,
+)
 from fastapi_app.lib.utils.config_utils import get_config
 
 __all__ = [
@@ -105,6 +117,10 @@ __all__ = [
     "LLMProviderError",
     "LLMProviderRegistry",
     "LLMRateLimitError",
+    "LayoutProvider",
+    "LineLayout",
+    "MISSING_LAYOUT_MESSAGE",
+    "PAGES_UNIT_PATH",
     "get_completion_session",
     "post_completion",
     "rate_limit_http_error",
@@ -123,6 +139,9 @@ __all__ = [
     "get_event_bus",
     "get_file_repository",
     "get_file_storage",
+    "get_line_layout",
+    "get_zone_labels",
+    "has_layout_provider",
     "get_plugin_config",
     "get_service_registry",
     "get_session_manager",
@@ -134,6 +153,7 @@ __all__ = [
     "register_document_rules_provider",
     "register_gc_handler",
     "register_gc_task",
+    "register_layout_provider",
     "register_lock_holder",
     "register_schema_config",
     "register_schema_redirect",
@@ -144,7 +164,9 @@ __all__ = [
     "unregister_document_rules_provider",
     "unregister_gc_handler",
     "unregister_gc_task",
+    "unregister_layout_provider",
     "unregister_lock_holder",
+    "zone_lines",
     "unregister_schema_config",
     "unregister_schema_redirect",
 ]

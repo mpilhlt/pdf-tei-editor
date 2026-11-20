@@ -1,12 +1,25 @@
-<sl-drawer name="infoDrawer" label="User Manual" style="--size: 80ch;">
+<sl-drawer name="infoDrawer" style="--size: 80ch;">
+  <div slot="label" class="manual-drawer-label">
+    <span name="titleText">User Manual</span>
+    <sl-input name="searchInput" size="small" placeholder="Search the manual" clearable autocomplete="off" hidden>
+      <sl-icon name="search" slot="prefix"></sl-icon>
+    </sl-input>
+  </div>
   <div slot="header-actions" style="display: flex; align-items: center; gap: 4px;">
+    <sl-tooltip content="Search the manual (Ctrl+K)">
+      <sl-icon-button data-name="searchBtn" name="search" label="Search the manual" style="font-size: 1.1rem;"></sl-icon-button>
+    </sl-tooltip>
     <span name="versionInfo" style="font-size: 0.875rem; color: var(--sl-color-neutral-600); margin-right: 4px;">
       <!-- Version will be injected here -->
     </span>
+    <sl-tooltip content="Open in new window">
+      <sl-icon-button data-name="openWindowBtn" name="box-arrow-up-right" label="Open in new window" style="font-size: 1.1rem;"></sl-icon-button>
+    </sl-tooltip>
     <sl-tooltip content="Edit on GitHub">
       <sl-icon-button data-name="editGitHubBtn" name="github" label="Edit on GitHub" style="font-size: 1.25rem;"></sl-icon-button>
     </sl-tooltip>
   </div>
+  <div class="manual-search-anchor"><div name="searchResults"></div></div>
   <div name="content" class="markdown-body" data-theme="light" style="color-scheme: light !important;">
     <!-- content will be dynamically updated-->
   </div>

@@ -403,6 +403,84 @@
  */
 
 /**
+ * @typedef {string|boolean|number} OcrOptionValue
+ */
+
+/**
+ * @typedef {Object} OcrOptionInfo
+ * @property {'string'|'boolean'|'integer'} type - Value type; a 'string' option with 'options' is a choice
+ * @property {string|null=} label - Field label
+ * @property {string|null=} description - Help text
+ * @property {Array<string>|null=} options - Allowed values of a 'string' option
+ * @property {OcrOptionValue|null=} default - Default value
+ */
+
+/**
+ * @typedef {Object} OcrEngineInfo
+ * @property {string} id - Unique identifier of the engine
+ * @property {string} name - Human-readable name
+ * @property {string} description - Short description
+ * @property {Array<string>} languages - Supported languages as normalized BCP 47 codes
+ * @property {Array<string>} default_languages - Languages used when none are given
+ * @property {Object<string, OcrOptionInfo>} options - Parameters apart from the languages
+ */
+
+/**
+ * @typedef {Object} OcrRequest
+ * @property {string} stable_id - stable_id of the PDF
+ * @property {string} engine - Id of the OCR engine
+ * @property {Array<string>=} languages - Languages of the document as BCP 47 codes; the engine default if empty
+ * @property {Object<string, OcrOptionValue>=} options - Engine parameters
+ * @property {boolean=} rebuild - The user explicitly asked to recreate the text layer: a digital text layer is replaced even if it looks fine
+ */
+
+/**
+ * @typedef {'skip'|'redo'|'force'|'vectorize'} OcrMethod
+ */
+
+/**
+ * @typedef {Object} OcrRecord
+ * @property {string} engine - Id of the engine that was used
+ * @property {Array<string>} languages - Languages that were used
+ * @property {string} applied_at - ISO timestamp
+ * @property {string} applied_by - Username
+ * @property {OcrMethod=} method - How the text layer was created, if the engine reports it
+ * @property {string=} fallback_reason - Why the engine fell back from the preferred method
+ */
+
+/**
+ * @typedef {Object} TextQualityReport
+ * @property {'missing'|'poor'|'good'} status - 'missing': no usable text layer, 'poor': text layer of bad quality, 'good': no problems found
+ * @property {string} summary - One-sentence description of the result
+ * @property {Array<string>} reasons - Problems that were found
+ * @property {number} page_count - Number of pages in the PDF
+ * @property {number} pages_analyzed - Number of pages that were analyzed
+ * @property {number} pages_without_text - Analyzed pages without a text layer
+ * @property {number} image_only_pages - Analyzed pages that contain images but no text
+ * @property {number} ocr_layer_pages - Analyzed pages with invisible text (an existing OCR layer)
+ * @property {number} char_count - Number of non-whitespace characters found
+ * @property {number} garbled_char_ratio - Share of garbled characters
+ * @property {number|null=} plausible_word_ratio - Share of tokens that look like words or numbers
+ * @property {string|null=} language - Language detected in the text layer
+ * @property {number|null=} language_confidence - Confidence of the language detection (0-1)
+ * @property {boolean=} layout_checked - Whether the text layer was compared with the words recognized on sample page images
+ * @property {number|null=} layout_text_match - Share of recognized words that match the text layer (0-1)
+ * @property {number|null=} layout_position_match - Share of matching words at the same place in the text layer (0-1)
+ * @property {number|null=} layout_order_agreement - Share of matching words in the same order in the text layer (0-1)
+ * @property {OcrRecord|null=} ocr_applied - Record of a previous OCR run by this application
+ */
+
+/**
+ * @typedef {Object} OcrResponse
+ * @property {string} stable_id - stable_id of the PDF (unchanged)
+ * @property {boolean} changed - Whether the PDF content changed
+ * @property {string|null=} message - Message of the engine, if any
+ * @property {OcrMethod|null=} method - How the text layer was created, if the engine reports it
+ * @property {string|null=} fallback_reason - Why the engine fell back from the preferred method
+ * @property {TextQualityReport} quality - Text layer quality after OCR
+ */
+
+/**
  * @typedef {Object} ExtractorInfo
  * @property {string} id - Unique identifier for the extractor
  * @property {string} name - Human-readable name of the extractor
@@ -417,7 +495,23 @@
  * @property {Array<AnnotationGuideInfo>=} annotationGuides - Annotation guide URLs for each variant
  * @property {Object<string, any>=} annotationTags - Annotation tag definitions keyed by variant_id
  * @property {Object<string, any>=} annotationTagsCutoff - Per-variant count of top-level menu items; tags beyond this go in 'More...' submenu
- * @property {Object<string, string>=} reviewUnits - Per-variant path of the review units below TEI/text for unit review mode, keyed by variant_id
+ * @property {Object<string, string>=} reviewUnits - Per-variant path of the review units below TEI/text for unit review mode, keyed by variant_id; `pages` for the page units of zone documents
+ * @property {Object<string, Array<ZoneLabelDef>>=} zoneLabels - Per-variant zone labels of zone documents (the children of `<text>` partition the text), keyed by variant_id
+ */
+
+/**
+ * @typedef {Object} ZoneLabelDef
+ * @property {string} code - Short code shown to models and in the unit review, e.g. `note:headnote`
+ * @property {string} element - Element name of the zone, e.g. `note`
+ * @property {Object<string, string>=} attributes - Attributes of the zone element, e.g. `{place: 'headnote'}`
+ */
+
+/**
+ * @typedef {Object} LineLayoutResponse
+ * @property {'ok'|'missing'|'unsupported'} status - ok: the layout is in `pages` and `hints`; missing: the variant has a layout provider, but it has no layout for this document; unsupported: no layout provider for the variant
+ * @property {Array<number>} pages - Page index (0-based) of every line of `<text>`
+ * @property {Array<Array<string>>} hints - Layout hints of every line (e.g. top, repeated, bold)
+ * @property {string|null=} message - Why there is no layout (status missing)
  */
 
 /**
@@ -857,6 +951,58 @@
  * @property {Array<MessageItem>} items
  * @property {number} total - Number of messages matching the filter
  * @property {number} unread - Unread messages of the user
+ */
+
+/**
+ * @typedef {Object} ManualContributionItem
+ * @property {string} plugin_id - Id of the contributing plugin
+ * @property {string} plugin_name - Name of the contributing plugin
+ * @property {string} plugin_version - Version of the contributing plugin
+ * @property {string} id - Id of the page, unique within the plugin
+ * @property {string} slot - Manual slot the page is listed in, e.g. 'tutorials'
+ * @property {string} title - Link text
+ * @property {string} description - One sentence shown after the link
+ * @property {Object<string, string>} files - Markdown file per language code, relative to the plugin directory; fetch it from /api/v1/manual/plugins/{plugin_id}/{file}
+ * @property {Object<string, string>=} anchors - Heading anchor per language code, for the files the page opens at a heading of
+ * @property {number} order - Sort key within the slot
+ * @property {boolean} active - False if the plugin or one of the plugins the page requires is not active (only listed for administrators)
+ */
+
+/**
+ * @typedef {Object} ManualContributionsResponse
+ * @property {Array<ManualContributionItem>} contributions - Sorted by slot, order and title
+ */
+
+/**
+ * @typedef {Object} ManualPageItem
+ * @property {string} path - Path relative to docs/, e.g. "user-manual/review-workflow.md"
+ * @property {string} title - First level-1 heading of the page
+ */
+
+/**
+ * @typedef {Object} ManualPagesResponse
+ * @property {Array<ManualPageItem>} pages - The pages of the core manual in reading order
+ */
+
+/**
+ * @typedef {Object} AnnotationGuideSectionItem
+ * @property {string} anchor - Heading anchor of the section, e.g. 'citation-model'
+ * @property {string} label - Label of the guide entry, e.g. 'Citation model guidelines'
+ * @property {string} category - Rule category of the entry; 'primary' for the main section of a variant
+ * @property {Array<string>} variant_ids - Variants the section applies to; '*' means every variant
+ */
+
+/**
+ * @typedef {Object} AnnotationGuideItem
+ * @property {string} id - Id of the guide in the guide window URL /guide/<id>, e.g. 'fossil-guidelines'
+ * @property {string} url - URL of the guide file as configured (a forge blob URL, without anchor)
+ * @property {string|null} url_template - The URL with '{ref}' in place of the branch or commit, if the URL is a recognized forge blob URL; null otherwise
+ * @property {Array<AnnotationGuideSectionItem>} sections - The sections the extractors point to, in declaration order
+ */
+
+/**
+ * @typedef {Object} AnnotationGuidesResponse
+ * @property {Array<AnnotationGuideItem>} guides
  */
 
 /**
@@ -2146,6 +2292,40 @@ export class ApiClientV1 {
   }
 
   /**
+   * List the available OCR engines with their languages and parameters.
+   *
+   * @returns {Promise<Array<OcrEngineInfo>>}
+   */
+  async ocrEngines() {
+    const endpoint = `/ocr/engines`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Assess the quality of the text layer of a PDF: whether it is missing or of poor quality,
+   * and the language detected in it.
+   *
+   * @param {string} stableId - stable_id of the PDF
+   * @param {boolean} [layout=false] - Also compare the text layer with the words an OCR engine recognizes on sample pages (takes a few seconds)
+   * @returns {Promise<TextQualityReport>}
+   */
+  async ocrTextQuality(stableId, layout = false) {
+    const endpoint = `/ocr/text-quality/${encodeURIComponent(stableId)}`
+    return this.callApi(endpoint, 'GET', layout ? { layout: true } : {});
+  }
+
+  /**
+   * Apply OCR to a PDF and replace the stored PDF with the result. The stable_id stays the same.
+   *
+   * @param {OcrRequest} requestBody
+   * @returns {Promise<OcrResponse>}
+   */
+  async ocr(requestBody) {
+    const endpoint = `/ocr`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * List every resource the posted document content references. Used to build the "Edit document rules" submenu.
    *
    * @param {ListResourcesRequest} requestBody
@@ -2533,6 +2713,42 @@ export class ApiClientV1 {
   async navigationXpathSave(variant, requestBody) {
     const endpoint = `/navigation-xpath/${encodeURIComponent(variant)}`
     return this.callApi(endpoint, 'PUT', requestBody);
+  }
+
+  /**
+   * The pages plugins contribute to the user manual that the current user can see. Administrators also get the
+   * pages of plugins that are not active (`active: false`). The files are served (without authentication) at
+   * `/api/v1/manual/plugins/{plugin_id}/{file}`.
+   *
+   * @param {{all_roles?: boolean}} [params] - `all_roles`: the pages of all active plugins whatever their roles, and
+   *   no pages of inactive plugins (as in the standalone manual window)
+   * @returns {Promise<ManualContributionsResponse>}
+   */
+  async manualContributions(params = {}) {
+    const endpoint = `/manual/contributions`
+    return this.callApi(endpoint, 'GET', params);
+  }
+
+  /**
+   * The pages of the core user manual (`index.md`, `about.md`, `user-manual/**`) in reading order. Served without
+   * authentication.
+   *
+   * @returns {Promise<ManualPagesResponse>}
+   */
+  async manualPages() {
+    const endpoint = `/manual/pages`
+    return this.callApi(endpoint, 'GET');
+  }
+
+  /**
+   * The Markdown annotation guides that the available extractors declare, one entry per file. Served without
+   * authentication; the annotation guide window renders only these files.
+   *
+   * @returns {Promise<AnnotationGuidesResponse>}
+   */
+  async annotationGuides() {
+    const endpoint = `/annotation-guides`
+    return this.callApi(endpoint, 'GET');
   }
 
   /**
@@ -2970,6 +3186,18 @@ export class ApiClientV1 {
    */
   async filesGetMetadata(stable_id) {
     const endpoint = `/files/${stable_id}/metadata`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * The page and layout hints of every line of the document's `<text>`, from the layout provider
+   * of its variant.
+   *
+   * @param {string} stable_id
+   * @returns {Promise<LineLayoutResponse>}
+   */
+  async filesGetLayout(stable_id) {
+    const endpoint = `/files/${stable_id}/layout`
     return this.callApi(endpoint);
   }
 

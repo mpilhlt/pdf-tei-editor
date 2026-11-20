@@ -8,7 +8,7 @@ await writeImportmaps({
   importmaps: {
     "./app/web/importmap.json": {
       importResolution: {
-        entryPoints: ["./app/src/app.js", "./app/src/ui.js"],
+        entryPoints: ["./app/src/app.js", "./app/src/ui.js", "./app/src/manual.js", "./app/src/guide.js"],
       }
     }
   },

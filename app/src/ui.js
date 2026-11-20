@@ -53,7 +53,9 @@ import './modules/panels/index.js';
  * @import {ToolBar} from './modules/panels/tool-bar.js'
  * @import {dialogPart} from './plugins/dialog.js'
  * @import {saveDocumentDialogPart} from './templates/save-document-dialog.types.js'
- * @import {extractionActionsPart, extractionDialogPart} from './plugins/extraction.js'
+ * @import {extractionActionsPart} from './templates/extraction-buttons.types.js'
+ * @import {extractionOptionsPart} from './templates/extraction-dialog.types.js'
+ * @import {ocrOptionsDialogPart} from './templates/ocr-dialog.types.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
  * @import {infoDrawerPart} from './plugins/info.js'
  * @import {annotationGuideDrawerPart} from './plugins/annotation-guide.js'
@@ -101,7 +103,8 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDrawer, fileDrawerPart>} fileDrawer - File selection drawer (added by file-selection-drawer plugin)
  * @property {UIPart<SlDrawer, teiRevisionHistoryDrawerPart>} teiRevisionHistoryDrawer - TEI revision history drawer (added by tei-tools plugin)
  * @property {UIPart<SlDialog, dialogPart>} dialog - A dialog to display messages or errors
- * @property {UIPart<SlDialog, extractionDialogPart>} extractionOptions - A dialog to choose extraction options
+ * @property {UIPart<SlDialog, extractionOptionsPart>} extractionOptions - A dialog to choose extraction options
+ * @property {UIPart<SlDialog, ocrOptionsDialogPart>} ocrOptionsDialog - A dialog to configure text recognition (added by ocr plugin)
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, saveDocumentDialogPart>} saveDocumentDialog - Save revision dialog (added by document-actions plugin)
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)

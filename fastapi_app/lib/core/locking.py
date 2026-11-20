@@ -409,6 +409,38 @@ def release_lock(file_id: str, session_id: str, db_dir: Path, logger: logging.Lo
             }
 
 
+def release_session_locks(session_ids: List[str], db_dir: Path, logger: logging.Logger) -> List[str]:
+    """
+    Release all locks held by the given sessions, e.g. when the sessions end with a logout.
+
+    A lock whose session no longer exists cannot be refreshed or released by anyone, and it
+    blocks the file until it becomes stale - also for the user who held it, who gets a new session
+    when logging in again.
+
+    Args:
+        session_ids: The session ids whose locks to release
+        db_dir: Directory containing locks.db
+        logger: Logger instance
+
+    Returns:
+        The stable_ids of the files whose locks were released
+    """
+    if not session_ids:
+        return []
+
+    init_locks_db(db_dir, logger)
+
+    placeholders = ", ".join("?" for _ in session_ids)
+    with get_db_connection(db_dir, logger) as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT file_id FROM locks WHERE session_id IN ({placeholders})", session_ids)
+        file_ids = [row['file_id'] for row in cursor.fetchall()]
+        if file_ids:
+            cursor.execute(f"DELETE FROM locks WHERE session_id IN ({placeholders})", session_ids)
+            logger.info(f"[LOCK] Released {len(file_ids)} lock(s) of {len(session_ids)} ended session(s)")
+    return file_ids
+
+
 def cleanup_stale_locks(db_dir: Path, logger: logging.Logger, timeout_seconds: int = LOCK_TIMEOUT_SECONDS) -> int:
     """
     Removes all stale locks from the database.

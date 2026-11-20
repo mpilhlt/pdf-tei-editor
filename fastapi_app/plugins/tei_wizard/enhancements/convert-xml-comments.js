@@ -21,6 +21,11 @@ export const name = "Convert XML comments";
  */
 export const description = "Turns the XML comments inside <text> into comments on elements (stored in the standOff), so that they show in the editor's comment gutter and the diagnostics drawer.";
 
+/**
+ * Question the user confirms before the enhancement runs
+ */
+export const confirmation = "Convert XML comments into document comments?";
+
 const TEI_NS = "http://www.tei-c.org/ns/1.0";
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 const LIST_TYPE = "unit-comment";
