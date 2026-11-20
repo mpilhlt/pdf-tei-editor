@@ -2,6 +2,47 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.89.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.88.1...v0.89.0) (2026-11-20)
+
+
+### Bug Fixes
+
+* **document-rules:** allow overrides and machine rule sync in read-only documents ([6d8dd53](https://github.com/mpilhlt/pdf-tei-editor/commit/6d8dd539df58747c4972ef9120be9b3ddffcc98e))
+* **document-rules:** explain in read-only documents how to act on outdated machine rules ([30e53ac](https://github.com/mpilhlt/pdf-tei-editor/commit/30e53ac97a3d547b6fe2bab87acea4a328986dc7))
+* **markdown:** remove GitHub alert markers from rendered admonitions ([a9aef86](https://github.com/mpilhlt/pdf-tei-editor/commit/a9aef869b223deb6e221cad2a4aec8f9c6401e1a))
+* **navigation:** place the cursor at a milestone instead of selecting its range ([2a74044](https://github.com/mpilhlt/pdf-tei-editor/commit/2a74044498a79198c010015776ad028685bae1cb))
+* **plugins:** upgrade all plugins before restarting the server once ([940f8df](https://github.com/mpilhlt/pdf-tei-editor/commit/940f8df262086a787d12207184fe133c5c064c34)), closes [#847](https://github.com/mpilhlt/pdf-tei-editor/issues/847)
+* release document locks when a session ends ([d9079df](https://github.com/mpilhlt/pdf-tei-editor/commit/d9079df9afc98df6e034d61f41bd656be8a95529)), closes [#851](https://github.com/mpilhlt/pdf-tei-editor/issues/851)
+* **unit-review:** undo restores the marks of units an edit merged or removed ([0952613](https://github.com/mpilhlt/pdf-tei-editor/commit/0952613f07e3bfc0803cdfb0442aa069ea327113))
+* **xml-annotation:** clicking a badge keeps the selected element ([dbe404f](https://github.com/mpilhlt/pdf-tei-editor/commit/dbe404fc2cc0fab4b5b8bd036b2baac483991fce)), closes [#834](https://github.com/mpilhlt/pdf-tei-editor/issues/834)
+* **xmleditor:** accept all merge view changes in one transaction ([6e4ed33](https://github.com/mpilhlt/pdf-tei-editor/commit/6e4ed33778c56e968f25a0b82a2a1afefa72990c))
+* **xpath-navigation:** arrow keys go to the previous/next node in the visual mode ([0c74711](https://github.com/mpilhlt/pdf-tei-editor/commit/0c747112b33ad057f60989bea2fa5a33351b647b)), closes [#835](https://github.com/mpilhlt/pdf-tei-editor/issues/835)
+* **xpath-navigation:** arrow keys move the focus to the previous/next node in focus mode ([c43adcd](https://github.com/mpilhlt/pdf-tei-editor/commit/c43adcdeb8a05ee2dbf29fd3ccaaea94b1e149f4)), closes [#835](https://github.com/mpilhlt/pdf-tei-editor/issues/835)
+* **xpath-navigation:** resolve navigation xpaths across parents ([81f8804](https://github.com/mpilhlt/pdf-tei-editor/commit/81f88040ca586d3c1e95fa5837d790f555a842b6))
+
+
+### Features
+
+* **annotation-guide:** full-text search and standalone guide window ([8b5cdc2](https://github.com/mpilhlt/pdf-tei-editor/commit/8b5cdc28a5277ecb59e0e6ae7fdbfe5091554fa8)), closes [#879](https://github.com/mpilhlt/pdf-tei-editor/issues/879)
+* let installed plugins contribute pages to the user manual ([fcf13ce](https://github.com/mpilhlt/pdf-tei-editor/commit/fcf13ce5a9b82d8b95f60c3fbedcf2a37905fdf2)), closes [#871](https://github.com/mpilhlt/pdf-tei-editor/issues/871)
+* **manual:** inference slot and heading anchors for plugin manual pages ([0de8e31](https://github.com/mpilhlt/pdf-tei-editor/commit/0de8e317b65cf6e4f57ff4e6401d0875cb517463)), closes [mpilhlt/pte-plugins#66](https://github.com/mpilhlt/pte-plugins/issues/66)
+* **manual:** standalone manual window with shareable links and full-text search ([3623c57](https://github.com/mpilhlt/pdf-tei-editor/commit/3623c577c1e85dafbd32d38f8143f6b2c6818103)), closes [#875](https://github.com/mpilhlt/pdf-tei-editor/issues/875)
+* **navigation:** navigate milestones such as <pb/> by the text up to the next one ([a286008](https://github.com/mpilhlt/pdf-tei-editor/commit/a286008ef3d92c0b14f5bd536c6e3902698f8509)), closes [#865](https://github.com/mpilhlt/pdf-tei-editor/issues/865)
+* **ocr:** add text recognition step before extraction ([d79f04d](https://github.com/mpilhlt/pdf-tei-editor/commit/d79f04d05ab38c460d02d8b391f9a4686a808d52)), closes [#821](https://github.com/mpilhlt/pdf-tei-editor/issues/821)
+* **ocr:** detect misplaced text layers and replace them without rasterizing ([6e4f245](https://github.com/mpilhlt/pdf-tei-editor/commit/6e4f245ef63e814251883e3f0c571813001e59c0)), closes [#838](https://github.com/mpilhlt/pdf-tei-editor/issues/838)
+* **pdfviewer:** clear the no-match message when a later search succeeds ([5a61a4c](https://github.com/mpilhlt/pdf-tei-editor/commit/5a61a4cd1bdda3d6da00841350b55715b1405855))
+* **pdfviewer:** show the Autosearch no-match message in the statusbar ([47512a0](https://github.com/mpilhlt/pdf-tei-editor/commit/47512a07e11ae706464022f93aaa68e7b6852c47))
+* **plugins:** alert admins of plugin updates and add "Upgrade installed" ([1df6933](https://github.com/mpilhlt/pdf-tei-editor/commit/1df6933ae465c1e9e8cd7f81c2c3f59c16a684fa)), closes [#825](https://github.com/mpilhlt/pdf-tei-editor/issues/825)
+* read and insert <pb/> page breaks in zone documents ([e890810](https://github.com/mpilhlt/pdf-tei-editor/commit/e890810f661373dec1829fb5c3f7c6cd4621cf74)), closes [#860](https://github.com/mpilhlt/pdf-tei-editor/issues/860)
+* **tei-wizard:** keep Convert XML comments, ask for confirmation before it runs ([f8ace36](https://github.com/mpilhlt/pdf-tei-editor/commit/f8ace36ddb8055b83328fa650d844d89ba43f680)), closes [#819](https://github.com/mpilhlt/pdf-tei-editor/issues/819)
+* **tei-wizard:** menu of the enhancements that apply to the document, Pretty Print by review units ([08a09d7](https://github.com/mpilhlt/pdf-tei-editor/commit/08a09d708f9d8c614acba99ff283595deb2ed42b)), closes [#819](https://github.com/mpilhlt/pdf-tei-editor/issues/819)
+* **unit-review:** load the page layout once the document's variant is known ([5d68a8f](https://github.com/mpilhlt/pdf-tei-editor/commit/5d68a8f478a5c9d14be30b8d682e97d3762c458b))
+* **unit-review:** review zone documents by page from a line layout ([7b7a00e](https://github.com/mpilhlt/pdf-tei-editor/commit/7b7a00e90687677b18c41612736f4ef6efac6e74)), closes [#808](https://github.com/mpilhlt/pdf-tei-editor/issues/808)
+* **xpath-navigation:** keep the position when switching the XPath ([6c1b911](https://github.com/mpilhlt/pdf-tei-editor/commit/6c1b911461792a8ac3b869b55cca3e4c1c460bd2))
+* **xpath-navigation:** store the current node as (path)[n] and keep the position on switch ([0f95742](https://github.com/mpilhlt/pdf-tei-editor/commit/0f95742d3d7e3740329d96fec3fb7f06faecb201))
+* **zone-lines:** insert <pb/> before the zone when the page starts with it ([32284ce](https://github.com/mpilhlt/pdf-tei-editor/commit/32284ce8ef0d704899d4f8fb60684486ce234198))
+* **zone-lines:** page windows of a zone document ([9cc0b7d](https://github.com/mpilhlt/pdf-tei-editor/commit/9cc0b7d624ea716a5d02213150dbf8489ddd6722))
+
 ## [0.88.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.88.0...v0.88.1) (2026-11-18)
 
 
