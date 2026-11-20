@@ -29,7 +29,7 @@ import { createMarkdownRenderer, extractHeadings, resolveRelativeSources } from 
 import { addHeadingLinkButtons, fitTocMenu, populateTocMenu, scrollToHeading } from '../modules/markdown-toc.js'
 import { manualUrl, parseManualUrl } from '../modules/manual-links.js'
 import { notify } from '../modules/sl-utils.js'
-import { fillManualSlots, parsePluginPagePath, pickManualFile, pluginPagePath, pluginPageUrl } from '../modules/manual-slots.js'
+import { contributionPagePath, fillManualSlots, parsePluginPagePath, pluginPageUrl } from '../modules/manual-slots.js'
 
 // Register templates
 await registerTemplate('info-dialog', 'info-drawer.html');
@@ -210,8 +210,7 @@ class InfoPlugin extends Plugin {
   async #fillSlots() {
     const contributions = await this.#getContributions()
     fillManualSlots(this.#ui.content, contributions, contribution => {
-      const file = pickManualFile(contribution.files, navigator.languages)
-      this.load(`/${pluginPagePath(contribution.plugin_id, file)}`)
+      this.load(`/${contributionPagePath(contribution, navigator.languages)}`)
     })
   }
 

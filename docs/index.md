@@ -17,6 +17,7 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[Collection Management](user-manual/collection-management.md)** - Organizing documents
 - **[Import & Export](user-manual/import-export.md)** - Bulk import/export of files
 - **[Plugins](user-manual/plugins.md)** - Functions added by plugins and where to find their documentation
+- **[Choosing a Language Model](user-manual/language-models.md)** - The default model, your own choice and API keys
 
 ### Tutorials
 

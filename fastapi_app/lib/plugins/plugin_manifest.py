@@ -45,6 +45,8 @@ MANUAL_FILE_SUFFIX = ".md"
 
 _MANUAL_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _LANGUAGE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+_ANCHOR = re.compile(r"^[a-z0-9_-]+$")
+"""Heading anchors as the manual renderer creates them (``headingAnchor()`` in ``app/src/modules/markdown-utils.js``)"""
 
 
 class ManifestError(ValueError):
@@ -64,6 +66,9 @@ class ManualPage:
     files: dict[str, str]
     """One Markdown file per language code, as paths relative to the plugin directory; ``file`` in the manifest
     is either such a map or a single path, which is the English page"""
+    anchors: dict[str, str] = field(default_factory=dict)
+    """Heading anchor per language code, for files given as ``path#anchor`` in the manifest: the page opens at that
+    heading"""
     description: str = ""
     """One sentence shown after the link"""
     requires: tuple[str, ...] = ()
@@ -171,11 +176,13 @@ def _read_manual(value: object) -> tuple[ManualPage, ...]:
         order = entry.get("order", 500)
         if not isinstance(order, int) or isinstance(order, bool):
             raise ManifestError(f"{where}.order must be an integer")
+        files, anchors = _read_files(entry.get("file"), where)
         pages.append(ManualPage(
             id=page_id,
             slot=_read_string(entry, "slot", where),
             title=_read_string(entry, "title", where),
-            files=_read_files(entry.get("file"), where),
+            files=files,
+            anchors=anchors,
             description=description,
             requires=_read_string_list(entry, "requires", where),
             roles=_read_string_list(entry, "roles", where),
@@ -200,20 +207,35 @@ def _read_string_list(entry: dict[str, object], key: str, where: str) -> tuple[s
     return tuple(value)
 
 
-def _read_files(value: object, where: str) -> dict[str, str]:
-    """The ``file`` of a ``manual`` entry: a path (the English page) or a map from language code to path."""
+def _read_files(value: object, where: str) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    The ``file`` of a ``manual`` entry: a path (the English page) or a map from language code to path.
+
+    A path may end with ``#<anchor>``, the anchor of the heading the page opens at.
+
+    Returns:
+        (file per language code, anchor per language code for the paths that have one)
+    """
     if isinstance(value, str):
         value = {"en": value}
     if not isinstance(value, dict) or not value:
         raise ManifestError(f"{where}.file must be a path or an object mapping language codes to paths")
     files: dict[str, str] = {}
-    for language, path in value.items():
+    anchors: dict[str, str] = {}
+    for language, entry in value.items():
         if not _LANGUAGE.match(language):
             raise ManifestError(f"{where}.file: invalid language code '{language}'")
-        if not isinstance(path, str) or not is_safe_relative_path(path) or not path.endswith(MANUAL_FILE_SUFFIX):
-            raise ManifestError(f"{where}.file: '{path}' must be a relative path of a {MANUAL_FILE_SUFFIX} file inside the plugin directory")
+        if not isinstance(entry, str):
+            raise ManifestError(f"{where}.file: '{entry}' must be a relative path of a {MANUAL_FILE_SUFFIX} file inside the plugin directory")
+        path, _, anchor = entry.partition("#")
+        if not is_safe_relative_path(path) or not path.endswith(MANUAL_FILE_SUFFIX):
+            raise ManifestError(f"{where}.file: '{entry}' must be a relative path of a {MANUAL_FILE_SUFFIX} file inside the plugin directory")
+        if "#" in entry:
+            if not _ANCHOR.match(anchor):
+                raise ManifestError(f"{where}.file: '{entry}' has an invalid anchor (lowercase letters, digits, '_' and '-')")
+            anchors[language] = anchor
         files[language] = path
-    return files
+    return files, anchors
 
 
 def is_safe_relative_path(path: str) -> bool:

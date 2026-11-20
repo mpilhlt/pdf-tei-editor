@@ -16,7 +16,7 @@ global.window = /** @type {any} */ (dom.window);
 global.NodeFilter = dom.window.NodeFilter;
 global.Node = dom.window.Node;
 
-const { fillManualSlots, parsePluginPagePath, pickManualFile, pluginPagePath, pluginPageUrl } =
+const { contributionPagePath, fillManualSlots, parsePluginPagePath, pickManualFile, pluginPagePath, pluginPageUrl } =
   await import('../../../app/src/modules/manual-slots.js');
 const { createMarkdownRenderer } = await import('../../../app/src/modules/markdown-utils.js');
 
@@ -86,6 +86,16 @@ describe('plugin page paths', () => {
     for (const path of ['index.md', 'user-manual/plugins.md', 'plugins/', 'plugins/grobid', 'plugins/grobid/']) {
       assert.strictEqual(parsePluginPagePath(path), null, path);
     }
+  });
+});
+
+describe('contributionPagePath', () => {
+  /** @type {any} */
+  const contribution = { plugin_id: 'auto-annotation', files: { en: 'docs/a.md', de: 'docs/de/a.md' }, anchors: { en: 'transfer' } };
+  it('appends the anchor of the chosen language', () => {
+    assert.strictEqual(contributionPagePath(contribution, ['en-GB']), 'plugins/auto-annotation/docs/a.md#transfer');
+    assert.strictEqual(contributionPagePath(contribution, ['de']), 'plugins/auto-annotation/docs/de/a.md');
+    assert.strictEqual(contributionPagePath({ ...contribution, anchors: undefined }, []), 'plugins/auto-annotation/docs/a.md');
   });
 });
 

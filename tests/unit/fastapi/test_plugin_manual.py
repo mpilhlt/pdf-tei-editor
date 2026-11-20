@@ -47,6 +47,12 @@ class TestManifest(unittest.TestCase):
         self.assertEqual(first.order, 500)
         self.assertEqual(second.files["de"], "docs/de/b.md")
         self.assertEqual(second.roles, ("reviewer",))
+        self.assertEqual(first.anchors, {})
+
+    def test_anchor(self) -> None:
+        [page] = parse_manifest(manifest_text([{**TUTORIAL, "file": {"en": "docs/a.md#transfer-step_2", "de": "docs/de/a.md"}}])).manual
+        self.assertEqual(page.files, {"en": "docs/a.md", "de": "docs/de/a.md"})
+        self.assertEqual(page.anchors, {"en": "transfer-step_2"})
 
     def test_no_manual(self) -> None:
         self.assertEqual(parse_manifest("{}").manual, ())
@@ -61,6 +67,10 @@ class TestManifest(unittest.TestCase):
             [{**TUTORIAL, "file": "/abs/x.md"}],
             [{**TUTORIAL, "file": "docs/x.html"}],
             [{**TUTORIAL, "file": {"english": "docs/x.md"}}],
+            [{**TUTORIAL, "file": "docs/x.md#"}],
+            [{**TUTORIAL, "file": "docs/x.md#Upper"}],
+            [{**TUTORIAL, "file": "docs/x.md#a#b"}],
+            [{**TUTORIAL, "file": "docs/x#a.md"}],
             [{**TUTORIAL, "requires": "review"}],
             [{**TUTORIAL, "order": "1"}],
         ]
@@ -90,6 +100,7 @@ class RegistryTestCase(unittest.TestCase):
         manifest = parse_manifest(manifest_text([
             TUTORIAL,
             {"id": "admin", "slot": "admin", "title": "Configure", "file": "docs/llm-review.md", "roles": ["admin"]},
+            {"id": "models", "slot": "inference", "title": "Models", "file": "docs/llm-review.md#tutorial", "roles": ["admin"]},
             {"id": "unknown", "slot": "nowhere", "title": "X", "file": "docs/llm-review.md"},
         ]))
         self.registry = PluginRegistry()
@@ -115,18 +126,18 @@ class TestContributions(RegistryTestCase):
     def test_anonymous(self) -> None:
         self.assertEqual(self.ids(None), [("llm-review", True)])
 
-    def test_admin_sees_admin_slot_after_tutorials(self) -> None:
-        self.assertEqual(self.ids({"roles": ["admin"]}), [("llm-review", True), ("admin", True)])
+    def test_admin_sees_slots_in_order(self) -> None:
+        self.assertEqual(self.ids({"roles": ["admin"]}), [("llm-review", True), ("models", True), ("admin", True)])
 
     def test_required_plugin_disabled(self) -> None:
         self.registry.set_disabled({"review"})
         self.assertEqual(self.ids({"roles": ["annotator"]}), [])
-        self.assertEqual(self.ids({"roles": ["admin"]}), [("llm-review", False), ("admin", True)])
+        self.assertEqual(self.ids({"roles": ["admin"]}), [("llm-review", False), ("models", True), ("admin", True)])
 
     def test_plugin_disabled(self) -> None:
         self.registry.set_disabled({"grobid"})
         self.assertEqual(self.ids({"roles": ["annotator"]}), [])
-        self.assertEqual(self.ids({"roles": ["admin"]}), [("llm-review", False), ("admin", False)])
+        self.assertEqual(self.ids({"roles": ["admin"]}), [("llm-review", False), ("models", False), ("admin", False)])
 
     def test_unknown_slot_warning(self) -> None:
         plugin_manual._warned_slots.clear()
@@ -181,7 +192,14 @@ class TestRouter(RegistryTestCase):
         self.assertEqual(item["plugin_id"], "grobid")
         self.assertEqual(item["plugin_name"], "Grobid")
         self.assertEqual(item["files"], {"en": "docs/llm-review.md"})
+        self.assertEqual(item["anchors"], {})
         self.assertTrue(item["active"])
+
+    def test_contribution_anchors(self) -> None:
+        self.user = {"username": "admin", "roles": ["admin"]}
+        items = {item["id"]: item for item in self.client.get("/api/v1/manual/contributions").json()["contributions"]}
+        self.assertEqual(items["models"]["files"], {"en": "docs/llm-review.md"})
+        self.assertEqual(items["models"]["anchors"], {"en": "tutorial"})
 
     def test_file(self) -> None:
         response = self.client.get("/api/v1/manual/plugins/grobid/docs/llm-review.md")
