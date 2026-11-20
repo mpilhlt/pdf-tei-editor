@@ -4,7 +4,7 @@
  */
 
 /**
- * @import { SlInput } from '../ui.js'
+ * @import { SlDrawer, SlIconButton, SlInput } from '../ui.js'
  * @import { ManualIndex, ManualIndexPage, ManualPageHit } from './manual-search.js'
  * @import { ManualViewer } from './manual-viewer.js'
  * @import { ManualContributionItem, ManualPageItem } from './api-client-v1.js'
@@ -30,6 +30,9 @@ import { pickManualFile, pluginPagePath } from './manual-slots.js'
  * @property {() => Promise<ManualIndex>} loadIndex - Builds the index; called once until `invalidate()`
  * @property {(target: ManualSearchTarget) => void} onOpen - Called when a result is chosen
  * @property {() => void} [onClose] - Called when the search is closed with Esc
+ * @property {string} [subject] - What is searched, in the messages (default: "the manual")
+ * @property {boolean} [groupByPage] - Whether to list the results under their page (default: yes); without, a
+ *   single page is searched
  */
 
 const DEBOUNCE_MS = 150
@@ -99,18 +102,19 @@ export class ManualSearchBox {
   async update() {
     const { input, panel } = this.#options
     const query = input.value
-    if (!this.#index) this.#showMessage('Loading the manual…')
+    const subject = this.#options.subject ?? 'the manual'
+    if (!this.#index) this.#showMessage(`Loading ${subject}…`)
     let index
     try {
       index = await this.#getIndex()
     } catch (error) {
-      this.#showMessage(`The manual could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
+      this.#showMessage(`${subject.charAt(0).toUpperCase()}${subject.slice(1)} could not be loaded: ${error instanceof Error ? error.message : String(error)}`)
       return
     }
     if (input.value !== query) return
-    const hits = search(index, query)
+    const hits = search(index, query, (this.#options.groupByPage ?? true) ? {} : { sectionsPerPage: 10 })
     if (hits.length === 0) {
-      this.#showMessage('Nothing in the manual matches.')
+      this.#showMessage(`Nothing in ${subject} matches.`)
       return
     }
     this.#render(hits, parseQuery(query).words)
@@ -143,9 +147,10 @@ export class ManualSearchBox {
     this.#selected = -1
     let bestIndex = 0
     for (const [hitIndex, hit] of hits.entries()) {
-      const pageRow = this.#row('manual-search-page', { path: hit.path, anchor: '', occurrence: 0, words: queryWords })
-      pageRow.append(...this.#highlighted(hit.title, queryWords))
-      if (hit.source) {
+      const groupByPage = this.#options.groupByPage ?? true
+      const pageRow = groupByPage ? this.#row('manual-search-page', { path: hit.path, anchor: '', occurrence: 0, words: queryWords }) : null
+      pageRow?.append(...this.#highlighted(hit.title, queryWords))
+      if (pageRow && hit.source) {
         const badge = document.createElement('span')
         badge.className = 'manual-search-source'
         badge.textContent = `${hit.source} plugin`
@@ -155,7 +160,7 @@ export class ManualSearchBox {
         const isPageTop = !section.anchor
         if (isPageTop && !section.snippet) continue
         if (hitIndex === 0 && sectionIndex === 0) bestIndex = this.#targets.length
-        const row = this.#row('manual-search-section', { path: hit.path, anchor: section.anchor, occurrence: section.occurrence, words: queryWords })
+        const row = this.#row(groupByPage ? 'manual-search-section' : 'manual-search-section manual-search-ungrouped', { path: hit.path, anchor: section.anchor, occurrence: section.occurrence, words: queryWords })
         const heading = document.createElement('span')
         heading.className = 'manual-search-heading'
         heading.append(...this.#highlighted(isPageTop ? 'Introduction' : section.heading, queryWords))
@@ -344,4 +349,48 @@ export async function loadManualIndex(viewer, corePages, contributions, language
   }))
   const indexPages = /** @type {ManualIndexPage[]} */ (fetched.filter(Boolean))
   return buildIndex(indexPages, page => page.source ? viewer.pluginMd : viewer.md)
+}
+
+/**
+ * Elements of a drawer with a search field in place of its title
+ * @typedef {object} DrawerSearchElements
+ * @property {SlDrawer} drawer
+ * @property {SlIconButton} button - Search button in the header
+ * @property {SlInput} input - The search field, hidden while the search is closed
+ * @property {HTMLElement} title - The title, hidden while the search is open
+ */
+
+/**
+ * Lets a drawer's search button and Ctrl+K (while the drawer is open) replace the title with the search field, and
+ * Esc close the search instead of the drawer.
+ * @param {DrawerSearchElements} elements
+ * @param {() => ManualSearchBox | null} getSearchBox - The search box of the field
+ * @returns {(show: boolean) => void} Shows or hides the search field
+ */
+export function attachDrawerSearch({ drawer, button, input, title }, getSearchBox) {
+  /** @param {boolean} show */
+  const toggle = show => {
+    input.hidden = !show
+    title.hidden = show
+    if (show) {
+      setTimeout(() => input.focus(), 0)
+    } else {
+      input.value = ''
+      getSearchBox()?.hideResults()
+    }
+  }
+  button.addEventListener('click', () => toggle(input.hidden))
+  document.addEventListener('keydown', event => {
+    if (drawer.open && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault()
+      toggle(true)
+    }
+  })
+  drawer.addEventListener('sl-request-close', event => {
+    if (event.detail.source === 'keyboard' && !input.hidden) {
+      event.preventDefault()
+      toggle(false)
+    }
+  })
+  return toggle
 }

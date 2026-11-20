@@ -1,6 +1,7 @@
 /**
  * Script for bootstrapping the application, or another entry point given by the `data-entry` attribute of the
- * script tag (e.g. `<script src="/bootstrap.js" data-entry="manual">` for the manual window, app/web/manual.html).
+ * script tag (e.g. `<script src="/bootstrap.js" data-entry="manual">` for the manual window, app/web/manual.html, and
+ * `data-entry="guide"` for the annotation guide window, app/web/guide.html).
  * Pages other than the application are served below other paths, so their resources are loaded from absolute URLs.
  */
 

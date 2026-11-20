@@ -1,4 +1,4 @@
-/* Layout of the standalone user manual window (app/web/manual.html, app/src/manual.js) */
+/* Layout of the standalone user manual window (app/web/manual.html, app/src/manual.js) and annotation guide window (app/web/guide.html, app/src/guide.js) */
 
 body.manual-window {
   height: auto;
@@ -108,4 +108,17 @@ body.manual-window {
   .manual-window-home span {
     display: none;
   }
+}
+
+/* Annotation guide window (app/web/guide.html, app/src/guide.js), which uses the layout of the manual window */
+
+.guide-window-note {
+  margin-top: 48px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sl-color-neutral-200, #e5e5e5);
+  font-size: var(--sl-font-size-small, 0.875rem);
+}
+
+.guide-window-list li {
+  margin-bottom: 8px;
 }

@@ -84,11 +84,23 @@ With b), agree on how annotators claim a document. The simplest rule is: whoever
 
 ### Before you start: get to know the annotation guide
 
-Before your first document, read the annotation guide of the variant you work on. Open a document of the variant, click the help icon (**?**) in the lower right corner and choose **Annotation Guide**. The guide opens in a drawer next to the PDF; **Contents** lists its sections, and **Open in new window** shows it in a window of its own, which you can keep open next to the editor.
+Before your first document, read the annotation guide of the variant you work on. Open a document of the variant, click the help icon (**?**) in the lower right corner and choose **Annotation Guide**. The guide opens in a drawer next to the PDF at the section for the variant; **Contents** lists its sections.
 
-![The annotation guide with its table of contents](../images/review-workflow-02b-annotation-guide.png)
+![The annotation guide drawer with the Contents list opened from the footer](../images/review-workflow-02b-annotation-guide.png)
 
 *The annotation guide.*
+
+To find a rule, click the search icon in the header of the drawer (or press `Ctrl+K`) and type a few words. The results list the sections that contain all of them; `↑`/`↓` select a section, `Enter` opens it and highlights the words, `Esc` closes the search.
+
+![The search field in the header of the annotation guide drawer, with matching sections and highlighted words](../images/annotation-guide-search.png)
+
+*Searching the annotation guide.*
+
+The icon next to it opens the section you are reading in a window of its own, which you can keep open next to the editor. The window has the same search and a table of contents, and its address links to the section shown: share it to point someone to a rule. The window needs no login. It shows the version of the guide the document refers to, but not the personal versions of sections that reviewers write for themselves (see [Adjusting the rules the model uses](unit-review.md#adjusting-the-rules-the-model-uses)); those are shown in the drawer only. Hovering a heading in the drawer shows a button that copies the link of its section.
+
+![The annotation guide window with the table of contents on the left and the search field in the header](../images/annotation-guide-window.png)
+
+*The annotation guide window.*
 
 Nobody remembers all the rules after one reading, and you do not have to. The goal of this first reading is an overview: which rules exist, which cases they cover and where to find them again. When you are unsure later, look the rule up instead of guessing. The reviewers will refer to the same guide in their comments.
 
