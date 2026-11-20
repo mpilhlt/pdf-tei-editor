@@ -106,7 +106,7 @@ You are now editing your own copy. The extraction is superseded by your copy and
 
 ### Annotate
 
-Work in your copy as described in [Document Editing](editing-workflow.md). Your changes are saved automatically. Use **Save revision** only for milestones that you want to see in the revision history, for example at the end of a working day, with status *draft*. Do not make a new personal version for each session: one annotator, one version.
+Work in your copy as described in [Document Editing](editing-workflow.md). Your changes are saved automatically. Use **Save revision** for milestones that you want to see in the revision history, for example at the end of a working day, with status *draft*. Before a larger step that you may want to undo, such as inserting page breaks or applying the suggestions of the LLM Reviewer to a range of pages, save a new personal version instead (check *Save to a new personal version*). The older version stays unchanged, so you can go back to it. A new working session does not need a new version. Once you have set the document *in-review*, keep working in that version (see [step 5](#5-correcting)).
 
 **Work unit by unit in focus mode.** Choose the unit element (for example `<bibl>`) in the XPath dropdown in the status bar of the editor, and step through the units with **‹** and **›**. Focus mode (magnifier button next to the counter) is on by default: the current unit is centred and everything else is dimmed, so you can concentrate on one unit at a time. `Esc` turns focus mode off. See [Node Navigation](editing-workflow.md#xpath-navigation) and [Focus Mode](editing-workflow.md#focus-mode).
 
@@ -264,7 +264,7 @@ The approved version replaces the annotator's version in the review queue (which
 
 - When in doubt, look the rule up in the annotation guide. If the guide does not answer your question, ask in a comment on the unit and mention a reviewer.
 - LLM suggestions are drafts. Accept a fix only after you have checked it against the PDF and the guide.
-- One document, one personal version. Make it once, at the start, and do all your work in it, including the corrections after the review.
+- Save a new personal version before each larger step, so that you can go back if it goes wrong. Submit only the newest one, and make the corrections after the review in the version you submitted.
 - Set *in-review* only when you have finished the whole document.
 - Do not leave a not-OK mark unanswered: either correct the unit or explain in a comment why it is correct.
 - Check your inbox when you start working. The badge on the user menu tells you if there is something new.
