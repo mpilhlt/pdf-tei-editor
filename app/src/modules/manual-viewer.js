@@ -16,7 +16,7 @@
  */
 
 import { createMarkdownRenderer, extractHeadings, resolveRelativeSources } from './markdown-utils.js'
-import { fillManualSlots, parsePluginPagePath, pickManualFile, pluginPagePath, pluginPageUrl } from './manual-slots.js'
+import { contributionPagePath, fillManualSlots, parsePluginPagePath, pickManualFile, pluginPagePath, pluginPageUrl } from './manual-slots.js'
 import { parseManualUrl } from './manual-links.js'
 
 /**
@@ -207,8 +207,7 @@ export class ManualViewer {
     } else {
       const contributions = await this.#options.getContributions()
       fillManualSlots(container, contributions, contribution => {
-        const file = pickManualFile(contribution.files, this.#languages)
-        this.#options.onNavigate(`/${pluginPagePath(contribution.plugin_id, file)}`)
+        this.#options.onNavigate(`/${contributionPagePath(contribution, this.#languages)}`)
       })
     }
     const headings = extractHeadings(md, source.markdown)

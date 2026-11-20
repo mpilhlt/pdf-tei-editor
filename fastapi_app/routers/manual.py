@@ -32,6 +32,7 @@ class ManualContributionItem(BaseModel):
     title: str = Field(description="Link text")
     description: str = Field(description="One sentence shown after the link")
     files: dict[str, str] = Field(description="Markdown file per language code, relative to the plugin directory; fetch it from /api/v1/manual/plugins/{plugin_id}/{file}")
+    anchors: dict[str, str] = Field(default_factory=dict, description="Heading anchor per language code, for the files the page opens at a heading of")
     order: int = Field(description="Sort key within the slot")
     active: bool = Field(description="False if the plugin or one of the plugins the page requires is not active (only listed for administrators)")
 
@@ -88,6 +89,7 @@ def manual_contributions(
             title=c.page.title,
             description=c.page.description,
             files=dict(c.page.files),
+            anchors=dict(c.page.anchors),
             order=c.page.order,
             active=c.active,
         )

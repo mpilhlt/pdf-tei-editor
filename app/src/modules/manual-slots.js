@@ -6,7 +6,7 @@
  * page is contributed to it. The manual drawer (`app/src/plugins/info.js`) replaces the comment with a
  * list of links to the contributed pages, which it gets from `GET /api/v1/manual/contributions`.
  * Contributed pages are shown under the virtual path `plugins/<plugin id>/<file>` and fetched from
- * `/api/v1/manual/plugins/<plugin id>/<file>`. See docs/code-assistant/backend-plugins.md#manual-pages.
+ * `/api/v1/manual/plugins/<plugin id>/<file>`; a page can open at a heading (`anchors`). See docs/code-assistant/backend-plugins.md#manual-pages.
  */
 
 /**
@@ -29,6 +29,22 @@ const SLOT_COMMENT = /^\s*plugin-docs:\s*([a-z0-9-]+)((?:\s+[a-z-]+)*)\s*$/
  */
 
 /**
+ * The language of a contributed page that matches the preferred languages best.
+ * @param {Object<string, string>} files - File per language code
+ * @param {readonly string[]} [languages] - Preferred languages, e.g. `navigator.languages`
+ * @returns {string} The first preferred language (or its base language) that has a file, else "en" if it has one,
+ *   else the first language
+ */
+export function pickManualLanguage(files, languages = []) {
+  for (const language of languages) {
+    if (files[language]) return language
+    const base = language.split('-')[0]
+    if (files[base]) return base
+  }
+  return files.en ? 'en' : Object.keys(files)[0]
+}
+
+/**
  * The file of a contributed page in the preferred language.
  * @param {Object<string, string>} files - File per language code
  * @param {readonly string[]} [languages] - Preferred languages, e.g. `navigator.languages`
@@ -36,12 +52,20 @@ const SLOT_COMMENT = /^\s*plugin-docs:\s*([a-z0-9-]+)((?:\s+[a-z-]+)*)\s*$/
  *   file, else the first one
  */
 export function pickManualFile(files, languages = []) {
-  for (const language of languages) {
-    if (files[language]) return files[language]
-    const base = language.split('-')[0]
-    if (files[base]) return files[base]
-  }
-  return files.en ?? Object.values(files)[0]
+  return files[pickManualLanguage(files, languages)]
+}
+
+/**
+ * The virtual path a contributed page opens at in the manual drawer, in the preferred language.
+ * @param {ManualContributionItem} contribution
+ * @param {readonly string[]} [languages] - Preferred languages, e.g. `navigator.languages`
+ * @returns {string} `plugins/<plugin id>/<file>`, followed by `#<anchor>` if the page opens at a heading
+ */
+export function contributionPagePath(contribution, languages = []) {
+  const language = pickManualLanguage(contribution.files, languages)
+  const path = pluginPagePath(contribution.plugin_id, contribution.files[language])
+  const anchor = contribution.anchors?.[language]
+  return anchor ? `${path}#${anchor}` : path
 }
 
 /**
