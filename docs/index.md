@@ -18,6 +18,10 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[Import & Export](user-manual/import-export.md)** - Bulk import/export of files
 - **[Plugins](user-manual/plugins.md)** - Functions added by plugins and where to find their documentation
 
+### Tutorials
+
+<!-- plugin-docs: tutorials hide-heading -->
+
 ## Administration
 
 Information on setting up, configuring , and maintaining  the editor can be found in the dedicated [Admin Guide](./user-manual/admin-guide.md).

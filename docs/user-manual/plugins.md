@@ -24,6 +24,20 @@ Most plugins are maintained in the [pte-plugins](https://github.com/mpilhlt/pte-
 
 The plugins that ship with the application, such as the dashboard, the review queue, document search and the TEI Wizard, are described on the pages of this manual that cover the respective workflow.
 
+Plugins can also add pages to this manual. Tutorials are listed below and on the start page of the manual, other pages where they belong, for example in the [Review Workflow](review-workflow.md). A page is listed only if the plugins it describes are installed and enabled; administrators also see the pages of plugins that are not enabled, marked as such. Each page names the plugin and the version it comes from.
+
+![The Tutorials section of this page in the manual, listing "How to use the LLM Reviewer with GROBID" with a one-sentence description](../images/plugins-tutorials.png)
+
+*A tutorial of the GROBID plugin listed in the manual.*
+
+![The tutorial "How to use the LLM Reviewer with GROBID" open in the manual, with the line "Provided by the GROBID Extractor plugin, version 1.8.1." above the title](../images/plugins-tutorial-page.png)
+
+*A page of a plugin names the plugin and its version.*
+
+### Tutorials
+
+<!-- plugin-docs: tutorials hide-heading -->
+
 ## Which plugins are installed
 
 Administrators see the installed plugins, their status and a **README** button linking to each plugin's documentation in the [Plugin Manager](plugin-manager.md) (**Tools** > **Administration** > **Manage Plugins**). There they can switch plugins on or off and, if the operator allows it, install plugins from the plugin overview. If a function described in a plugin's documentation is missing in your installation, ask your administrator whether the plugin is installed and enabled.

@@ -60,11 +60,13 @@ function renderAdmonitionClose() {
 
 /**
  * Creates a configured markdown-it instance with admonitions, TOC support, and syntax highlighting
+ * @param {{html?: boolean}} [config] - `html`: whether raw HTML in the Markdown is passed through (default: true);
+ *   use false for Markdown from untrusted sources such as plugin manual pages, where raw HTML is shown as text
  * @returns {MarkdownIt} Configured markdown renderer
  */
-export function createMarkdownRenderer() {
+export function createMarkdownRenderer({ html = true } = {}) {
   const options = {
-    html: true,
+    html,
     linkify: true,
     typographer: true,
     highlight: (str, lang) => {
