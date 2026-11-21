@@ -11,6 +11,7 @@ directory that all workers share, not in memory. The same directory holds two lo
 
 import asyncio
 import os
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
@@ -30,6 +31,9 @@ RUN_LOCK_POLL_SECONDS = 1.0
 INTERRUPTED_MESSAGE = "Text recognition was interrupted because the server restarted. Please try again."
 
 ACTIVE_STATUSES: tuple[OcrJobStatus, ...] = ("queued", "running")
+
+JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+"""Valid job ids: the characters of `secrets.token_urlsafe()`; excludes path separators and dots."""
 
 
 class OcrJobConflict(Exception):
@@ -151,11 +155,17 @@ class OcrJobStore:
         A queued or running job whose process no longer exists (the worker was restarted) is
         marked as failed.
         """
-        if not job_id or "/" in job_id or "\\" in job_id or job_id.startswith("."):
+        # the id comes from the URL: allow only the characters of generated ids, and make sure the
+        # resulting path is inside the jobs directory
+        if not JOB_ID_RE.fullmatch(job_id):
             return None
-        path = self._path(job_id)
+        directory = os.path.realpath(self.directory)
+        path = os.path.realpath(os.path.join(directory, f"{job_id}.json"))
+        if not path.startswith(directory + os.sep):
+            return None
         try:
-            job = OcrJob.model_validate_json(path.read_text(encoding="utf-8"))
+            with open(path, encoding="utf-8") as f:
+                job = OcrJob.model_validate_json(f.read())
         except FileNotFoundError:
             return None
         if job.status in ACTIVE_STATUSES and not _process_alive(job.pid):
