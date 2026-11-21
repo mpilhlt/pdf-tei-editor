@@ -3,6 +3,7 @@
 # CLI for running the FastAPI server in development mode with auto-reload.
 
 import os
+import shutil
 import sys
 import subprocess
 from pathlib import Path
@@ -48,12 +49,27 @@ if __name__ == '__main__':
             sys.exit(0)
 
     # Generate the plugin and module registries, the importmap and the highlight.js bundle,
-    # which are not under version control and are needed to load the frontend from source
-    try:
-        subprocess.run(['npm', 'run', '--silent', 'generate'], cwd=project_root, check=True, shell=sys.platform == 'win32')
-    except (OSError, subprocess.CalledProcessError) as e:
-        print(f"Generating the frontend source files failed ({e}). Run `npm install` and try again.", file=sys.stderr)
-        sys.exit(1)
+    # which are not under version control and are needed to load the frontend from source.
+    # Without npm on the PATH (e.g. a systemd unit with a restricted PATH and node installed via nvm),
+    # start with the files generated earlier, e.g. by `npm run build` during deployment.
+    generated_files = [
+        project_root / 'app' / 'src' / 'plugin-registry.js',
+        project_root / 'app' / 'src' / 'module-registry.js',
+        project_root / 'app' / 'web' / 'importmap.json',
+        project_root / 'app' / 'web' / 'highlight.js',
+    ]
+    if shutil.which('npm') is None:
+        missing = [str(f.relative_to(project_root)) for f in generated_files if not f.exists()]
+        if missing:
+            print(f"npm was not found on the PATH and these generated frontend files are missing: {', '.join(missing)}. Install node/npm or add it to the PATH, run `npm install` and try again.", file=sys.stderr)
+            sys.exit(1)
+        print("Warning: npm was not found on the PATH, skipping `npm run generate` and using the existing generated frontend files, which may be outdated.", file=sys.stderr)
+    else:
+        try:
+            subprocess.run(['npm', 'run', '--silent', 'generate'], cwd=project_root, check=True, shell=sys.platform == 'win32')
+        except (OSError, subprocess.CalledProcessError) as e:
+            print(f"Generating the frontend source files failed ({e}). Run `npm install` and try again.", file=sys.stderr)
+            sys.exit(1)
 
     # Set up logging
     log_file = setup_log_directory(project_root)
