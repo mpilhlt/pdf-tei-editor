@@ -253,8 +253,11 @@ class ExtractionPlugin extends Plugin {
         }
 
         if (ocr && !extractsFromXml) {
-          ui.spinner.show('Applying text recognition, this may take a while')
-          const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr)
+          const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr, status => {
+            ui.spinner.show(status === 'queued'
+              ? 'Waiting for another text recognition to finish'
+              : 'Applying text recognition, this may take a while')
+          })
           if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
             notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
           }

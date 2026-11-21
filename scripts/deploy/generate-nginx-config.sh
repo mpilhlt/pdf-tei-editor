@@ -17,7 +17,7 @@ OUTPUT_FILE=${3:-"/etc/nginx/sites-available/${FQDN}"}
 
 echo "Generating nginx configuration for $FQDN -> localhost:$PORT"
 
-cat > "$OU¥¥¥¥¥ TPUT_FILE" << EOF
+cat > "$OUTPUT_FILE" << EOF
 # PDF TEI Editor demo configuration for $FQDN
 server {
     server_name $FQDN;
@@ -45,6 +45,11 @@ server {
         proxy_read_timeout 300;
         proxy_connect_timeout 75;
     }
+
+    # Increase timeouts for long operations such as LLM extraction.
+    # OCR runs as a background job and does not depend on these timeouts.
+    proxy_read_timeout 900s;
+    proxy_send_timeout 900s;
 
     listen 80;
 }

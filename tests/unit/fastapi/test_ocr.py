@@ -14,6 +14,7 @@ engine registry and the OCR endpoints.
 import io
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +31,8 @@ import pypdfium2 as pdfium
 
 from fastapi_app.lib.models.models_ocr import TextQualityReport
 from fastapi_app.lib.ocr.base import OcrEngine, OcrOption, OcrOptionValue, OcrResult, OcrWord
+from fastapi_app.lib.ocr.jobs import OcrJobConflict, OcrJobStore
+from fastapi_app.lib.utils.file_lock import NonBlockingFileLock
 from fastapi_app.lib.ocr.languages import normalize_ocr_language, to_iso639_3
 from fastapi_app.lib.ocr.layout_check import (
     LayoutCheckResult,
@@ -208,6 +211,8 @@ class FakeEngine(OcrEngine):
         self.result: Optional[str | OcrResult] = "done"
         self.words: Optional[list[OcrWord]] = None
         """Words returned by recognize_words(); word recognition is unsupported if None."""
+        self.error: Optional[Exception] = None
+        """Exception raised by recognize(), if set."""
 
     def get_options(self) -> dict[str, OcrOption]:
         return {
@@ -237,6 +242,8 @@ class FakeEngine(OcrEngine):
     ) -> Optional[str | OcrResult]:
         self.calls.append((languages, options))
         self.rebuild_flags.append(rebuild)
+        if self.error is not None:
+            raise self.error
         shutil.copy(TEXT_PDF, output_path)
         return self.result
 
@@ -289,14 +296,43 @@ class TestOcrRouter(unittest.TestCase):
         app.dependency_overrides[require_authenticated_user] = lambda: USER
         app.dependency_overrides[get_file_repository] = lambda: self.repo
         app.dependency_overrides[get_file_storage] = lambda: self.storage
-        self.client = TestClient(app)
+        self.jobs = OcrJobStore(self.tmp / "jobs", poll_seconds=0.02)
+        app.dependency_overrides[ocr_router.get_ocr_job_store] = lambda: self.jobs
+        # the context manager keeps the event loop running between requests, so background jobs finish
+        self.client = TestClient(app).__enter__()
         self.access = patch.object(ocr_router, "check_file_access", lambda file, user, op: self.allowed)
         self.access.start()
 
     def tearDown(self):
+        self.client.__exit__(None, None, None)
         self.access.stop()
         OcrEngineRegistry.reset_instance()
         shutil.rmtree(self.tmp)
+
+    def run_ocr(self, payload: dict) -> dict:
+        """Start an OCR job, wait for it and return the finished job."""
+        response = self.client.post("/ocr", json=payload)
+        self.assertEqual(response.status_code, 202, response.text)
+        job = response.json()
+        self.assertEqual(job["status"], "queued")
+        return self.wait_for(job)
+
+    def wait_for(self, job: dict) -> dict:
+        """Poll a job until it is finished."""
+        deadline = time.monotonic() + 30
+        while job["status"] in ("queued", "running"):
+            self.assertLess(time.monotonic(), deadline, "OCR job did not finish")
+            time.sleep(0.05)
+            response = self.client.get(f"/ocr/jobs/{job['job_id']}")
+            self.assertEqual(response.status_code, 200, response.text)
+            job = response.json()
+        return job
+
+    def ocr_result(self, payload: dict) -> dict:
+        """Run OCR and return the result of the successful job."""
+        job = self.run_ocr(payload)
+        self.assertEqual(job["status"], "done", job.get("error"))
+        return job["result"]
 
     def test_list_engines_only_lists_available_engines(self):
         response = self.client.get("/ocr/engines")
@@ -317,9 +353,7 @@ class TestOcrRouter(unittest.TestCase):
         self.assertEqual(self.client.get("/ocr/text-quality/pdf1").status_code, 403)
 
     def test_apply_ocr_replaces_the_pdf(self):
-        response = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake", "languages": ["deu", "zh-hans"], "options": {"flag": True}})
-        self.assertEqual(response.status_code, 200, response.text)
-        body = response.json()
+        body = self.ocr_result({"stable_id": "pdf1", "engine": "fake", "languages": ["deu", "zh-hans"], "options": {"flag": True}})
         self.assertTrue(body["changed"])
         self.assertEqual(body["stable_id"], "pdf1")
         self.assertEqual(body["quality"]["status"], "good")
@@ -351,9 +385,7 @@ class TestOcrRouter(unittest.TestCase):
 
     def test_apply_ocr_records_method_and_rebuild(self):
         self.engine.result = OcrResult(message="rasterized", method="force", fallback_reason="Ghostscript is not installed")
-        response = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake", "rebuild": True})
-        self.assertEqual(response.status_code, 200, response.text)
-        body = response.json()
+        body = self.ocr_result({"stable_id": "pdf1", "engine": "fake", "rebuild": True})
         self.assertEqual((body["message"], body["method"], body["fallback_reason"]), ("rasterized", "force", "Ghostscript is not installed"))
         self.assertEqual(body["quality"]["ocr_applied"]["method"], "force")
         self.assertEqual(self.engine.rebuild_flags, [True])
@@ -361,15 +393,64 @@ class TestOcrRouter(unittest.TestCase):
         self.assertEqual((record["method"], record["fallback_reason"]), ("force", "Ghostscript is not installed"))
         # engines that return a plain message record no method
         self.engine.result = "done"
-        body = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"}).json()
+        body = self.ocr_result({"stable_id": "pdf1", "engine": "fake"})
         self.assertEqual((body["message"], body["method"]), ("done", None))
         self.assertNotIn("method", body["quality"]["ocr_applied"])
         self.assertEqual(self.engine.rebuild_flags, [True, False])
 
     def test_apply_ocr_uses_default_languages(self):
-        response = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"})
-        self.assertEqual(response.status_code, 200, response.text)
+        self.ocr_result({"stable_id": "pdf1", "engine": "fake"})
         self.assertEqual(self.engine.calls[0][0], ["en"])
+
+    def test_failed_job_reports_the_error(self):
+        self.engine.error = ValueError("The PDF is protected by a password")
+        job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        self.assertEqual((job["status"], job["error_status"]), ("failed", 400))
+        self.assertEqual(job["error"], "The PDF is protected by a password")
+        self.engine.error = RuntimeError("tesseract crashed")
+        with self.assertLogs("fastapi_app.routers.ocr", level="ERROR"):
+            job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        self.assertEqual((job["status"], job["error_status"]), ("failed", 500))
+        self.assertIn("tesseract crashed", job["error"])
+        self.assertEqual(self.repo.updates, [])
+
+    def test_second_job_for_the_same_pdf_is_rejected(self):
+        run_lock = NonBlockingFileLock(self.jobs.directory / ".run.lock")
+        self.assertTrue(run_lock.try_acquire())
+        try:
+            first = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"}).json()
+            response = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"})
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertIn("already queued", response.json()["detail"])
+            # another PDF is queued behind the first job
+            other = self.client.post("/ocr", json={"stable_id": "pdf2", "engine": "fake"})
+            self.assertEqual(other.status_code, 202, other.text)
+        finally:
+            run_lock.release()
+        self.assertEqual(self.wait_for(first)["status"], "done")
+        self.assertEqual(self.wait_for(other.json())["status"], "done")
+        # once the job is finished, the PDF can be processed again
+        self.assertEqual(self.run_ocr({"stable_id": "pdf1", "engine": "fake"})["status"], "done")
+
+    def test_job_is_queued_while_another_run_holds_the_lock(self):
+        run_lock = NonBlockingFileLock(self.jobs.directory / ".run.lock")
+        self.assertTrue(run_lock.try_acquire())
+        try:
+            job = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"}).json()
+            time.sleep(0.2)
+            self.assertEqual(self.client.get(f"/ocr/jobs/{job['job_id']}").json()["status"], "queued")
+            self.assertEqual(self.engine.calls, [])
+        finally:
+            run_lock.release()
+        self.assertEqual(self.wait_for(job)["status"], "done")
+        self.assertEqual(len(self.engine.calls), 1)
+
+    def test_jobs_are_private(self):
+        job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        self.assertEqual(self.client.get("/ocr/jobs/nope").status_code, 404)
+        self.assertEqual(self.client.get("/ocr/jobs/..%2Fx").status_code, 404)
+        self.client.app.dependency_overrides[require_authenticated_user] = lambda: {"username": "bob"}
+        self.assertEqual(self.client.get(f"/ocr/jobs/{job['job_id']}").status_code, 404)
 
     def test_apply_ocr_validation(self):
         cases = [
@@ -389,6 +470,63 @@ class TestOcrRouter(unittest.TestCase):
         self.assertEqual(self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"}).status_code, 403)
         self.assertEqual(self.engine.calls, [])
         self.assertEqual(self.repo.updates, [])
+
+
+class TestOcrJobStore(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.store = OcrJobStore(self.tmp)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_job_of_a_dead_process_fails(self):
+        job = self.store.create("pdf1", "alice")
+        self.assertEqual(self.store.get(job.job_id).status, "queued")
+        dead = job.model_copy(update={"pid": 2**22 + 12345})
+        self.store._write(dead)
+        failed = self.store.get(job.job_id)
+        self.assertEqual((failed.status, failed.error_status), ("failed", 503))
+
+    def test_invalid_ids_and_cleanup(self):
+        self.assertIsNone(self.store.get("../etc"))
+        self.assertIsNone(self.store.get(".hidden"))
+        active = self.store.create("pdf1", "alice")
+        finished = self.store.fail(self.store.create("pdf2", "alice"), "error")
+        self.store.cleanup(max_age=-1)
+        # active jobs are kept, finished ones deleted
+        self.assertIsNotNone(self.store.get(active.job_id))
+        self.assertIsNone(self.store.get(finished.job_id))
+
+    def test_conflict_and_dead_jobs(self):
+        job = self.store.create("pdf1", "alice")
+        with self.assertRaises(OcrJobConflict):
+            self.store.create("pdf1", "bob")
+        # a job of a dead process does not block a new one
+        self.store._write(job.model_copy(update={"pid": 2**22 + 12345}))
+        self.assertEqual(self.store.create("pdf1", "bob").status, "queued")
+
+    def test_run_lock_excludes_other_holders(self):
+        import asyncio
+
+        async def scenario() -> list[str]:
+            events: list[str] = []
+            store = OcrJobStore(self.tmp, poll_seconds=0.01)
+
+            async def run(name: str) -> None:
+                job = store.create(name, "alice")
+                async with store.run_slot(job) as running:
+                    self.assertEqual(running.status, "running")
+                    events.append(f"start {name}")
+                    await asyncio.sleep(0.05)
+                    events.append(f"end {name}")
+
+            await asyncio.gather(run("a"), run("b"))
+            return events
+
+        events = asyncio.run(scenario())
+        # the runs do not overlap
+        self.assertEqual([e.split()[0] for e in events], ["start", "end", "start", "end"])
 
 
 class UnavailableEngine(FakeEngine):
