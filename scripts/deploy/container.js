@@ -1176,10 +1176,11 @@ server {
     # Allow uploads up to 100MB (adjust as needed)
     client_max_body_size 100M;
 
-    # Increase timeouts for large uploads and long operations
-    proxy_read_timeout 300s;
+    # Increase timeouts for large uploads and long operations such as LLM extraction.
+    # OCR runs as a background job and does not depend on these timeouts.
+    proxy_read_timeout 900s;
     proxy_connect_timeout 300s;
-    proxy_send_timeout 300s;
+    proxy_send_timeout 900s;
 
     listen 80;
 }

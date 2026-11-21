@@ -481,6 +481,25 @@
  */
 
 /**
+ * @typedef {'running'|'done'|'failed'} OcrJobStatus
+ */
+
+/**
+ * An OCR run in the background, started by `POST /api/v1/ocr` and polled with `GET /api/v1/ocr/jobs/{job_id}`
+ * @typedef {Object} OcrJob
+ * @property {string} job_id - Id of the job
+ * @property {string} stable_id - stable_id of the PDF
+ * @property {OcrJobStatus} status - 'running', 'done' (see `result`) or 'failed' (see `error`)
+ * @property {OcrResponse|null=} result - Result of the run if the status is 'done'
+ * @property {string|null=} error - Error message if the status is 'failed'
+ * @property {number|null=} error_status - HTTP status code corresponding to the error (4xx: invalid request, 5xx: failure of the engine or the server)
+ * @property {string} username - User who started the job
+ * @property {number} pid - Id of the server process that runs the job
+ * @property {string} created_at - ISO timestamp of the start of the job
+ * @property {string} updated_at - ISO timestamp of the last status change
+ */
+
+/**
  * @typedef {Object} ExtractorInfo
  * @property {string} id - Unique identifier for the extractor
  * @property {string} name - Human-readable name of the extractor
@@ -2315,14 +2334,26 @@ export class ApiClientV1 {
   }
 
   /**
-   * Apply OCR to a PDF and replace the stored PDF with the result. The stable_id stays the same.
+   * Start applying OCR to a PDF; the stored PDF is replaced with the result and the stable_id stays
+   * the same. The run happens in the background: poll {@link ApiClientV1#ocrJob} for the result.
    *
    * @param {OcrRequest} requestBody
-   * @returns {Promise<OcrResponse>}
+   * @returns {Promise<OcrJob>}
    */
   async ocr(requestBody) {
     const endpoint = `/ocr`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Return the status of an OCR run started with {@link ApiClientV1#ocr}, and its result when it is done.
+   *
+   * @param {string} jobId - Id of the job
+   * @returns {Promise<OcrJob>}
+   */
+  async ocrJob(jobId) {
+    const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}`
+    return this.callApi(endpoint);
   }
 
   /**

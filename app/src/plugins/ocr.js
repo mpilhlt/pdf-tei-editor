@@ -19,6 +19,9 @@ import { testLog } from '../modules/test-log.js'
 
 await registerTemplate('ocr-dialog', 'ocr-dialog.html')
 
+/** Interval in milliseconds at which the status of a running OCR job is requested */
+const OCR_POLL_INTERVAL_MS = 2000
+
 /**
  * Parameters of an OCR run
  * @typedef {object} OcrSettings
@@ -207,19 +210,36 @@ class OcrPlugin extends Plugin {
 
   /**
    * Apply OCR to a PDF. The stored PDF is replaced; its stable_id stays the same.
+   *
+   * The server runs OCR in the background, since a long document can take longer than a reverse
+   * proxy waits for a response. This method starts the job and polls it until it is finished.
    * @param {string} stableId - stable_id of the PDF
    * @param {OcrRunOptions} run - Engine and parameters
    * @returns {Promise<OcrResponse>}
+   * @throws {Error} An ApiError (invalid request) or ServerError (failure of the engine or the server) if the run fails
    */
   async recognize(stableId, run) {
-    this.getDependency('logger').info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
-    const result = await this.#client.apiClient.ocr({
+    const logger = this.getDependency('logger')
+    logger.info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
+    const client = this.#client
+    let job = await client.apiClient.ocr({
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
       options: run.options,
       rebuild: Boolean(run.rebuild)
     })
+    while (job.status === 'running') {
+      await new Promise(resolve => setTimeout(resolve, OCR_POLL_INTERVAL_MS))
+      job = await client.apiClient.ocrJob(job.job_id)
+    }
+    if (job.status === 'failed') {
+      const message = job.error || 'Text recognition failed'
+      const status = job.error_status ?? 500
+      testLog('OCR_FAILED', { stableId, error: message, status })
+      throw status < 500 ? new client.ApiError(message, status) : new client.ServerError(message, status)
+    }
+    const result = job.result
     testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
     return result
   }
