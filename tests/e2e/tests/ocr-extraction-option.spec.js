@@ -110,7 +110,7 @@ test.describe('OCR extraction option', () => {
       const job = await page.evaluate(async ({ id, engine }) => {
         const apiClient = /** @type {any} */(window).client.apiClient;
         let job = await apiClient.ocr({ stable_id: id, engine, languages: ['en'] });
-        while (job.status === 'running') {
+        while (job.status === 'queued' || job.status === 'running') {
           await new Promise(resolve => setTimeout(resolve, 500));
           job = await apiClient.ocrJob(job.job_id);
         }

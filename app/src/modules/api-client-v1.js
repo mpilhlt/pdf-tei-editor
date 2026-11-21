@@ -481,7 +481,7 @@
  */
 
 /**
- * @typedef {'running'|'done'|'failed'} OcrJobStatus
+ * @typedef {'queued'|'running'|'done'|'failed'} OcrJobStatus
  */
 
 /**
@@ -489,7 +489,7 @@
  * @typedef {Object} OcrJob
  * @property {string} job_id - Id of the job
  * @property {string} stable_id - stable_id of the PDF
- * @property {OcrJobStatus} status - 'running', 'done' (see `result`) or 'failed' (see `error`)
+ * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`) or 'failed' (see `error`)
  * @property {OcrResponse|null=} result - Result of the run if the status is 'done'
  * @property {string|null=} error - Error message if the status is 'failed'
  * @property {number|null=} error_status - HTTP status code corresponding to the error (4xx: invalid request, 5xx: failure of the engine or the server)
@@ -2336,6 +2336,7 @@ export class ApiClientV1 {
   /**
    * Start applying OCR to a PDF; the stored PDF is replaced with the result and the stable_id stays
    * the same. The run happens in the background: poll {@link ApiClientV1#ocrJob} for the result.
+   * Rejected with 409 if a job for the PDF is already queued or running.
    *
    * @param {OcrRequest} requestBody
    * @returns {Promise<OcrJob>}

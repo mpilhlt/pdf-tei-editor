@@ -22,7 +22,7 @@ from ..lib.core.dependencies import get_file_repository, get_file_storage, requi
 from ..lib.models import FileMetadata, FileUpdate
 from ..lib.models.models_ocr import OcrEngineInfo, OcrJob, OcrOptionInfo, OcrRequest, OcrResponse, TextQualityReport
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
-from ..lib.ocr.jobs import OcrJobStore
+from ..lib.ocr.jobs import OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
 from ..lib.ocr.registry import OcrEngineRegistry
@@ -37,9 +37,6 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
 
 OCR_METADATA_KEY = "ocr"
 """Key in the PDF's file_metadata under which the last OCR run is recorded."""
-
-_ocr_semaphore = asyncio.Semaphore(1)
-"""OCR is CPU-bound and uses all cores, so runs are serialized."""
 
 _running_jobs: set["asyncio.Task[None]"] = set()
 """References to the running job tasks, which asyncio would otherwise garbage-collect."""
@@ -218,6 +215,10 @@ async def apply_ocr(
     happens in the background: the response is the job, and `GET /api/v1/ocr/jobs/{job_id}`
     reports its status and, when it is done, the result. Invalid requests are rejected at once.
 
+    Only one OCR run happens at a time on the server; the job has the status 'queued' while it
+    waits for other runs. A request for a PDF that already has a queued or running job is rejected
+    with 409.
+
     The stable_id of the PDF stays the same; its content hash changes. The OCR run, including the
     method the engine used, is recorded in the PDF's file metadata under "ocr".
     """
@@ -232,7 +233,10 @@ async def apply_ocr(
     options = _validate_options(engine, request.options)
     _pdf_path(storage, file)
 
-    job = jobs.create(file.stable_id, str(current_user.get("username") or ""))
+    try:
+        job = jobs.create(file.stable_id, str(current_user.get("username") or ""))
+    except OcrJobConflict as e:
+        raise HTTPException(status_code=409, detail=f"{e}. Please wait until it is finished.")
     task = asyncio.create_task(_run_job(job, jobs, engine, languages, options, request.rebuild, repo, storage, current_user))
     _running_jobs.add(task)
     task.add_done_callback(_running_jobs.discard)
@@ -268,9 +272,10 @@ async def _run_job(
     storage: FileStorage,
     user: dict[str, Any],
 ) -> None:
-    """Run OCR in the background and record the outcome in the job."""
+    """Wait until no other OCR run happens on the server, run OCR and record the outcome in the job."""
     try:
-        result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user)
+        async with jobs.run_slot(job) as job:
+            result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user)
     except HTTPException as e:
         jobs.fail(job, str(e.detail), e.status_code)
     except asyncio.CancelledError:
@@ -294,28 +299,27 @@ async def _recognize(
     user: dict[str, Any],
 ) -> OcrResponse:
     """
-    Apply OCR to a PDF and replace the stored PDF with the result.
+    Apply OCR to a PDF and replace the stored PDF with the result. The caller holds the run slot.
 
     Raises:
         HTTPException: if the PDF is gone, the options are invalid or the engine fails
     """
-    async with _ocr_semaphore:
-        # look the PDF up again, since it may have changed while waiting for other runs
-        file = _get_pdf(repo, stable_id, user, "edit")
-        input_path = _pdf_path(storage, file)
-        with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
-            output_path = Path(tmp) / "output.pdf"
-            try:
-                outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, rebuild)
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
-            except Exception as e:
-                logger.error(f"OCR with {engine.id} failed for {file.stable_id}: {e}")
-                raise HTTPException(status_code=500, detail=f"Text recognition failed: {e}")
-            if not output_path.exists():
-                raise HTTPException(status_code=500, detail="Text recognition produced no output")
-            content = output_path.read_bytes()
-            quality = await asyncio.to_thread(analyze_text_layer, output_path)
+    # look the PDF up again, since it may have changed while the job was queued
+    file = _get_pdf(repo, stable_id, user, "edit")
+    input_path = _pdf_path(storage, file)
+    with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
+        output_path = Path(tmp) / "output.pdf"
+        try:
+            outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, rebuild)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"OCR with {engine.id} failed for {file.stable_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Text recognition failed: {e}")
+        if not output_path.exists():
+            raise HTTPException(status_code=500, detail="Text recognition produced no output")
+        content = output_path.read_bytes()
+        quality = await asyncio.to_thread(analyze_text_layer, output_path)
 
     result = outcome if isinstance(outcome, OcrResult) else OcrResult(message=outcome)
     record: dict[str, str | list[str]] = {

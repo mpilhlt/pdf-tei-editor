@@ -8,7 +8,7 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlSelect, SlInput, SlCheckbox } from '../ui.js'
  * @import { ocrOptionsDialogPart } from '../templates/ocr-dialog.types.js'
- * @import { OcrEngineInfo, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -213,12 +213,16 @@ class OcrPlugin extends Plugin {
    *
    * The server runs OCR in the background, since a long document can take longer than a reverse
    * proxy waits for a response. This method starts the job and polls it until it is finished.
+   * Only one OCR run happens at a time on the server, so the job may first wait in the queue.
    * @param {string} stableId - stable_id of the PDF
    * @param {OcrRunOptions} run - Engine and parameters
+   * @param {(status: OcrJobStatus) => void} [onStatus] - Called with the initial status of the job
+   *   ('queued' or 'running') and whenever it changes while it is not finished
    * @returns {Promise<OcrResponse>}
-   * @throws {Error} An ApiError (invalid request) or ServerError (failure of the engine or the server) if the run fails
+   * @throws {Error} An ApiError (invalid request, or 409 if OCR is already running for this PDF) or
+   *   ServerError (failure of the engine or the server) if the run fails
    */
-  async recognize(stableId, run) {
+  async recognize(stableId, run, onStatus) {
     const logger = this.getDependency('logger')
     logger.info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
@@ -229,7 +233,14 @@ class OcrPlugin extends Plugin {
       options: run.options,
       rebuild: Boolean(run.rebuild)
     })
-    while (job.status === 'running') {
+    /** @type {OcrJobStatus|null} */
+    let reported = null
+    while (job.status === 'queued' || job.status === 'running') {
+      if (job.status !== reported) {
+        reported = job.status
+        testLog('OCR_JOB_STATUS', { stableId, status: job.status })
+        onStatus?.(job.status)
+      }
       await new Promise(resolve => setTimeout(resolve, OCR_POLL_INTERVAL_MS))
       job = await client.apiClient.ocrJob(job.job_id)
     }

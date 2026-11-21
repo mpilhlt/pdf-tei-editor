@@ -77,19 +77,20 @@ class TextQualityReport(BaseModel):
     ocr_applied: Optional[dict[str, str | list[str]]] = Field(default=None, description="Record of a previous OCR run by this application")
 
 
-OcrJobStatus = Literal["running", "done", "failed"]
+OcrJobStatus = Literal["queued", "running", "done", "failed"]
 
 
 class OcrJob(BaseModel):
     """
     An OCR run in the background. OCR of a long document can take longer than a reverse proxy
     waits for a response, so `POST /api/v1/ocr` returns the job at once and the client polls
-    `GET /api/v1/ocr/jobs/{job_id}` until the status is 'done' or 'failed'.
+    `GET /api/v1/ocr/jobs/{job_id}` until the status is 'done' or 'failed'. Only one OCR run
+    happens at a time on the server; other jobs wait with the status 'queued'.
     """
 
     job_id: str = Field(..., description="Id of the job")
     stable_id: str = Field(..., description="stable_id of the PDF")
-    status: OcrJobStatus = Field(..., description="'running', 'done' (see 'result') or 'failed' (see 'error')")
+    status: OcrJobStatus = Field(..., description="'queued' (waiting for another run to finish), 'running', 'done' (see 'result') or 'failed' (see 'error')")
     result: Optional[OcrResponse] = Field(None, description="Result of the run if the status is 'done'")
     error: Optional[str] = Field(None, description="Error message if the status is 'failed'")
     error_status: Optional[int] = Field(None, description="HTTP status code corresponding to the error (4xx: invalid request, 5xx: failure of the engine or the server)")
