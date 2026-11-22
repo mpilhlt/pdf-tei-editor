@@ -285,9 +285,6 @@ class ServicesPlugin extends Plugin {
 
           // Check source id
           if (pdf && fileData.source && fileData.source.id === pdf) {
-            if (!currentState.collection) {
-              stateChanges.collection = fileData.collections[0]
-            }
             foundMatch = true
           }
 
@@ -295,9 +292,6 @@ class ServicesPlugin extends Plugin {
           if (xml) {
             const matchingArtifact = fileData.artifacts && fileData.artifacts.find(/** @param {any} artifact */ artifact => artifact.id === xml)
             if (matchingArtifact) {
-              if (!currentState.collection) {
-                stateChanges.collection = fileData.collections[0]
-              }
               // Always set variant from artifact (it's the source of truth for the loaded document)
               if (matchingArtifact.variant) {
                 stateChanges.variant = matchingArtifact.variant
@@ -308,6 +302,7 @@ class ServicesPlugin extends Plugin {
 
           // Only break if we found what we're looking for
           if (foundMatch) {
+            Object.assign(stateChanges, this.#getCollectionChanges(currentState, fileData.collections || []))
             break
           }
         }
@@ -319,6 +314,33 @@ class ServicesPlugin extends Plugin {
       // Clear loading state
       await this.context.invokePluginEndpoint(ep.filedata.loading, false)
     }
+  }
+
+  /**
+   * Returns the state changes that make the collection state match the loaded document: `collection`
+   * (and `project`) if the current collection is not one of the document's, and `collectionFilter` if
+   * the file selection is filtered by a collection that does not contain the document (e.g. a filter
+   * restored from the session when the document comes from the URL hash), which would otherwise hide
+   * the document in the selectboxes.
+   * @param {ApplicationState} currentState
+   * @param {string[]} docCollections - The collections of the loaded document
+   * @returns {Partial<ApplicationState>}
+   */
+  #getCollectionChanges(currentState, docCollections) {
+    /** @type {Partial<ApplicationState>} */
+    const changes = {}
+    if (docCollections.length === 0) return changes
+    const filter = currentState.collectionFilter
+    if (filter && !docCollections.includes(filter)) {
+      changes.collectionFilter = docCollections[0]
+    }
+    if (!currentState.collection || !docCollections.includes(currentState.collection)) {
+      const collection = changes.collectionFilter || docCollections[0]
+      const project = (currentState.projects || []).find(p => p.collections && p.collections.includes(collection))
+      changes.collection = collection
+      changes.project = project ? project.id : null
+    }
+    return changes
   }
 
   async #startAutocomplete() {
