@@ -7,6 +7,8 @@
  *   `diff` state, the URL hash and switching validation off while the merge view is shown,
  * - the diff navigation, reject/accept-all and strict-diff buttons in the left section of the XML
  *   editor toolbar,
+ * - a read-only side-by-side diff in a separate window, which follows the merge view and closes
+ *   with it,
  * - ending the merge view with Esc.
  *
  * Other plugins only invoke the extension points, so the application works without this plugin. The
@@ -28,7 +30,9 @@ import ep from '../extension-points.js'
 import { registerTemplate, createFromTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { XMLEditor } from '../modules/xmleditor.js'
 import { UrlHash } from '../modules/browser-utils.js'
+import { notify } from '../modules/sl-utils.js'
 import { filterFileData, getSelectedFileVersions, appendVersionOptions } from '../modules/version-options.js'
+import { SideBySideDiffWindow } from '../modules/side-by-side-diff-window.js'
 
 await registerTemplate('merge-view-toolbar', 'merge-view-toolbar.html')
 await registerTemplate('merge-view-selector', 'merge-view-selector.html')
@@ -41,13 +45,14 @@ await registerTemplate('merge-view-selector', 'merge-view-selector.html')
  * @property {StatusButton} rejectAllBtn - Reject all changes button
  * @property {StatusButton} acceptAllBtn - Accept all changes button
  * @property {StatusToggleButton} strictDiffToggle - Strict diff toggle (whitespace and linebreaks significant in merge view diff)
+ * @property {StatusButton} sideBySideBtn - Opens the side-by-side diff window
  */
 
 /**
  * Overflow priority of the XML editor toolbar widgets, in template order (also their order in the
- * section): prevDiff, nextDiff, separator, rejectAll, acceptAll, separator, strictDiff
+ * section): prevDiff, nextDiff, separator, rejectAll, acceptAll, separator, strictDiff, sideBySide
  */
-const TOOLBAR_PRIORITIES = [103, 102, 101, 100, 99, 98, 97]
+const TOOLBAR_PRIORITIES = [104, 103, 102, 101, 100, 99, 98, 97]
 
 /** Elements that show the merge view as active (highlighted) and are only enabled in an editable document */
 const DIFF_BUTTON_NAMES = /** @type {const} */ (['prevDiffBtn', 'nextDiffBtn', 'rejectAllBtn', 'acceptAllBtn'])
@@ -119,6 +124,9 @@ class MergeViewPlugin extends Plugin {
 
   #isFileLoading = false
 
+  /** The read-only side-by-side diff window */
+  #sideBySideWindow = new SideBySideDiffWindow()
+
   /** @param {ApplicationState} initialState */
   async install(initialState) {
     await super.install(initialState)
@@ -150,8 +158,10 @@ class MergeViewPlugin extends Plugin {
       const strict = /** @type {CustomEvent} */ (e).detail.checked
       this.#setStrictDiffPreference(strict)
       this.#xmlEditor.setIgnoreWhitespaceInDiff(!strict)
+      this.#updateSideBySideWindow()
       this.#logger.debug(`Strict diff ${strict ? 'enabled' : 'disabled'}`)
     })
+    toolbar.sideBySideBtn.addEventListener('widget-click', () => this.openSideBySideWindow())
 
     toolbar.prevDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToPreviousDiff())
     toolbar.nextDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToNextDiff())
@@ -167,11 +177,16 @@ class MergeViewPlugin extends Plugin {
     xmlEditor.on(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW, () => {
       this.#mergeViewActive = true
       this.#updateButtons()
+      this.#updateSideBySideWindow()
     })
-    xmlEditor.on(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW, () => {
+    xmlEditor.on(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW, (data) => {
       this.#mergeViewActive = false
       this.#updateButtons()
+      // keep the window open while the merge view only switches to another version
+      if (!data?.replaced) this.#sideBySideWindow.close()
     })
+    xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => this.#updateSideBySideWindow())
+    window.addEventListener('pagehide', () => this.#sideBySideWindow.close())
     this.#updateButtons()
 
     // Esc ends the merge view, unless focus mode is on (the xpath-navigation plugin leaves it then)
@@ -235,6 +250,25 @@ class MergeViewPlugin extends Plugin {
       UrlHash.remove("diff")
       await this.dispatchStateChange({ diff: null })
     }
+  }
+
+  /**
+   * Opens the read-only side-by-side diff of the merge view in a separate window, or brings it to
+   * the front. The window follows the merge view and closes when the merge view is hidden. Must be
+   * called from a user action (popup blocker).
+   * @returns {boolean} False if the merge view is not shown or the window could not be opened
+   */
+  openSideBySideWindow() {
+    const docs = this.#xmlEditor.getMergeViewDocuments()
+    if (!docs) return false
+    const opened = this.#sideBySideWindow.open(docs, {
+      theme: this.#xmlEditor.getTheme().extensions,
+      title: `Diff: ${docs.titles.incoming} ↔ ${docs.titles.current}`
+    })
+    if (!opened) {
+      notify('The side-by-side diff window was blocked by the browser. Please allow popups for this site.', 'warning', 'exclamation-triangle')
+    }
+    return opened
   }
 
   /**
@@ -334,6 +368,14 @@ class MergeViewPlugin extends Plugin {
       button.classList.toggle('merge-view-highlight', enabled)
     }
     toolbar.strictDiffToggle.disabled = !this.#mergeViewActive
+    toolbar.sideBySideBtn.disabled = !this.#mergeViewActive
+  }
+
+  /** Shows the current merge view documents in the side-by-side diff window, if it is open */
+  #updateSideBySideWindow() {
+    if (!this.#sideBySideWindow.isOpen()) return
+    const docs = this.#xmlEditor.getMergeViewDocuments()
+    if (docs) this.#sideBySideWindow.update(docs)
   }
 
   /**

@@ -24,6 +24,24 @@
  * @property {boolean} editorReadOnly - Emitted when read-only state changes
  * @property {string} editorBeforeLoad - Emitted before loading new document
  * @property {null} editorAfterLoad - Emitted after loading and syncing new document
+ * @property {null} editorShowMergeView - Emitted when the merge view is shown
+ * @property {MergeViewHideEventData} editorHideMergeView - Emitted when the merge view is removed
+ */
+
+/**
+ * Data of the `editorHideMergeView` event
+ * @typedef {object} MergeViewHideEventData
+ * @property {boolean} replaced - True if the merge view is removed only to show a merge view with
+ *   another version right afterwards (`showMergeView()` while a merge view is active)
+ */
+
+/**
+ * The two documents compared in the merge view, as returned by `XMLEditor#getMergeViewDocuments()`
+ * @typedef {object} MergeViewDocuments
+ * @property {string} current - The current editor content
+ * @property {string} incoming - The version compared with, after the whitespace normalization of
+ *   the merge view diff if whitespace differences are ignored
+ * @property {{current: string, incoming: string}} titles - The edition titles of both documents
  */
 
 /**
@@ -761,7 +779,7 @@ export class XMLEditor extends EventEmitter {
 
     // remove existing merge view
     if (this.isMergeViewActive()) {
-      await this.hideMergeView()
+      await this.#removeMergeView(true)
     }
 
     // fetch xml if it is a path
@@ -780,7 +798,7 @@ export class XMLEditor extends EventEmitter {
     this.#setupMergeViewObserver();
 
     // notify listeners
-    this.emit(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW)
+    this.emit("editorShowMergeView", null)
   }
 
   /**
@@ -848,6 +866,31 @@ export class XMLEditor extends EventEmitter {
    * @returns {Promise<void>} A promise that resolves when the merge view is hidden or right away if it not enabled
    */
   async hideMergeView() {
+    await this.#removeMergeView(false)
+  }
+
+  /**
+   * Returns the documents compared in the merge view, for showing them elsewhere (e.g. side by side).
+   * Whitespace differences are normalized in the same way as in the merge view.
+   * @returns {MergeViewDocuments | null} The documents, or null if the merge view is not active
+   */
+  getMergeViewDocuments() {
+    if (!this.isMergeViewActive() || !this.#mergeViewTitles) {
+      return null
+    }
+    const current = this.#view.state.doc.toString()
+    const incoming = this.#ignoreWhitespaceInDiff
+      ? normalizeXmlWhitespaceForDiff(this.#incomingXml, current)
+      : this.#incomingXml
+    return { current, incoming, titles: { ...this.#mergeViewTitles } }
+  }
+
+  /**
+   * Removes the merge view and emits `editorHideMergeView`.
+   * @param {boolean} replaced - Whether a merge view with another version is shown right afterwards
+   * @returns {Promise<void>}
+   */
+  async #removeMergeView(replaced) {
     if (!this.#mergeViewExt) {
       return;
     }
@@ -868,7 +911,9 @@ export class XMLEditor extends EventEmitter {
     this.#mergeViewTitles = null;
 
     // notify listeners
-    this.emit(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW)
+    /** @type {MergeViewHideEventData} */
+    const eventData = { replaced }
+    this.emit("editorHideMergeView", eventData)
   }
 
   /**
@@ -1043,6 +1088,14 @@ export class XMLEditor extends EventEmitter {
     requestAnimationFrame(() => {
       this.#view.scrollDOM.scrollLeft = 0;
     });
+  }
+
+  /**
+   * Returns the active editor theme bundle.
+   * @returns {EditorTheme}
+   */
+  getTheme() {
+    return this.#currentTheme
   }
 
   /**

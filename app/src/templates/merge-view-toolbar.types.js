@@ -8,6 +8,7 @@
  * @property {HTMLElement} rejectAllBtn
  * @property {HTMLElement} acceptAllBtn
  * @property {HTMLElement} strictDiffToggle
+ * @property {HTMLElement} sideBySideBtn
  */
 
 export {}

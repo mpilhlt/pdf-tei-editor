@@ -40,6 +40,7 @@ The left part of the toolbar holds the editing controls. The right part is divid
 | ← diff / → diff | Merge view active | Navigate between changed chunks |
 | Current / Incoming (reject/accept all) | Merge view active | Accept or discard all incoming annotation changes at once |
 | Strict diff (paragraph icon) | Merge view active | Treat whitespace and line breaks as significant in the diff |
+| Side-by-side diff (split-layout icon) | Merge view active | Open a read-only side-by-side comparison in a separate window |
 | **Wrap** toggle | Always | Toggle soft line-wrapping in the editor |
 | **Header** toggle | When document has a `<teiHeader>` | Fold or unfold the TEI header section |
 | Edit header (card icon) | Not shown to annotators; enabled when the document is editable | Edit the metadata in the TEI header in a form |
@@ -291,12 +292,13 @@ Click the clock icon in the toolbar to open the revision history panel. It lists
 
 ## Merge View (Comparing Versions)
 
-When a diff document is selected in the toolbar, a side-by-side merge view activates. The diff navigation buttons and reject/accept controls highlight in the toolbar. You can:
+When a diff document is selected in the toolbar, the merge view activates: the changes are shown inline in the editor. The diff navigation buttons and reject/accept controls highlight in the toolbar. You can:
 
 - Use **← diff / → diff** to jump between changed chunks.
 - Click **Current** (orange) in the context menu or toolbar to keep the editor text for a chunk.
 - Click **Incoming** (blue) to apply the diff version for a chunk.
 - Use **Reject all** / **Accept all** to resolve all chunks at once.
+- Click **Side-by-side diff** (split-layout icon) to compare both versions next to each other in a separate, read-only window. The window follows the merge view: it shows your edits and another selected version, and it closes when the merge view ends. Accepting and rejecting changes stays in the editor. If nothing opens, allow popups for the site in your browser.
 
 ![The merge view in the XML editor: a changed bibl element with the old text in blue, the new text in orange, and the buttons Current and Incoming](../images/extraction-workflow-merge-view.png)
 
