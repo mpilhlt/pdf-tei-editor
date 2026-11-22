@@ -1283,7 +1283,6 @@ class UnitReviewPlugin extends Plugin {
     meter.addEventListener('click', () => {
       if (!this.#diagnosticsKey && this.getMissingLayoutMessage() === null) this.goToNext('unreviewed')
     })
-    this.#updateMeterHint()
     return meter
   }
 
@@ -1294,7 +1293,7 @@ class UnitReviewPlugin extends Plugin {
   #updateMeterHint() {
     const hint = this.#meter?.querySelector('.ur-hint')
     if (!hint) return
-    hint.textContent = this.#diagnosticsKey
+    hint.textContent = this.getMissingLayoutMessage() !== null ? '' : this.#diagnosticsKey
       ? 'Click to show the units that are not OK in the diagnostics drawer. F7: next unit you have not reviewed.'
       : 'Click to go to the next unit not reviewed yet. F7: next unit you have not reviewed.'
   }
@@ -1306,6 +1305,7 @@ class UnitReviewPlugin extends Plugin {
     const missingLayout = this.getMissingLayoutMessage()
     const visible = this.#enabled && (s.units > 0 || missingLayout !== null)
     meter.style.display = visible ? 'inline-flex' : 'none'
+    this.#updateMeterHint()
     ;/** @type {HTMLElement} */ (meter.querySelector('.ur-warning')).style.display = missingLayout !== null ? '' : 'none'
     if (!visible) return
     if (missingLayout !== null) {

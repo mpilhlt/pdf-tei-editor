@@ -182,6 +182,7 @@ test.describe('Unit review', () => {
         const p = popup.getBoundingClientRect();
         return p.width > 0 && p.bottom <= m.top + 1 && m.top - p.bottom < 40 && p.left < m.right && p.right > m.left;
       })).toBe(true);
+      await expect(page.getByTestId('unit-review-meter').locator('.ur-hint')).toHaveText(/Click to go to the next unit not reviewed yet/);
       await page.mouse.move(0, 0);
 
       // without units in the diagnostics drawer, clicking the meter goes to the next unit nobody
@@ -258,6 +259,8 @@ test.describe('Unit review', () => {
       await prompt.locator('input').fill('wrong year');
       await prompt.locator('input').press('Enter');
       await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 not reviewed');
+      // with the not-OK unit listed in the diagnostics drawer, clicking the meter shows the drawer
+      await expect(page.getByTestId('unit-review-meter').locator('.ur-hint')).toHaveText(/in the diagnostics drawer/);
       text = await editorText(page);
       const betaFp = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').getUnits()[1].fingerprint);
       expect(text).toContain(`<note type="not-ok" n="${betaFp}">wrong year</note>`);
