@@ -774,16 +774,38 @@ export class XMLEditor extends EventEmitter {
    */
   getTopVisibleLine() {
     const view = this.#view
-    // the editor may be scrolled by an ancestor element instead of its own scroller: the visible
-    // area starts at the lowest top edge of the clipping ancestors (or the window)
+    const block = view.lineBlockAtHeight(Math.max(0, this.#visibleTop() - view.documentTop))
+    return view.state.doc.lineAt(block.from).number
+  }
+
+  /**
+   * Returns the top edge (in viewport coordinates) of the visible part of the editor. The editor may
+   * be scrolled by an ancestor element instead of its own scroller: the visible area starts at the
+   * lowest top edge of the clipping ancestors (or the window).
+   * @returns {number}
+   */
+  #visibleTop() {
     let visibleTop = 0
-    for (let el = /** @type {Element | null} */ (view.scrollDOM); el; el = el.parentElement) {
+    for (let el = /** @type {Element | null} */ (this.#view.scrollDOM); el; el = el.parentElement) {
       if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(el).overflowY)) {
         visibleTop = Math.max(visibleTop, el.getBoundingClientRect().top)
       }
     }
-    const block = view.lineBlockAtHeight(Math.max(0, visibleTop - view.documentTop))
-    return view.state.doc.lineAt(block.from).number
+    return visibleTop
+  }
+
+  /**
+   * Returns the element that actually scrolls the editor content: the editor's own scroller or the
+   * nearest ancestor whose content overflows it.
+   * @returns {HTMLElement | null}
+   */
+  #scrollingElement() {
+    for (let el = /** @type {HTMLElement | null} */ (this.#view.scrollDOM); el; el = el.parentElement) {
+      if (/(auto|scroll)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight) {
+        return el
+      }
+    }
+    return null
   }
 
   /**
@@ -806,6 +828,16 @@ export class XMLEditor extends EventEmitter {
     const doc = this.#view.state.doc
     const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)))
     this.#view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 0 }) })
+    // CodeMirror may scroll by estimated heights of lines it has not drawn yet (e.g. while the
+    // window is in the background and animation frames are throttled): correct the position once
+    // the lines around the target are drawn
+    setTimeout(() => {
+      const view = this.#view
+      if (line.from > view.state.doc.length) return
+      const offset = view.lineBlockAt(line.from).top - (this.#visibleTop() - view.documentTop)
+      const scroller = this.#scrollingElement()
+      if (scroller && Math.abs(offset) >= 1) scroller.scrollTop += offset
+    }, 50)
   }
 
   /**
