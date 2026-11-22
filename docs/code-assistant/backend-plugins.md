@@ -1262,9 +1262,9 @@ async def initialize(self, context: PluginContext) -> None:
 ```
 
 
-### Fallback for Autosearch
+### Fallback for the PDF sync
 
-When the text of the selected XML node is not found in the PDF (typically because the PDF is a scan without text layer), or the node has no text at all (e.g. an empty `<pb/>` selected via the navigation), the Autosearch switch of the PDF viewer asks the `pdfSearch.fallback` extension point for a page. A frontend extension implements it to supply its own heuristic:
+When the text of the selected XML node is not found in the PDF (typically because the PDF is a scan without text layer), or the node has no text at all (e.g. an empty `<pb/>` selected via the navigation), the editor sync plugin (`app/src/plugins/editor-sync.js`, "Sync with editor" switch) asks the `pdfSearch.fallback` extension point for a page. A frontend extension implements it to supply its own heuristic:
 
 ```javascript
 class MyExt extends window.FrontendExtensionPlugin {

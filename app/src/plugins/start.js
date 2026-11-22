@@ -8,7 +8,6 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
- * @import { RangeWithNode } from '../modules/xmleditor.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -163,9 +162,6 @@ class StartPlugin extends Plugin {
         })
       }
 
-      // configure the xml editor events
-      this.#configureFindNodeInPdf()
-
       // Heartbeat mechanism for file locking and offline detection
       HeartbeatPlugin.getInstance().startHeartbeat(await this.#config.get('heartbeat.interval', 10))
 
@@ -217,47 +213,6 @@ class StartPlugin extends Plugin {
     Object.assign(this.#titleSlots, slots)
     const title = renderTitleTemplate(this.state.titleTemplate, this.#titleSlots)
     if (document.title !== title) document.title = title
-  }
-
-  /**
-   * Add behavior that looks up the content of the current node in the PDF
-   */
-  #configureFindNodeInPdf() {
-    /** @type {Node | null} */
-    let lastNode = null
-
-    // Cross-plugin coordination: Find the currently selected node's contents in the PDF
-    this.#xmlEditor.on("selectionChanged", async (/** @type {RangeWithNode[]} */ ranges) => {
-      // workaround for the node selection not being updated immediately
-      await new Promise(resolve => setTimeout(resolve, 100)) // wait for the next tick
-      // trigger auto-search if enabled and if a new node has been selected
-      const node = this.#getAutoSearchNode(ranges?.[0]?.node ?? null)
-
-      if (this.getDependency('pdfviewer').isAutoSearchEnabled() && node && node !== lastNode) {
-        // Record the node before awaiting the search: "selectionChanged" can fire
-        // several times in quick succession for the same effective selection (e.g.
-        // during initial document load), each scheduling this async handler. Without
-        // updating lastNode synchronously here, all of them would still see the stale
-        // value while the first search is in flight and re-trigger the PDF lookup.
-        lastNode = node
-        await this.#services.searchNodeContentsInPdf(node)
-      }
-    })
-  }
-
-  /**
-   * The node whose position Autosearch looks up: the node selected via the navigation xpath, or the
-   * element at the cursor if the cursor is not inside it. The latter happens when the cursor is outside
-   * every element of the navigation xpath, e.g. in the text between two `<pb/>` with `//tei:pb`.
-   * @param {Element|null} cursorNode - the element at the cursor
-   * @returns {Element|null}
-   */
-  #getAutoSearchNode(cursorNode) {
-    const selectedNode = this.#xmlEditor.selectedNode
-    if (selectedNode && cursorNode && !selectedNode.contains(cursorNode)) {
-      return cursorNode
-    }
-    return selectedNode ?? cursorNode
   }
 }
 

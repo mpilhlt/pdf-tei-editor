@@ -8,6 +8,10 @@ Three mechanisms are available. Choose based on the relationship between produce
 | Extension points (`static extensionPoints`) | A host plugin needs structured contributions from many plugins. Contributions are additive and defined at install/start time. |
 | `getDependency()` API | The interaction targets one specific plugin, or a synchronous return value is required. |
 
+**Prefer extension points over hard dependencies.** When a plugin needs another plugin to do something, or to show something in its UI, define an extension point for it instead of calling the other plugin's API through `getDependency()`. A hard dependency (a `deps` entry plus API calls) is only appropriate for core features that many call sites already depend on (e.g. `logger`, `client`, `xmleditor`, `pdfviewer`). Features built on top of a core plugin go into their own plugin, which depends on the core plugin and contributes to it through extension points; callers then invoke an extension point and do not need to know which plugin implements it. Document every new extension point in `app/src/extension-points.js` with its caller, its handler(s) and its function signature.
+
+Example: the synchronization of the XML editor and the PDF viewer (`app/src/plugins/editor-sync.js`) is a plugin of its own. It depends on `pdfviewer` and contributes its "Sync with editor" switch to the PDF viewer's statusbar via `pdfViewer.statusbarItems`, which `PdfViewerPlugin.start()` collects, and learns about page changes via `pdfViewer.pageChanged`. `ServicesPlugin.searchNodeContentsInPdf()` does not call the PDF viewer, but invokes `pdfSearch.searchNode`, which `EditorSyncPlugin` handles.
+
 Cross-plugin UI access via the global `ui` object is never correct. A plugin that needs to affect another plugin's widget must use one of the three mechanisms above.
 
 ---
@@ -167,8 +171,14 @@ Only add a plugin to `deps` when it must be fully installed before this plugin's
 ```
 Need to affect another plugin's widget?
   → No direct ui.otherPlugin.* access allowed.
+  → To add a widget to another plugin's UI, contribute it via an extension point of that plugin
+    (e.g. toolbar.contentItems, pdfViewer.statusbarItems); add one if it does not exist yet.
   → If the other plugin owns the widget, add an API method to it and use getDependency().
   → If the value is domain state (e.g. readOnly, currentUser), use dispatchStateChange().
+
+Need another plugin to perform an action?
+  → Invoke an extension point that the other plugin handles (e.g. pdfSearch.searchNode).
+  → Use getDependency() only for core plugins that many call sites already depend on.
 
 Need contributions from many plugins?
   → Define an extension point. Contributors implement it passively.

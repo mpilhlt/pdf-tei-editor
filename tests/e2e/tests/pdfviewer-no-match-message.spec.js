@@ -2,7 +2,7 @@
  * PDF viewer no-match message end-to-end tests
  *
  * Checks that a PDF text search without a match shows its message in the PDF
- * viewer statusbar next to the Autosearch switch, not as a toast, and that the
+ * viewer statusbar next to the "Sync with editor" switch, not as a toast, and that the
  * message is removed again after 5 seconds.
  *
  * @testCovers app/src/plugins/pdfviewer.js
@@ -31,7 +31,7 @@ const MESSAGE = 'No sufficiently similar text found in the PDF';
 const NO_MATCH_TEXT = 'qzxv wjkq pfzx vbnq mlkj zzqx ywqv';
 
 /**
- * Searches the PDF for a `<p>` in `/TEI/text` with the given text, as Autosearch does.
+ * Searches the PDF for a `<p>` in `/TEI/text` with the given text, as the "Sync with editor" switch does.
  * @param {Page} page
  * @param {string} text
  */
@@ -79,11 +79,11 @@ test.describe('PDF viewer no-match message', () => {
       await expect(message).toHaveAttribute('text', MESSAGE);
       await expect(message).toHaveAttribute('variant', 'warning');
 
-      // Placed directly after the Autosearch switch
+      // Placed directly after the "Sync with editor" switch
       const precededBySwitch = await message.evaluate(el => {
         const bar = /** @type {any} */ (el.parentElement);
         const ids = bar.positions.left.map(/** @param {{id: string}} w */ w => w.id);
-        const switchEl = bar.querySelector('[name="searchSwitch"]');
+        const switchEl = bar.querySelector('[name="syncSwitch"]');
         return ids.indexOf(el.id) === ids.indexOf(switchEl.id) + 1;
       });
       expect(precededBySwitch).toBe(true);

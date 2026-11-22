@@ -18,6 +18,10 @@ import { SessionStorage } from '../modules/session-storage.js'
 import { userHasRole } from '../modules/acl-utils.js'
 import { encodeFilename, decodeFilename } from '../modules/doi-utils.js'
 import Plugin from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
+
+/** Delay after the last page change before `pdfViewer.pageChanged` is invoked */
+const PAGE_CHANGED_DELAY_MS = 300;
 
 //
 // UI Parts
@@ -64,12 +68,12 @@ class PdfViewerPlugin extends Plugin {
   #pageInfoWidget;
   /** @type {HTMLElement} */
   #zoomInfoWidget;
-  /** @type {import('../modules/panels/widgets/status-switch.js').StatusSwitch|null} */
-  #autoSearchSwitch = null;
   /** @type {StatusText|null} */
   #statusMessageWidget = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   #statusMessageTimer = null;
+  /** @type {ReturnType<typeof setTimeout>|null} */
+  #pageChangedTimer = null;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the PDFJSViewer API.
@@ -80,7 +84,7 @@ class PdfViewerPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#pdfViewer;
-    const pluginMethods = new Set(['isAutoSearchEnabled', 'showStatusMessage', 'clearStatusMessage']);
+    const pluginMethods = new Set(['showStatusMessage', 'clearStatusMessage']);
     return /** @type {PDFJSViewer} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -93,15 +97,7 @@ class PdfViewerPlugin extends Plugin {
   }
 
   /**
-   * Whether auto-search is currently enabled.
-   * @returns {boolean}
-   */
-  isAutoSearchEnabled() {
-    return /** @type {any} */ (this.#autoSearchSwitch)?.checked ?? false;
-  }
-
-  /**
-   * Shows a transient message in the statusbar, next to the Autosearch switch.
+   * Shows a transient message on the left of the statusbar.
    * A new message replaces the current one and restarts the timeout.
    * @param {string} text - The message
    * @param {{variant?: 'default'|'warning'|'error'|'success', timeout?: number}} [options]
@@ -306,20 +302,6 @@ class PdfViewerPlugin extends Plugin {
     downloadBtn.addEventListener('widget-click', () => this.#onDownloadPdf());
     toolbar.add(downloadBtn, 60);
 
-    // Add autosearch switch to statusbar
-    const statusBar = ui.pdfViewer.statusbar;
-    const savedAutoSearch = this.uiStorage.get('autosearch', false);
-    const autoSearchSwitchWidget = PanelUtils.createSwitch({
-      text: 'Autosearch',
-      helpText: savedAutoSearch ? 'on' : 'off',
-      checked: savedAutoSearch,
-      name: 'searchSwitch'
-    });
-
-    this.#autoSearchSwitch = autoSearchSwitchWidget;
-    autoSearchSwitchWidget.addEventListener('widget-change', (evt) => this.#onAutoSearchSwitchChange(evt));
-    statusBar.add(autoSearchSwitchWidget, 'left', 10);
-
     // Capture Ctrl/Cmd+S to trigger PDF download
     const pdfViewerContainer = document.getElementById('pdf-viewer');
     if (pdfViewerContainer) {
@@ -335,6 +317,7 @@ class PdfViewerPlugin extends Plugin {
     // Listen to PDF viewer events to update controls and persist state
     this.#pdfViewer.eventBus.on('pagechanging', (evt) => {
       this.#updatePageInfo(evt.pageNumber, this.#pdfViewer.pdfDoc?.numPages || 0);
+      this.#schedulePageChanged(evt.pageNumber);
       if (!this.#isRestoringState) {
         const pdfId = this.state?.pdf;
         if (pdfId) {
@@ -378,6 +361,43 @@ class PdfViewerPlugin extends Plugin {
       this.#textSelectBtn.setAttribute('variant', 'default');
       this.#handToolBtn.setAttribute('variant', 'primary');
     }
+  }
+
+  /**
+   * Adds the statusbar widgets that other plugins contribute via the
+   * `pdfViewer.statusbarItems` extension point.
+   * @returns {Promise<void>}
+   */
+  async start() {
+    const results = await this.context.invokePluginEndpoint(
+      ep.pdfViewer.statusbarItems, [], { result: 'values', throws: false }
+    );
+    const statusBar = ui.pdfViewer.statusbar;
+    for (const items of results) {
+      if (!Array.isArray(items)) continue;
+      for (const { element, position = 'left', priority = 0 } of items) {
+        if (element instanceof HTMLElement && !element.isConnected) {
+          statusBar.add(element, position, priority);
+        }
+      }
+    }
+  }
+
+  /**
+   * Invokes the `pdfViewer.pageChanged` extension point once the page has stopped
+   * changing for PAGE_CHANGED_DELAY_MS (a scroll over several pages counts as one change).
+   * @param {number} page - 1-based page number
+   * @returns {void}
+   */
+  #schedulePageChanged(page) {
+    if (this.#pageChangedTimer) {
+      clearTimeout(this.#pageChangedTimer);
+    }
+    this.#pageChangedTimer = setTimeout(() => {
+      this.#pageChangedTimer = null;
+      const userInitiated = this.#pdfViewer.isUserNavigation();
+      this.context.invokePluginEndpoint(ep.pdfViewer.pageChanged, [page, { userInitiated }], { result: 'values', throws: false });
+    }, PAGE_CHANGED_DELAY_MS);
   }
 
   /**
@@ -496,6 +516,7 @@ class PdfViewerPlugin extends Plugin {
     const newPage = currentPage + delta;
     if (newPage >= 1 && newPage <= this.#pdfViewer.pdfDoc.numPages) {
       await this.#pdfViewer.goToPage(newPage);
+      this.#pdfViewer.markUserNavigation();
     }
   }
 
@@ -574,26 +595,6 @@ class PdfViewerPlugin extends Plugin {
   }
 
   /**
-   * @param {Event} evt
-   */
-  async #onAutoSearchSwitchChange(evt) {
-    const customEvt = /** @type {CustomEvent} */ (evt);
-    const checked = customEvt.detail.checked;
-    const autoSearchSwitch = customEvt.detail.widget;
-
-    if (autoSearchSwitch) {
-      autoSearchSwitch.setAttribute('help-text', checked ? 'on' : 'off');
-    }
-    this.uiStorage.set('autosearch', checked);
-
-    this.#logger.info(`Auto search is: ${checked}`);
-    const xmlEditor = this.getDependency('xmleditor');
-    if (checked && xmlEditor.selectedNode) {
-      await this.getDependency('services').searchNodeContentsInPdf(xmlEditor.selectedNode);
-    }
-  }
-
-  /**
    * @param {string} pdfId
    */
   async #restoreViewerState(pdfId) {
@@ -606,7 +607,7 @@ class PdfViewerPlugin extends Plugin {
       if (state.zoom !== undefined) {
         await this.#pdfViewer.setZoom(state.zoom);
       }
-      // A search (e.g. autosearch) may already have positioned the view
+      // A search (e.g. by the "Sync with editor" switch) may already have positioned the view
       // on a match in this document: don't jump away from it
       if (this.#pdfViewer._highlightMatch) {
         return;
