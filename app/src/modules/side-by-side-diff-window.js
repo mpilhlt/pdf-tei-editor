@@ -23,8 +23,11 @@ const WINDOW_STYLE = `
   html, body { margin: 0; height: 100%; }
   body { display: flex; flex-direction: column; font-family: system-ui, sans-serif; font-size: 14px; }
   .sbs-header { display: flex; flex: none; border-bottom: 1px solid #ccc; background: #f5f5f5; }
-  .sbs-header > div { flex: 1; padding: 6px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sbs-header > div { flex: 1; min-width: 0; display: flex; align-items: center; padding: 0 0 0 12px; }
   .sbs-header > div + div { border-left: 1px solid #ccc; }
+  .sbs-title { flex: 1; padding: 6px 12px 6px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sbs-sync { flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px; white-space: nowrap; cursor: pointer; }
+  .sbs-close { flex: none; margin: 3px 6px; padding: 2px 12px; font: inherit; cursor: pointer; }
   .sbs-label { color: #666; margin-right: 6px; }
   .sbs-diff { flex: 1; overflow: auto; }
   .sbs-diff .cm-mergeView { min-height: 100%; }
@@ -36,7 +39,14 @@ const WINDOW_STYLE = `
  * @typedef {object} SideBySideDiffWindowOptions
  * @property {Extension[]} [theme] - CodeMirror theme extensions (e.g. the XML editor's theme)
  * @property {string} [title] - The window title
+ * @property {boolean} [syncScroll] - Initial state of the "Sync with editor" checkbox
+ * @property {(enabled: boolean) => void} [onSyncScrollChange] - Called when the user toggles the checkbox
+ * @property {(lineNumber: number) => void} [onScrollLine] - Called with the line of the current
+ *   document at the top of the window when the user scrolls the window while syncing is enabled
  */
+
+/** Time in ms during which scroll events caused by `scrollToLine()` are not reported */
+const PROGRAMMATIC_SCROLL_MS = 300
 
 export class SideBySideDiffWindow {
   /** @type {Window | null} */
@@ -53,6 +63,15 @@ export class SideBySideDiffWindow {
 
   /** @type {SideBySideDiffWindowOptions} */
   #options
+
+  /** @type {HTMLElement | null} The scrolling container of both editors */
+  #container = null
+
+  /** @type {HTMLInputElement | null} */
+  #syncCheckbox = null
+
+  /** Scroll events before this time (performance.now()) were caused by `scrollToLine()` */
+  #ignoreScrollUntil = 0
 
   /** @param {SideBySideDiffWindowOptions} [options] */
   constructor(options = {}) {
@@ -103,10 +122,36 @@ export class SideBySideDiffWindow {
     }
   }
 
+  /**
+   * Whether the "Sync with editor" checkbox is checked
+   * @returns {boolean}
+   */
+  isSyncEnabled() {
+    return this.isOpen() && Boolean(this.#syncCheckbox?.checked)
+  }
+
+  /**
+   * Scrolls the window so that the given line of the current document is at the top, if syncing is
+   * enabled. The resulting scroll events are not reported to `onScrollLine`.
+   * @param {number} lineNumber - 1-based line number of the current document
+   */
+  scrollToLine(lineNumber) {
+    if (!this.isSyncEnabled() || !this.#mergeView || !this.#container) return
+    const view = this.#mergeView.b
+    const doc = view.state.doc
+    const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)))
+    // CodeMirror measures the lines before scrolling the container (estimated heights of lines
+    // that were not drawn yet would leave the target off by a few pixels)
+    this.#ignoreScrollUntil = performance.now() + PROGRAMMATIC_SCROLL_MS
+    view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 0 }) })
+  }
+
   /** Closes the window if it is open */
   close() {
     this.#mergeView?.destroy()
     this.#mergeView = null
+    this.#container = null
+    this.#syncCheckbox = null
     if (this.isOpen()) this.#window?.close()
     this.#window = null
   }
@@ -128,11 +173,33 @@ export class SideBySideDiffWindow {
 
     const header = doc.createElement('div')
     header.className = 'sbs-header'
-    this.#incomingTitle = doc.createElement('div')
-    this.#currentTitle = doc.createElement('div')
-    header.append(this.#incomingTitle, this.#currentTitle)
+    const incomingCell = doc.createElement('div')
+    const currentCell = doc.createElement('div')
+    this.#incomingTitle = doc.createElement('span')
+    this.#incomingTitle.className = 'sbs-title'
+    this.#currentTitle = doc.createElement('span')
+    this.#currentTitle.className = 'sbs-title'
+    const closeBtn = doc.createElement('button')
+    closeBtn.type = 'button'
+    closeBtn.className = 'sbs-close'
+    closeBtn.textContent = 'Close'
+    closeBtn.addEventListener('click', () => this.close())
+    const syncLabel = doc.createElement('label')
+    syncLabel.className = 'sbs-sync'
+    syncLabel.title = 'Scroll this window and the XML editor together, by the line numbers of the current document'
+    const syncCheckbox = doc.createElement('input')
+    syncCheckbox.type = 'checkbox'
+    syncCheckbox.name = 'syncScroll'
+    syncCheckbox.checked = this.#options.syncScroll ?? true
+    syncCheckbox.addEventListener('change', () => this.#options.onSyncScrollChange?.(syncCheckbox.checked))
+    syncLabel.append(syncCheckbox, doc.createTextNode('Sync with editor'))
+    this.#syncCheckbox = syncCheckbox
+    incomingCell.append(this.#incomingTitle)
+    currentCell.append(this.#currentTitle, syncLabel, closeBtn)
+    header.append(incomingCell, currentCell)
     const container = doc.createElement('div')
     container.className = 'sbs-diff'
+    this.#container = container
     doc.body.append(header, container)
     this.#setTitles(docs)
 
@@ -156,6 +223,19 @@ export class SideBySideDiffWindow {
       diffConfig: { scanLimit: 50000, timeout: 20000 }
     })
 
+    // CodeMirror redraws the visible lines on scrolling only while its IntersectionObserver reports
+    // the editor as visible. That observer is created in the realm of the opening window and does
+    // not see elements in this window (blank areas in Firefox), so request the measurement here.
+    const mergeView = this.#mergeView
+    const measure = () => {
+      mergeView.a.requestMeasure()
+      mergeView.b.requestMeasure()
+    }
+    container.addEventListener('scroll', measure, { passive: true })
+    container.addEventListener('scroll', () => this.#onScroll(), { passive: true })
+    win.addEventListener('resize', measure)
+    win.addEventListener('keydown', (evt) => { if (evt.key === 'Escape') this.close() })
+
     // the window content cannot be restored after a reload, as it is drawn from the opening window
     win.addEventListener('pagehide', () => {
       if (this.#window === win) {
@@ -163,6 +243,25 @@ export class SideBySideDiffWindow {
         this.#window = null
       }
     })
+  }
+
+  /** Reports the line at the top of the window to `onScrollLine` when the user scrolls */
+  #onScroll() {
+    if (!this.isSyncEnabled() || !this.#mergeView || !this.#container) return
+    if (performance.now() < this.#ignoreScrollUntil) return
+    const view = this.#mergeView.b
+    const block = view.lineBlockAtHeight(Math.max(0, this.#container.scrollTop - this.#documentOffset(view)))
+    this.#options.onScrollLine?.(view.state.doc.lineAt(block.from).number)
+  }
+
+  /**
+   * Distance of the top of the editor's document from the top of the scrolled content
+   * @param {EditorView} view
+   * @returns {number}
+   */
+  #documentOffset(view) {
+    const container = /** @type {HTMLElement} */ (this.#container)
+    return view.documentTop - container.getBoundingClientRect().top + container.scrollTop
   }
 
   /** @param {MergeViewDocuments} docs */

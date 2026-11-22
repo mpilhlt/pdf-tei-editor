@@ -61,6 +61,45 @@ test.describe('Side-by-side diff window', () => {
       expect(await editors.nth(0).locator('.cm-content').getAttribute('contenteditable')).toBe('false');
       expect(await editors.nth(1).locator('.cm-content').getAttribute('contenteditable')).toBe('false');
 
+      // scrolling renders the lines that come into view
+      await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = el.scrollHeight });
+      await expect(editors.nth(0).locator('.cm-content')).toContainText('</TEI>');
+      await expect(editors.nth(1).locator('.cm-content')).toContainText('</TEI>');
+      await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = 0 });
+
+      // "Sync with editor" (checked by default): scrolling the editor scrolls the window to the same
+      // line of the current document, and scrolling the window scrolls the editor
+      const windowTopLine = () => popup.locator('.sbs-diff').evaluate(container => {
+        const top = container.getBoundingClientRect().top;
+        const right = container.querySelectorAll('.cm-editor')[1];
+        const first = [...right.querySelectorAll('.cm-lineNumbers .cm-gutterElement')]
+          .find(el => el.textContent && el.getBoundingClientRect().bottom > top + 1);
+        return Number(first?.textContent);
+      });
+      await expect(popup.locator('input[name="syncScroll"]')).toBeChecked();
+      // a line below the folded teiHeader
+      const target = await page.evaluate(async () => {
+        const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        const doc = xmleditor.getView().state.doc;
+        const line = doc.lineAt(doc.toString().indexOf('<text ')).number + 3;
+        xmleditor.scrollLineToTop(line);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return xmleditor.getTopVisibleLine();
+      });
+      expect(target).toBeGreaterThan(3);
+      await expect.poll(windowTopLine).toBe(target);
+      await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = Math.floor(el.scrollHeight / 3) });
+      const lineAfterWindowScroll = await (async () => { await popup.waitForTimeout(300); return windowTopLine(); })();
+      await expect.poll(() => page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getTopVisibleLine()))
+        .toBe(lineAfterWindowScroll);
+      // unchecked: the window does not follow the editor
+      await popup.locator('input[name="syncScroll"]').uncheck();
+      await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').scrollLineToTop(1));
+      await popup.waitForTimeout(300);
+      expect(await windowTopLine()).toBe(lineAfterWindowScroll);
+      await popup.locator('input[name="syncScroll"]').check();
+      await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = 0 });
+
       // edits in the editor are shown in the window
       await page.evaluate(() => {
         const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
@@ -81,6 +120,22 @@ test.describe('Side-by-side diff window', () => {
         await (/** @type {any} */ (window)).app.getDependency('xmleditor').hideMergeView();
       });
       await expect.poll(() => popup.isClosed()).toBe(true);
+
+      // the Close button closes the window
+      await page.evaluate(async () => {
+        const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
+        await xmleditor.showMergeView(xmleditor.getView().state.doc.toString().replace('<teiHeader', '<!--INCOMING--><teiHeader'));
+      });
+      await expect.poll(() => button.evaluate(el => /** @type {any} */ (el).disabled)).toBe(false);
+      const [popup2] = await Promise.all([
+        page.waitForEvent('popup'),
+        button.click()
+      ]);
+      await popup2.getByRole('button', { name: 'Close' }).click();
+      await expect.poll(() => popup2.isClosed()).toBe(true);
+      await page.evaluate(async () => {
+        await (/** @type {any} */ (window)).app.getDependency('xmleditor').hideMergeView();
+      });
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);

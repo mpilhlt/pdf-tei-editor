@@ -768,6 +768,47 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
+   * Returns the number of the first line visible at the top of the editor, without changing the
+   * selection.
+   * @returns {number} 1-based line number
+   */
+  getTopVisibleLine() {
+    const view = this.#view
+    // the editor may be scrolled by an ancestor element instead of its own scroller: the visible
+    // area starts at the lowest top edge of the clipping ancestors (or the window)
+    let visibleTop = 0
+    for (let el = /** @type {Element | null} */ (view.scrollDOM); el; el = el.parentElement) {
+      if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(el).overflowY)) {
+        visibleTop = Math.max(visibleTop, el.getBoundingClientRect().top)
+      }
+    }
+    const block = view.lineBlockAtHeight(Math.max(0, visibleTop - view.documentTop))
+    return view.state.doc.lineAt(block.from).number
+  }
+
+  /**
+   * Whether the given element scrolls the editor content (the editor's own scroller or an ancestor
+   * of it), e.g. to filter scroll events captured at the document
+   * @param {EventTarget | null} target
+   * @returns {boolean}
+   */
+  isScrollContainer(target) {
+    if (target === this.#view.dom.ownerDocument) return true
+    return target instanceof Node && target.contains(this.#view.scrollDOM)
+  }
+
+  /**
+   * Scrolls the given line to the top of the editor, without changing the selection or the focus
+   * (unlike `scrollToLine()`).
+   * @param {number} lineNumber - 1-based line number, clamped to the document
+   */
+  scrollLineToTop(lineNumber) {
+    const doc = this.#view.state.doc
+    const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)))
+    this.#view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 0 }) })
+  }
+
+  /**
    * Loads and displays a merge view for the given XML file or string.
    * @param {string} xmlPathOrString The URL or path to the XML file, or an xml string
    * @returns {Promise<void>} A promise that resolves when the merge view is shown
@@ -775,12 +816,12 @@ export class XMLEditor extends EventEmitter {
    */
   async showMergeView(xmlPathOrString) {
 
-    this.#original = this.getXML() // store the original XML content;
-
-    // remove existing merge view
+    // remove existing merge view (before storing the original, which this resets)
     if (this.isMergeViewActive()) {
       await this.#removeMergeView(true)
     }
+
+    this.#original = this.getXML() // store the original XML content;
 
     // fetch xml if it is a path
     const diff = await this.#fetchXml(xmlPathOrString);
