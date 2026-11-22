@@ -40,7 +40,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { PanelUtils } from '../modules/panels/index.js'
 import { UIStorage } from '../modules/ui-storage.js'
-import { isInTeiText, getPageBreakHint, findPageBreak, getPageBreakText } from '../modules/tei-utils.js'
+import { isInTeiText, getPageBreakHint, findPageBreak, getPageBreakText, getPdfLookupNode } from '../modules/tei-utils.js'
 
 /** Storage key of the switch state */
 const STORAGE_KEY = 'enabled'
@@ -358,18 +358,17 @@ class EditorSyncPlugin extends Plugin {
   }
 
   /**
-   * The node whose position is looked up in the PDF: the node selected via the navigation xpath, or the
-   * element at the cursor if the cursor is not inside it. The latter happens when the cursor is outside
-   * every element of the navigation xpath, e.g. in the text between two `<pb/>` with `//tei:pb`.
+   * The node whose position is looked up in the PDF, see {@link getPdfLookupNode}. Null if the
+   * cursor is in an element without a single position in the PDF (e.g. in the whitespace
+   * directly inside `<text>`), in which case the PDF viewer does not navigate.
    * @param {Element|null} cursorNode - the element at the cursor
    * @returns {Element|null}
    */
   #getSearchNode(cursorNode) {
-    const selectedNode = this.#xmlEditor.selectedNode
-    if (selectedNode && cursorNode && !selectedNode.contains(cursorNode)) {
-      return cursorNode
-    }
-    return selectedNode ?? cursorNode
+    // Without a navigation xpath, the selected node is just the element at the cursor
+    const xmlEditor = this.#xmlEditor
+    const selectedNode = xmlEditor.parentPath ? xmlEditor.selectedNode : null
+    return getPdfLookupNode(selectedNode, cursorNode)
   }
 
   /**
