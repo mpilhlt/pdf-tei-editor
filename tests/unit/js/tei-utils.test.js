@@ -21,6 +21,7 @@ import {
   getPageBreakHint,
   findPageBreak,
   getPageBreakText,
+  getPdfLookupNode,
   addRevisionChange,
   getRevisionLabel,
   getRevisionStatus,
@@ -563,6 +564,46 @@ describe('document history ignores stand-off revisionDesc', () => {
     assert.strictEqual(headerChanges.length, 1);
     assert.strictEqual(headerChanges[0].getAttribute('status'), 'draft');
     assert.strictEqual(doc.querySelectorAll('standOff revisionDesc > change').length, 1);
+  });
+});
+
+describe('getPdfLookupNode', () => {
+  const doc = new JSDOM(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0"><text id="t">
+  <pb n="1"/>
+  <p id="p1">First page <hi id="h1">text</hi></p>
+  <pb n="2"/>
+  <p id="p2">Second page</p>
+  <div id="d1"><p id="p3">Third</p><pb n="3"/><p id="p4">page</p></div>
+</text></TEI>`, { contentType: 'text/xml' }).window.document;
+  const byId = (/** @type {string} */ id) => /** @type {Element} */ (doc.querySelector(`[id="${id}"]`));
+
+  it('returns the selected node if the cursor is inside it', () => {
+    assert.strictEqual(getPdfLookupNode(byId('p1'), byId('h1')), byId('p1'));
+    assert.strictEqual(getPdfLookupNode(byId('d1'), byId('d1')), byId('d1'));
+  });
+
+  it('returns the selected node if there is no cursor node', () => {
+    assert.strictEqual(getPdfLookupNode(byId('p1'), null), byId('p1'));
+    assert.strictEqual(getPdfLookupNode(null, null), null);
+  });
+
+  it('returns the element at the cursor if it is outside the selected node', () => {
+    assert.strictEqual(getPdfLookupNode(byId('p1'), byId('p2')), byId('p2'));
+    assert.strictEqual(getPdfLookupNode(null, byId('p2')), byId('p2'));
+  });
+
+  // https://github.com/mpilhlt/pdf-tei-editor/issues/900
+  it('returns null for whitespace in a container of the selected node', () => {
+    assert.strictEqual(getPdfLookupNode(byId('p1'), byId('t')), null);
+    assert.strictEqual(getPdfLookupNode(byId('p3'), byId('d1')), null);
+  });
+
+  it('returns null for whitespace in an element containing a page break', () => {
+    const pb = doc.getElementsByTagNameNS('*', 'pb')[0];
+    assert.strictEqual(getPdfLookupNode(pb, byId('t')), null);
+    assert.strictEqual(getPdfLookupNode(null, byId('t')), null);
+    assert.strictEqual(getPdfLookupNode(null, byId('d1')), null);
   });
 });
 

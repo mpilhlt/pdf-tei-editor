@@ -110,6 +110,33 @@ export function findPageBreak(doc, { n, ordinal }) {
 }
 
 /**
+ * Returns the node whose position should be looked up in the PDF for a selection in the XML
+ * editor: the node selected via the navigation xpath, or the element at the cursor if the
+ * cursor is not inside it (e.g. in the text between two `<pb/>` with `//tei:pb`) or if no
+ * navigation xpath is active.
+ *
+ * Returns null if the element at the cursor is used but has no single position in the PDF:
+ * if it is an ancestor of the selected node or contains a `<pb/>`. This is the case when
+ * the cursor is in the whitespace between elements, e.g. directly inside `<text>` or
+ * `<body>`; looking up the text of such a container would jump to the beginning of the PDF.
+ * @param {Element|null} selectedNode - the node selected via the navigation xpath, null if none is active
+ * @param {Element|null} cursorNode - the element at the cursor
+ * @returns {Element|null}
+ */
+export function getPdfLookupNode(selectedNode, cursorNode) {
+  if (!cursorNode || selectedNode?.contains(cursorNode)) {
+    return selectedNode;
+  }
+  if (selectedNode && cursorNode.contains(selectedNode)) {
+    return null;
+  }
+  if (cursorNode.getElementsByTagNameNS('*', 'pb').length > 0) {
+    return null;
+  }
+  return cursorNode;
+}
+
+/**
  * Returns the text that follows a `<pb/>` up to the next `<pb/>` (the text of the page),
  * whitespace-normalized and cut at `maxLength` characters.
  * @param {Element} pb
