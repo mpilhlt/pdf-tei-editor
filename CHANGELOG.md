@@ -2,6 +2,24 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.90.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.89.1...v0.90.0) (2026-11-22)
+
+
+### Bug Fixes
+
+* **file-selection:** show the loaded document when the collection filter excludes it ([5796137](https://github.com/mpilhlt/pdf-tei-editor/commit/5796137c87e5cecc7f8a7f3861d27c59c51134f5))
+* **merge-view:** keep the side-by-side diff window in sync while it is in the background ([b52f8ce](https://github.com/mpilhlt/pdf-tei-editor/commit/b52f8ce0297241f2577d64e0af8957b7d61f8226))
+* **merge-view:** let the active side lead the side-by-side scroll sync ([d764c11](https://github.com/mpilhlt/pdf-tei-editor/commit/d764c11c66a08b6f0ecdb0a9580fe15c041aabe8))
+* **merge-view:** rename the side-by-side window's checkbox to "Scroll with editor" ([96d9d15](https://github.com/mpilhlt/pdf-tei-editor/commit/96d9d157f10a1e9b06537afd0ed2d0c8356f6764))
+* **xmleditor:** correct scrollLineToTop() when CodeMirror scrolls by estimated line heights ([f4bc516](https://github.com/mpilhlt/pdf-tei-editor/commit/f4bc516d4d5ce8fc098e7d76d51a1323a4a5a0fd))
+
+
+### Features
+
+* **editor-sync:** two-way sync of XML editor and PDF viewer, faster lookup of large units ([a3954aa](https://github.com/mpilhlt/pdf-tei-editor/commit/a3954aa4d8dadc757e53662dacb8c6616961c1e9)), closes [#892](https://github.com/mpilhlt/pdf-tei-editor/issues/892)
+* **merge-view:** add a read-only side-by-side diff window ([8b75c7e](https://github.com/mpilhlt/pdf-tei-editor/commit/8b75c7e93b741c4db3f8a06dfc9802e331d57f2d))
+* **merge-view:** sync the side-by-side diff window with the editor, add Close button ([6e69671](https://github.com/mpilhlt/pdf-tei-editor/commit/6e69671b2b826388c907021fe408f9aa0b5b85c8))
+
 ## [0.89.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.89.0...v0.89.1) (2026-11-22)
 
 
