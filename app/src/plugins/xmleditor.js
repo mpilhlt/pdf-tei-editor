@@ -721,7 +721,7 @@ class XmlEditorPlugin extends Plugin {
    * @param {string[]} changedKeys
    * @param {ApplicationState} state
    */
-  async onStateUpdate(_changedKeys, state) {
+  async onStateUpdate(changedKeys, state) {
     // Track the currently loaded document so draft-save knows which key to write to.
     // We explicitly avoid clearing this on a null state.xml because `clear()` is called
     // during the transition — keep the last id until editorAfterLoad for the next document
@@ -762,9 +762,14 @@ class XmlEditorPlugin extends Plugin {
     }
 
     if (!state.xml) {
-      // end a merge view before the document goes (the merge-view plugin, if active, resets the diff state)
-      await this.#xmlEditor.hideMergeView();
-      this.#xmlEditor.clear();
+      // Clear the editor only when the document goes. services.load() sets state.xml only after
+      // the editor has loaded the document, so other state changes in the meantime (e.g. the
+      // xpath navigation selecting the stored xpath on editorAfterLoad) must not clear it (#893)
+      if (changedKeys.includes('xml')) {
+        // end a merge view before the document goes (the merge-view plugin, if active, resets the diff state)
+        await this.#xmlEditor.hideMergeView();
+        this.#xmlEditor.clear();
+      }
       this.#xmlEditor.setReadOnly(true);
       this.#xmlEditorEl.classList.remove('editor-readonly');
       if (this.#readOnlyStatusWidget && this.#readOnlyStatusWidget.isConnected) {

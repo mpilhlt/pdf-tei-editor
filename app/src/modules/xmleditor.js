@@ -162,6 +162,13 @@ export class XMLEditor extends EventEmitter {
   #readyPromise = null
 
   /**
+   * Incremented by every {@link loadXml}, so that a load whose content arrives after the one of a
+   * newer load does not overwrite the editor
+   * @type {number}
+   */
+  #loadGeneration = 0
+
+  /**
    * true if the content of the editor is different from the original XML document
    * @type {boolean}
    */
@@ -635,20 +642,29 @@ export class XMLEditor extends EventEmitter {
    * Loads XML, either from a string or from a given path. 
    * @async
    * @param {string} xmlPathOrString - The URL or path to the XML file, or an xml string
-   * @returns {Promise<void>} - A promise that resolves with no value when the document is fully loaded and the editor is ready. 
+   * If another document is loaded while this one is fetched, the content of the outdated load is
+   * discarded, whatever the order in which the fetches complete.
+   * @param {string} xmlPathOrString - The URL or path to the XML file, or an xml string
+   * @returns {Promise<boolean>} - A promise that resolves when the document is fully loaded and the editor is ready,
+   *   with `false` if the load was superseded by a newer one and its content was discarded, otherwise `true`.
    * @throws {Error} - If there's an error loading or parsing the XML.
    */
   async loadXml(xmlPathOrString) {
+    const generation = ++this.#loadGeneration
     // this created the isReadyPromise
     this.#markAsNotReady()
 
-    // fetch xml if path 
-    //console.warn("Loading XML")
+    // fetch xml if path
     const xml = await this.#fetchXml(xmlPathOrString);
+    if (generation !== this.#loadGeneration) {
+      // a newer load started while this one was fetched: it takes care of the content and readiness
+      return false
+    }
 
     
     // inform listeners about the xml
     await this.emit("editorBeforeLoad", xml)
+    if (generation !== this.#loadGeneration) return false
 
     // Clear undo/redo history so the previous document's edits cannot be undone into new doc (fixes #387)
     this.clearHistory();
@@ -676,6 +692,7 @@ export class XMLEditor extends EventEmitter {
     } finally {
       this.#view.dom.style.visibility = '';
     }
+    return true
   }
 
   /**
