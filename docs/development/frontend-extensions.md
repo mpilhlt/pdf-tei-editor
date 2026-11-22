@@ -116,7 +116,7 @@ To expose an additional module, add a `@registerModule` tag to its file header a
 | Name | Common API |
 |------|-----------|
 | `'dialog'` | `info`, `error`, `success`, `confirm`, `prompt` |
-| `'services'` | `load(files)`, `showMergeView(diff)` |
+| `'services'` | `load(files)` |
 | `'file-selection'` | `reload(options)` |
 | `'sse'` | `addEventListener(type, fn)`, `removeEventListener(type, fn)` |
 | `'client'` | `.apiClient` — typed API client for all `/api/v1/` endpoints |
@@ -125,6 +125,8 @@ To expose an additional module, add a `@registerModule` tag to its file header a
 | `'tools'` | `addMenuItems(items, group)` |
 | `'xmleditor'` | `getXmlTree()`, `showMergeView(xml)`, etc. |
 | `'unit-review'` | `getVariant()`, `getUnitPath()`, `findUnitElements(xmlDoc, unitPath)`, `getUnits()`, `setMarks(reviewer, marks)` |
+
+To compare the open document with another stored version, invoke the `mergeView.show` extension point instead of calling a plugin, so that the extension keeps working when the merge-view plugin is deactivated: `await this.context.invokePluginEndpoint('mergeView.show', [stableId], { throws: true })`, and `'mergeView.hide'` to end the comparison. To show a merge view with generated XML (e.g. a proposed change), call `getDependency('xmleditor').showMergeView(xml)`.
 
 ### Standard Plugin API (inherited)
 

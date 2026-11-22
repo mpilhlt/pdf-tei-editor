@@ -73,7 +73,17 @@ class TeiValidationPlugin extends Plugin {
     }
   }
 
-  static extensionPoints = [ep.validation.validate, ep.validation.inProgress];
+  static extensionPoints = [ep.validation.validate, ep.validation.configure, ep.validation.inProgress];
+
+  /**
+   * Extension point handler for `ep.validation.configure`.
+   * Called by plugins that switch validation off and on without depending on this plugin, e.g. the
+   * merge-view plugin while the merge view is shown.
+   * Delegates to {@link TeiValidationPlugin#configure}.
+   * @param {{ mode: string }} options
+   * @returns {void}
+   */
+  [ep.validation.configure](options) { return this.configure(options) }
 
   /**
    * Extension point handler for `ep.validation.validate`.

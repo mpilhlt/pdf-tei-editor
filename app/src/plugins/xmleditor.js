@@ -14,6 +14,7 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { EditorTheme } from '../modules/codemirror/editor-themes.js'
  * @import { xpathNavigationStatusbarPart } from './xpath-navigation.js'
+ * @import { mergeViewToolbarPart } from './merge-view.js'
  */
 
 import ui, { updateUi } from '../ui.js'
@@ -75,13 +76,14 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  */
 
 /**
- * XML editor toolbar navigation properties
- * @typedef {object} xmlEditorToolbarPart
- * @property {StatusButton} prevDiffBtn - Previous diff button
- * @property {StatusButton} nextDiffBtn - Next diff button
- * @property {StatusButton} rejectAllBtn - Reject all changes button
- * @property {StatusButton} acceptAllBtn - Accept all changes button
- * @property {StatusToggleButton} strictDiffToggle - Strict diff toggle (whitespace and linebreaks significant in merge view diff)
+ * XML editor toolbar navigation properties. The merge view widgets in the left section are added by
+ * the merge-view plugin (see {@link mergeViewToolbarPart}).
+ * @typedef {mergeViewToolbarPart & xmlEditorToolbarPartOwn} xmlEditorToolbarPart
+ */
+
+/**
+ * The toolbar widgets of the XML editor plugin itself and of plugins that add them without a typedef of their own
+ * @typedef {object} xmlEditorToolbarPartOwn
  * @property {StatusToggleButton} wrapToggle - Line wrapping toggle
  * @property {headerGroupPart} headerGroup - Container for the fused header toggle/edit buttons
  * @property {StatusButton} validateBtn - Validate XML button
@@ -121,8 +123,9 @@ await registerTemplate('xmleditor-theme-button', 'xmleditor-theme-button.html')
  */
 
 /**
- * Section of the XML editor toolbar's right-hand side that a widget is added to
- * @typedef {'review'|'import-export'|'plugins'} ToolbarSection
+ * Section of the XML editor toolbar that a widget is added to: `'left'` at the start of the toolbar
+ * (e.g. the merge view buttons), the others on its right-hand side
+ * @typedef {'left'|'review'|'import-export'|'plugins'} ToolbarSection
  */
 
 /** Reasons of `fileDataChanged` events after which a read-only document is reloaded */
@@ -172,18 +175,6 @@ class XmlEditorPlugin extends Plugin {
 
   // Toolbar widget references
   /** @type {StatusButton} */
-  #prevDiffBtn;
-  /** @type {StatusButton} */
-  #nextDiffBtn;
-  /** @type {StatusButton} */
-  #rejectAllBtn;
-  /** @type {StatusButton} */
-  #acceptAllBtn;
-  // Whether the merge (diff) view is currently shown, independent of read-only state
-  #mergeViewActive = false;
-  /** @type {() => void} */
-  #updateDiffButtons = () => {};
-  /** @type {StatusButton} */
   #validateBtn;
   /** @type {StatusButton} */
   #undoBtn;
@@ -201,8 +192,6 @@ class XmlEditorPlugin extends Plugin {
   // Statusbar widget references
   /** @type {StatusToggleButton} */
   #wrapToggle;
-  /** @type {StatusToggleButton} */
-  #strictDiffToggle;
 
   // Status widgets
   /** @type {StatusText} */
@@ -322,13 +311,14 @@ class XmlEditorPlugin extends Plugin {
       this.#statusbar.add(widget, 'right', statusbarRightPriorities[index] ?? 0);
     });
 
-    // Create toolbar widgets from templates and add to toolbar
-    const toolbarWidgets = createFromTemplate('xmleditor-toolbar');
-    const toolbarPriorities = [104, 103, 102, 101, 100, 99, 98, 97, 96, 95, 94]; // style, prevDiff, nextDiff, sep, reject, accept, sep, ignoreWhitespace, sep, wrap, header
-    toolbarWidgets.forEach((widget, index) => {
-      if (widget instanceof HTMLElement) {
-        this.#toolbar.add(widget, toolbarPriorities[index] || 1);
-      }
+    // Left-hand toolbar sections: [plugin additions, e.g. the merge view buttons] | [view options].
+    // The separator between them has priority 96, so that it goes before the merge view buttons (97-103).
+    this.#toolbar.defineSections(['left', 'view'], 96);
+    const viewWidgets = /** @type {HTMLElement[]} */ (createFromTemplate('xmleditor-toolbar')
+      .filter(widget => widget instanceof HTMLElement));
+    const viewPriorities = [95, 94]; // wrap, header group
+    viewWidgets.forEach((widget, index) => {
+      this.#toolbar.addToSection('view', widget, viewPriorities[index] ?? 1);
     });
 
     // Create TEI action buttons and add to toolbar (to the left of upload/download)
@@ -452,13 +442,8 @@ class XmlEditorPlugin extends Plugin {
     this.#indentationStatusWidget = this.#statusbar.indentationStatusWidget;
     this.#cursorPositionWidget = this.#statusbar.cursorPositionWidget;
     this.#wrapToggle = this.#toolbar.wrapToggle;
-    this.#strictDiffToggle = this.#toolbar.strictDiffToggle;
 
     // Store toolbar widget references
-    this.#prevDiffBtn = this.#toolbar.prevDiffBtn;
-    this.#nextDiffBtn = this.#toolbar.nextDiffBtn;
-    this.#rejectAllBtn = this.#toolbar.rejectAllBtn;
-    this.#acceptAllBtn = this.#toolbar.acceptAllBtn;
     this.#validateBtn = this.#toolbar.validateBtn;
     this.#undoBtn = this.#toolbar.undoBtn;
     this.#redoBtn = this.#toolbar.redoBtn;
@@ -469,22 +454,6 @@ class XmlEditorPlugin extends Plugin {
     const lineWrappingEnabled = this.#getLineWrappingPreference();
     this.#wrapToggle.checked = lineWrappingEnabled;
 
-    // Initialize strict-diff toggle from stored preference
-    const strictDiff = this.#getStrictDiffPreference();
-    this.#strictDiffToggle.checked = strictDiff;
-    this.#xmlEditor.setIgnoreWhitespaceInDiff(!strictDiff);
-
-    // Attach event listeners to toolbar buttons
-    this.#prevDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToPreviousDiff());
-    this.#nextDiffBtn.addEventListener('widget-click', () => this.#xmlEditor.goToNextDiff());
-    this.#rejectAllBtn.addEventListener('widget-click', () => {
-      this.#xmlEditor.rejectAllDiffs();
-      this.getDependency('services').removeMergeView();
-    });
-    this.#acceptAllBtn.addEventListener('widget-click', () => {
-      this.#xmlEditor.acceptAllDiffs();
-      this.getDependency('services').removeMergeView();
-    });
 
     // Attach event listeners to import/export buttons
     this.#uploadBtn.addEventListener('widget-click', () => {
@@ -625,14 +594,6 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
-    // Add change handler for strict-diff toggle
-    this.#strictDiffToggle.addEventListener('widget-change', (e) => {
-      const strict = e.detail.checked;
-      this.#setStrictDiffPreference(strict);
-      this.#xmlEditor.setIgnoreWhitespaceInDiff(!strict);
-      this.#logger.debug(`Strict diff ${strict ? 'enabled' : 'disabled'}`);
-    });
-
     // Capture Ctrl/Cmd+S to trigger XML download instead of browser save
     const xmlEditorContainer = document.getElementById('codemirror-container');
     if (xmlEditorContainer) {
@@ -662,9 +623,6 @@ class XmlEditorPlugin extends Plugin {
       // Legacy browsers require returnValue to be set to a non-empty string.
       evt.returnValue = 'You have unsaved changes in the XML editor.';
     });
-
-    // Esc ends the visual diff mode, unless focus mode is on (the xpath-navigation plugin leaves it then)
-    document.addEventListener('keydown', (evt) => this.#onEscapeKey(evt));
 
     // Context menu — self-contained, mounts to the editor panel
     // The visual annotation mode makes the editor read-only for typing, but the document stays
@@ -739,33 +697,6 @@ class XmlEditorPlugin extends Plugin {
       }
     });
 
-    // dis/enable diff buttons based on merge-view state and read-only state
-    const diffBtns = [
-      this.#prevDiffBtn,
-      this.#nextDiffBtn,
-      this.#rejectAllBtn,
-      this.#acceptAllBtn
-    ];
-    this.#updateDiffButtons = () => {
-      const enabled = this.#mergeViewActive && !this.state?.editorReadOnly;
-      for (let btn of diffBtns) {
-        btn.disabled = !enabled;
-        btn.classList.toggle('xmleditor-toolbar-highlight', enabled);
-      }
-      // Ignore-whitespace is a diff display preference, not an edit action, so it
-      // stays enabled in read-only diff mode and only depends on merge view state
-      this.#strictDiffToggle.disabled = !this.#mergeViewActive;
-    };
-    this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_SHOW_MERGE_VIEW, () => {
-      this.#mergeViewActive = true;
-      this.#updateDiffButtons();
-    });
-    this.#xmlEditor.on(XMLEditor.EVENT_EDITOR_HIDE_MERGE_VIEW, () => {
-      this.#mergeViewActive = false;
-      this.#updateDiffButtons();
-    });
-    this.#updateDiffButtons();
-
     // Collect context menu contributions from all plugins that declare ep.xmlEditor.contextMenuItems
     const contributions = await this.context.invokePluginEndpoint(
       ep.xmlEditor.contextMenuItems, [], { throws: false, result: 'values' }
@@ -791,11 +722,6 @@ class XmlEditorPlugin extends Plugin {
    * @param {ApplicationState} state
    */
   async onStateUpdate(_changedKeys, state) {
-    // When diff is cleared externally (e.g. logout), hide the merge view
-    if (!state.diff && this.#xmlEditor.isMergeViewActive()) {
-      await this.#xmlEditor.hideMergeView();
-    }
-
     // Track the currently loaded document so draft-save knows which key to write to.
     // We explicitly avoid clearing this on a null state.xml because `clear()` is called
     // during the transition — keep the last id until editorAfterLoad for the next document
@@ -806,7 +732,6 @@ class XmlEditorPlugin extends Plugin {
     }
 
     // Keep line wrapping switch always visible but disable when no document
-    // (the ignore-whitespace switch is disabled/enabled by #updateDiffButtons based on merge view state)
     this.#wrapToggle.disabled = !state.xml;
 
     // Hide other statusbar widgets when no document
@@ -837,6 +762,8 @@ class XmlEditorPlugin extends Plugin {
     }
 
     if (!state.xml) {
+      // end a merge view before the document goes (the merge-view plugin, if active, resets the diff state)
+      await this.#xmlEditor.hideMergeView();
       this.#xmlEditor.clear();
       this.#xmlEditor.setReadOnly(true);
       this.#xmlEditorEl.classList.remove('editor-readonly');
@@ -878,8 +805,6 @@ class XmlEditorPlugin extends Plugin {
       }
       this.#editGuard = editGuard;
     }
-
-    this.#updateDiffButtons();
 
     // Update visual indicators based on state
     if (state.editorReadOnly) {
@@ -990,8 +915,9 @@ class XmlEditorPlugin extends Plugin {
   }
 
   /**
-   * Add a widget to one of the sections on the right of the XML editor toolbar:
-   * `'review'` (document history and review) `|` `'import-export'` `|` `'plugins'` (other additions).
+   * Add a widget to one of the sections of the XML editor toolbar: `'left'` at its start (e.g. the merge
+   * view buttons), and on its right `'review'` (document history and review) `|` `'import-export'` `|`
+   * `'plugins'` (other additions).
    * @param {HTMLElement} widget
    * @param {number} priority - Higher priority widgets stay visible longer when the toolbar runs out of space
    * @param {ToolbarSection} [section] - Defaults to `'plugins'`
@@ -1057,20 +983,6 @@ class XmlEditorPlugin extends Plugin {
    */
   #setLineWrappingPreference(enabled) {
     this.uiStorage.set('lineWrapping', enabled);
-  }
-
-  /**
-   * @returns {boolean}
-   */
-  #getStrictDiffPreference() {
-    return this.uiStorage.get('strictDiff', false);
-  }
-
-  /**
-   * @param {boolean} enabled
-   */
-  #setStrictDiffPreference(enabled) {
-    this.uiStorage.set('strictDiff', enabled);
   }
 
   /**
@@ -1512,22 +1424,6 @@ class XmlEditorPlugin extends Plugin {
       displayText = `Indent: ${spaceCount} spaces`;
     }
     this.#indentationStatusWidget.text = displayText;
-  }
-
-  /**
-   * Handles the Escape key: ends the visual diff mode, unless focus mode is on (the xpath-navigation
-   * plugin leaves focus mode then). Ignored if the key was already handled (e.g. by CodeMirror closing
-   * the search panel or the autocomplete popup) or pressed inside a dialog, drawer or dropdown.
-   * @param {KeyboardEvent} evt
-   */
-  async #onEscapeKey(evt) {
-    if (evt.key !== 'Escape' || evt.defaultPrevented) return;
-    const inOverlay = evt.composedPath().some(el =>
-      el instanceof HTMLElement && ['SL-DIALOG', 'SL-DRAWER', 'SL-DROPDOWN'].includes(el.tagName));
-    if (inOverlay || this.#xmlEditor.isFocusMode()) return;
-    if (this.#mergeViewActive) {
-      await this.getDependency('services').removeMergeView();
-    }
   }
 }
 

@@ -134,7 +134,7 @@ class StartPlugin extends Plugin {
       if (diff && diff !== xml) {
         // a) load the diff view
         try {
-          await this.#services.showMergeView(diff)
+          await this.context.invokePluginEndpoint(ep.mergeView.show, [diff], { throws: true })
         } catch (error) {
           this.#logger.warn("Error loading diff view: " + String(error))
         }

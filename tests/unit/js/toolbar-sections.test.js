@@ -105,6 +105,29 @@ describe('ToolBar sections', () => {
     assert.strictEqual(layout(toolbar), 'history | upload', 'removed widget');
   });
 
+  it('starts each group of sections without a leading separator', () => {
+    const toolbar = createToolbar();
+    toolbar.defineSections(['left', 'view']);
+    toolbar.add(widget('validate'), 54);
+    toolbar.add(widget('spacer'), 50);
+    toolbar.defineSections(['review', 'transfer']);
+    toolbar.addToSection('transfer', widget('upload'));
+    toolbar.addToSection('view', widget('wrap'));
+    toolbar.addToSection('review', widget('history'));
+    toolbar.addToSection('left', widget('next'), 102);
+    toolbar.addToSection('left', widget('prev'), 103);
+    assert.strictEqual(layout(toolbar), 'prev next | wrap validate spacer history | upload');
+  });
+
+  it('places the first widget of an empty first section before the next section of its group', () => {
+    const toolbar = createToolbar();
+    toolbar.defineSections(['left', 'view']);
+    toolbar.addToSection('view', widget('wrap'));
+    toolbar.add(widget('validate'));
+    toolbar.addToSection('left', widget('prev'));
+    assert.strictEqual(layout(toolbar), 'prev | wrap validate');
+  });
+
   it('rejects unknown and duplicate sections', () => {
     const toolbar = createToolbar();
     toolbar.defineSections(['a']);
