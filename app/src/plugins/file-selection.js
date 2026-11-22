@@ -6,7 +6,6 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { SlSelect } from '../ui.js'
- * @import { DocumentItem, Artifact, VersionLineage } from '../modules/file-data-utils.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { PanelContribution } from '../modules/panels/base-panel.js'
  */
@@ -14,8 +13,9 @@ import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
-import { groupFilesByCollection, getCollectionName, groupVersionsByLineage } from '../modules/file-data-utils.js'
+import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
 import { getActiveProjects, getArchivedCollectionIds, compareCollectionNames } from '../modules/collection-utils.js'
+import { filterFileData, getFileIdentifier, getSelectedFileVersions, appendVersionOptions } from '../modules/version-options.js'
 
 // Register templates
 await registerTemplate('file-selection', 'file-selection.html');
@@ -67,9 +67,10 @@ class FileSelectionPlugin extends Plugin {
   /**
    * Extension point handler for `ep.toolbar.contentItems`.
    * Called by ToolbarPlugin during start() to collect this plugin's toolbar contributions.
-   * Returns all five file-selection controls in the order Collection, Model Variant, Source File,
-   * Target XML, Compare with version (`order`, left of the Document actions at 8). On overflow,
-   * Collection and Model Variant are hidden first and Source File and Target XML last (`priority`).
+   * Returns the four file-selection controls in the order Collection, Model Variant, Source File,
+   * Target XML (`order`, left of "Compare with version" of the merge-view plugin at 10 and the
+   * Document actions at 8). On overflow, Collection and Model Variant are hidden first and Source File
+   * and Target XML last (`priority`).
    * @returns {PanelContribution[]}
    */
   [ep.toolbar.contentItems]() {
@@ -78,10 +79,9 @@ class FileSelectionPlugin extends Plugin {
       collection: { order: 14, priority: 5 },
       variant: { order: 13, priority: 5 },
       pdf: { order: 12, priority: 10 },
-      xml: { order: 11, priority: 10 },
-      diff: { order: 10, priority: 9 }
+      xml: { order: 11, priority: 10 }
     }
-    return [this.#collection, this.#variant, this.#pdf, this.#xml, this.#diff]
+    return [this.#collection, this.#variant, this.#pdf, this.#xml]
       .filter(Boolean)
       .map(el => ({ element: el, ...(placement[el.getAttribute('name') ?? ''] ?? { order: 1, priority: 1 }), position: 'center' }))
   }
@@ -92,7 +92,6 @@ class FileSelectionPlugin extends Plugin {
   // Own toolbar elements — set during install()
   /** @type {import('../ui.js').SlSelect} */ #pdf
   /** @type {import('../ui.js').SlSelect} */ #xml
-  /** @type {import('../ui.js').SlSelect} */ #diff
   /** @type {import('../ui.js').SlSelect} */ #variant
   /** @type {import('../ui.js').SlSelect} */ #collection
 
@@ -118,7 +117,6 @@ class FileSelectionPlugin extends Plugin {
       switch (control.getAttribute('name')) {
         case 'pdf':        this.#pdf        = /** @type {import('../ui.js').SlSelect} */ (control); break
         case 'xml':        this.#xml        = /** @type {import('../ui.js').SlSelect} */ (control); break
-        case 'diff':       this.#diff       = /** @type {import('../ui.js').SlSelect} */ (control); break
         case 'variant':    this.#variant    = /** @type {import('../ui.js').SlSelect} */ (control); break
         case 'collection': this.#collection = /** @type {import('../ui.js').SlSelect} */ (control); break
       }
@@ -132,8 +130,7 @@ class FileSelectionPlugin extends Plugin {
       [this.#collection, 'collection', (v) => this.#onChangeCollectionSelection(v)],
       [this.#variant,    'variant',    (v) => this.#onChangeVariantSelection(v)],
       [this.#pdf,        'pdf',        (v) => this.#onChangePdfSelection(v)],
-      [this.#xml,        'xml',        (v) => this.#onChangeXmlSelection(v)],
-      [this.#diff,       'diff',       (v) => this.#onChangeDiffSelection(v)]
+      [this.#xml,        'xml',        (v) => this.#onChangeXmlSelection(v)]
     ];
 
     for (const [select, , handler] of handlers) {
@@ -141,17 +138,6 @@ class FileSelectionPlugin extends Plugin {
         this.#userOpenedDropdown.add(select);
         select.closest('tool-bar')?.classList.add('dropdown-open');
       });
-
-      // Without a diff, sl-select highlights the first option on open, which looks like a
-      // selection. Clear the highlight after sl-select has set it (in the next animation frame).
-      if (select === this.#diff) {
-        select.addEventListener('sl-show', () => {
-          if (select.value) return;
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            select.querySelectorAll('sl-option').forEach(option => { /** @type {SlOption} */ (option).current = false; });
-          }));
-        });
-      }
 
       select.addEventListener('sl-change', async () => {
         if (!this.#userOpenedDropdown.has(select)) return;
@@ -179,7 +165,7 @@ class FileSelectionPlugin extends Plugin {
       await this.#populateCollectionSelectbox(state);
     }
 
-    if (changedKeys.some(k => ['xml', 'pdf', 'diff', 'variant', 'fileData', 'collectionFilter', 'projects'].includes(k)) && state.fileData) {
+    if (changedKeys.some(k => ['xml', 'pdf', 'variant', 'fileData', 'collectionFilter', 'projects'].includes(k)) && state.fileData) {
       // Schedule outside the state propagation window: #populateSelectboxes has many async
       // steps that can take seconds for large file lists, and holding #isUpdatingState=true
       // that long blocks user interactions from dispatching their own state changes.
@@ -218,11 +204,11 @@ class FileSelectionPlugin extends Plugin {
 
   /**
    * Returns the current options for the given select element.
-   * @param {'xml'|'pdf'|'diff'} type
+   * @param {'xml'|'pdf'} type
    * @returns {{value: string, label: string, isGold: boolean}[]}
    */
   getOptionValues(type) {
-    const select = { xml: this.#xml, pdf: this.#pdf, diff: this.#diff }[type]
+    const select = { xml: this.#xml, pdf: this.#pdf }[type]
     if (!select) return []
     return Array.from(select.querySelectorAll('sl-option')).map(opt => ({
       value: /** @type {any} */ (opt).value,
@@ -245,20 +231,6 @@ class FileSelectionPlugin extends Plugin {
   // Private methods
   //
 
-  /**
-   * @param {string} label
-   * @param {boolean} [isLocked]
-   * @param {string} [variantId]
-   * @param {boolean} [isGold] - Prefix the label with a medal marking the gold version
-   * @returns {string}
-   */
-  #createDocumentLabel(label, isLocked, variantId, isGold) {
-    let html = variantId ? `${label} [${variantId}]` : label;
-    if (isGold === true) html = `<sl-icon name="award" slot="prefix" label="Gold version"></sl-icon>${html}`;
-    if (isLocked === true) html += `<sl-icon name="file-lock2" slot="suffix"></sl-icon>`;
-    return html;
-  }
-
   /** @param {ApplicationState} state */
   #updateSelectboxValues(state) {
     let sourceValue = state.pdf || "";
@@ -272,14 +244,13 @@ class FileSelectionPlugin extends Plugin {
     }
     this.#pdf.value = sourceValue;
     this.#xml.value = state.xml || "";
-    this.#diff.value = state.diff || "";
     this.#collection.value = state.collectionFilter || "";
   }
 
   /** @param {boolean} isLoading */
   #setSelectboxLoadingState(isLoading) {
     const selectboxes = [
-      this.#pdf, this.#xml, this.#diff,
+      this.#pdf, this.#xml,
       this.#variant, this.#collection
     ];
     for (const select of selectboxes) {
@@ -438,7 +409,7 @@ class FileSelectionPlugin extends Plugin {
     try {
       await this.#populateVariantSelectbox(state);
 
-      for (const select of [this.#pdf, this.#xml, this.#diff]) {
+      for (const select of [this.#pdf, this.#xml]) {
         select.innerHTML = "";
       }
 
@@ -447,38 +418,7 @@ class FileSelectionPlugin extends Plugin {
         return;
       }
 
-      const fileData = JSON.parse(JSON.stringify(state.fileData));
-      let filteredFileData = fileData;
-      const collectionFilter = state.collectionFilter;
-
-      if (collectionFilter && collectionFilter !== "") {
-        filteredFileData = fileData.filter(file =>
-          file.collections && file.collections.includes(collectionFilter)
-        ).map(file => { file.collections = [collectionFilter]; return file; });
-      } else {
-        // Hide collections that belong only to archived projects
-        const archivedCollectionIds = getArchivedCollectionIds(state.projects || []);
-        if (archivedCollectionIds.size > 0) {
-          filteredFileData = fileData.filter(file => {
-            if (!file.collections || file.collections.length === 0) return true;
-            file.collections = file.collections.filter(c => !archivedCollectionIds.has(c));
-            return file.collections.length > 0;
-          });
-        }
-      }
-
-      const variant = state.variant;
-      if (variant === "none") {
-        filteredFileData = filteredFileData.filter(file => {
-          const hasArtifactVariant = file.artifacts && file.artifacts.some(a => !!a.variant);
-          return !hasArtifactVariant;
-        });
-      } else if (variant && variant !== "") {
-        filteredFileData = filteredFileData.filter(file =>
-          file.artifacts && file.artifacts.some(a => a.variant === variant)
-        );
-      }
-
+      const filteredFileData = filterFileData(state);
       const grouped_files = groupFilesByCollection(filteredFileData);
       this.#collections = Object.keys(grouped_files).sort((a, b) => {
         if (a === "__unfiled") return -1;
@@ -486,8 +426,6 @@ class FileSelectionPlugin extends Plugin {
         return compareCollectionNames(getCollectionName(a, state.collections), getCollectionName(b, state.collections));
       });
       this.#pdf.dataset.collections = JSON.stringify(this.#collections);
-
-      let hasPopulatedVersionsForSelectedFile = false;
 
       for (const collection_name of this.#collections) {
         const displayName = getCollectionName(collection_name, state.collections);
@@ -500,17 +438,9 @@ class FileSelectionPlugin extends Plugin {
         });
 
         for (const file of files) {
-          let fileIdentifier, displayLabel;
-
-          if (file.source) {
-            fileIdentifier = file.source.id;
-            displayLabel = file.source.label;
-          } else if (file.artifacts && file.artifacts.length > 0) {
-            fileIdentifier = file.artifacts[0].id;
-            displayLabel = `📄 ${file.doc_metadata?.title || file.doc_id}`;
-          } else {
-            continue;
-          }
+          const fileIdentifier = getFileIdentifier(file);
+          if (!fileIdentifier) continue;
+          const displayLabel = file.source ? file.source.label : `📄 ${file.doc_metadata?.title || file.doc_id}`;
 
           const option = Object.assign(new SlOption, {
             value: fileIdentifier,
@@ -521,67 +451,13 @@ class FileSelectionPlugin extends Plugin {
           option.dataset.collections = JSON.stringify(file.collections);
           this.#pdf.hoist = true;
           this.#pdf.appendChild(option);
-
-          const isSelectedFile = (fileIdentifier === state.pdf) ||
-            (file.source && file.source.file_type !== 'pdf' && fileIdentifier === state.xml);
-
-          if (isSelectedFile && !hasPopulatedVersionsForSelectedFile) {
-            hasPopulatedVersionsForSelectedFile = true;
-
-            if (file.artifacts) {
-              let artifactsToShow = file.artifacts;
-              if (variant === "none") {
-                artifactsToShow = file.artifacts.filter(a => !a.variant);
-              } else if (variant && variant !== "") {
-                artifactsToShow = file.artifacts.filter(a => a.variant === variant);
-              }
-
-              /**
-               * @param {Artifact} version
-               * @param {string[]} [classes] - CSS classes of the option
-               */
-              const createOption = (version, classes = []) => {
-                const variantSuffix = (!variant || variant === "") ? version.variant : undefined;
-                const opt = new SlOption();
-                // @ts-ignore
-                opt.size = "small";
-                opt.value = version.id;
-                opt.innerHTML = this.#createDocumentLabel(version.label, version.is_locked, variantSuffix, version.is_gold_standard);
-                opt.classList.add(...classes);
-                if (version.is_gold_standard) opt.dataset.gold = "true";
-                return opt;
-              };
-
-              // one group per lineage, current versions first, then their superseded (frozen)
-              // ancestors, connected to them by lines drawn in CSS (app.css). Ancestors open
-              // read-only; they can be compared or copied into a new version. The gold version
-              // is marked with a medal inside its lineage, whose group comes first.
-              const lineages = groupVersionsByLineage(artifactsToShow);
-              const hasGold = (/** @type {VersionLineage} */ g) =>
-                g.leaves.concat(g.ancestors).some(v => v.is_gold_standard) ? 0 : 1;
-              lineages.sort((a, b) => hasGold(a) - hasGold(b));
-              for (const select of [this.#xml, this.#diff]) {
-                lineages.forEach((group, index) => {
-                  if (index > 0) select.appendChild(new SlDivider());
-                  group.leaves.forEach(version => select.appendChild(createOption(version)));
-                  if (group.leaves.length > 0 && group.ancestors.length > 0) {
-                    const arrow = document.createElement("div");
-                    arrow.className = "lineage-arrow";
-                    arrow.setAttribute("aria-hidden", "true");
-                    select.appendChild(arrow);
-                  }
-                  group.ancestors.forEach((version, i) => {
-                    const classes = ["lineage-ancestor"];
-                    if (i === group.ancestors.length - 1) classes.push("lineage-ancestor-last");
-                    select.appendChild(createOption(version, classes));
-                  });
-                });
-              }
-            }
-          }
         }
         this.#pdf.appendChild(new SlDivider());
       }
+
+      // the versions of the selected document (the merge-view plugin lists the same ones)
+      appendVersionOptions(this.#xml, getSelectedFileVersions(filteredFileData, state), state.variant);
+
       // Update selected values after options are in the DOM
       this.#updateSelectboxValues(state);
     } finally {
@@ -633,7 +509,7 @@ class FileSelectionPlugin extends Plugin {
 
     if (Object.keys(filesToLoad).length > 0) {
       try {
-        await this.getDependency('services').removeMergeView();
+        await this.#hideMergeView();
         const stateUpdate = { collection };
         if (pdf) {
           stateUpdate.pdf = pdf;
@@ -671,7 +547,7 @@ class FileSelectionPlugin extends Plugin {
           break;
         }
       }
-      await this.getDependency('services').removeMergeView();
+      await this.#hideMergeView();
       await this.getDependency('services').load({ xml });
       await this.scheduleStateChange({ xml });
     } catch (error) {
@@ -682,18 +558,12 @@ class FileSelectionPlugin extends Plugin {
     }
   }
 
-  /** @param {string} diff */
-  async #onChangeDiffSelection(diff) {
-    if (diff && diff !== this.state.xml) {
-      try {
-        await this.getDependency('services').showMergeView(diff);
-      } catch (error) {
-        this.#logger.error(String(error));
-      }
-    } else {
-      await this.getDependency('services').removeMergeView();
-    }
-    await this.scheduleStateChange({ diff });
+  /**
+   * Hides the merge view, if the merge-view plugin is active
+   * @returns {Promise<void>}
+   */
+  async #hideMergeView() {
+    await this.context.invokePluginEndpoint(ep.mergeView.hide, [], { throws: true });
   }
 
   /** @param {string} variant */
@@ -721,7 +591,7 @@ class FileSelectionPlugin extends Plugin {
     }
 
     if (shouldClearSelection) {
-      await this.getDependency('services').removeMergeView();
+      await this.#hideMergeView();
       await this.scheduleStateChange({ collectionFilter, collection, project, pdf: null, xml: null, diff: null });
     } else {
       await this.scheduleStateChange({ collectionFilter, collection, project });

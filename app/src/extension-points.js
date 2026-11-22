@@ -142,6 +142,21 @@ const extensionPoints = {
      */
     contextMenuItems: "xmlEditor.contextMenuItems",
   },
+  mergeView: {
+    /**
+     * Shows the merge view, which compares the open document with another version of it.
+     * Implemented by MergeViewPlugin; without it, nothing happens. Throws if the version cannot be
+     * loaded when invoked with `throws: true`.
+     * Function signature: (diff: string) => Promise<void> — `diff` is the stable id of the version to compare with
+     */
+    show: "mergeView.show",
+    /**
+     * Hides the merge view, if it is shown, and keeps the open document unchanged.
+     * Implemented by MergeViewPlugin; without it, nothing happens.
+     * Function signature: () => Promise<void>
+     */
+    hide: "mergeView.hide"
+  },
   pdfViewer: {
     /**
      * Contribute widgets to the statusbar (footer) of the PDF viewer.

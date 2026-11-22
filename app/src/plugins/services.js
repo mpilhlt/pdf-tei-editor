@@ -12,7 +12,6 @@ import ep from '../extension-points.js'
 import ui from '../ui.js'
 import { SsePlugin } from '../plugin-registry.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
-import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror/codemirror-utils.js'
 import { ApiError } from '../modules/utils.js'
@@ -235,8 +234,10 @@ class ServicesPlugin extends Plugin {
           ui.spinner.hide()
         }
 
-        // Always load XML content and update state
-        await this.removeMergeView()
+        // Always load XML content and update state. The merge view of the previous document ends;
+        // the editor's own merge view is hidden too, in case it was shown without the merge-view plugin
+        await this.context.invokePluginEndpoint(ep.mergeView.hide, [], { throws: true })
+        await this.#xmlEditor.hideMergeView()
         await this.dispatchStateChange({
           xml: null,
           diff: null,
@@ -365,43 +366,6 @@ class ServicesPlugin extends Plugin {
   async validateXml() {
     this.#logger.info("Validating XML...")
     return await this.#validation.validate() // todo use endpoint instead
-  }
-
-  /**
-   * Creates a diff between the current and the given document and shows a merge view
-   * @param {string} diff The path to the xml document with which to compare the current xml doc
-   */
-  async showMergeView(diff) {
-    if (!diff || typeof diff != "string") {
-      throw new TypeError("Invalid diff value")
-    }
-    this.#logger.info("Loading diff XML: " + diff)
-    ui.spinner.show('Computing file differences, please wait...')
-    try {
-      // Convert document identifier to static file URL
-      const diffUrl = `/api/files/${diff}`
-      await this.#xmlEditor.showMergeView(diffUrl)
-      if (!this.state || this.state.diff !== diff) {
-        await this.dispatchStateChange({ diff: diff })
-      }
-      // turn validation off as it creates too much visual noise
-      this.#validation.configure({ mode: "off" })
-    } finally {
-      ui.spinner.hide()
-    }
-  }
-
-  /**
-   * Removes all remaining diffs
-   */
-  async removeMergeView() {
-    this.#xmlEditor.hideMergeView()
-    // re-enable validation
-    this.#validation.configure({ mode: "auto" })
-    if (this.state && this.state.diff) {
-      UrlHash.remove("diff")
-      await this.dispatchStateChange({ diff: null })
-    }
   }
 
   /**

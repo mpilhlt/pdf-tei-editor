@@ -196,12 +196,14 @@ Only add a plugin to `deps` when it must be fully installed before this plugin's
 
 The `xmleditor` dependency adds widgets to the editor's bars: `addToolbarWidget(widget, priority, section, order)`, `addStatusbarWidget(widget, position, priority)` and `addHeaderbarWidget(widget, position, priority)`. The priority decides which widgets stay visible longest when the bar runs out of space.
 
-The right-hand side of the toolbar has three sections (ToolBar sections, see `app/src/modules/panels/README.md`), separated by separators that are only shown while both neighbouring sections have a visible button:
+The toolbar has a group of sections at its start and one on its right-hand side (ToolBar sections, see `app/src/modules/panels/README.md`), separated by separators that are only shown while both neighbouring sections have a visible button:
 
 ```text
-[document history & review] | [import & export] | [plugin additions]
+[left] | [view options]  validate undo redo  ...spacer...  [document history & review] | [import & export] | [plugin additions]
 ```
 
+- `section = 'left'` - plugin additions at the start of the toolbar (the `merge-view` plugin's diff navigation, reject/accept-all and strict-diff buttons, priorities and orders 97-103).
+- The view options (line wrapping, TEI header group) belong to the `xmleditor` plugin itself (internal section `'view'`).
 - `section = 'review'` - document history and review (`tei-tools` revision history at order 2, `unit-review` toggle at order 1).
 - `section = 'import-export'` - upload and download, owned by the `xmleditor` plugin.
 - `section = 'plugins'` (default) - everything else a plugin adds (TEI Wizard at 51.5, XSL viewer at 50.5).

@@ -131,7 +131,7 @@ toolBar.add(customButton, 5);
 
 #### Sections
 
-`defineSections(names, separatorPriority)` appends named sections, separated by `<status-separator>`s. `addToSection(section, widget, priority, order)` adds a widget to a section; within the section, widgets are sorted by `order` (default: `priority`), highest leftmost, whatever the order of the calls. A section separator is hidden while one of its sides has no visible widget (hidden via `display: none`, `hidden` or overflow), so empty sections leave no stray separators.
+`defineSections(names, separatorPriority)` appends named sections, separated by `<status-separator>`s. `addToSection(section, widget, priority, order)` adds a widget to a section; within the section, widgets are sorted by `order` (default: `priority`), highest leftmost, whatever the order of the calls. A section separator is hidden while one of its sides has no visible widget (hidden via `display: none`, `hidden` or overflow), so empty sections leave no stray separators. Each `defineSections()` call appends a new group whose first section has no leading separator, so that groups can sit at different places of the toolbar, e.g. one at its start and one after a spacer.
 
 ```javascript
 toolBar.defineSections(['review', 'transfer', 'plugins']);
