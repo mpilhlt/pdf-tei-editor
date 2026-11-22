@@ -43,6 +43,93 @@ export function isInTeiText(node) {
 }
 
 /**
+ * The page break (`<pb/>`) at which a node starts: the node itself if it is a `<pb/>`,
+ * otherwise the nearest `<pb/>` preceding it in document order (a `<pb/>` inside the node
+ * does not count).
+ * @typedef {object} PageBreakHint
+ * @property {number} ordinal - 1-based position of the `<pb/>` among all `<pb/>` elements of the document
+ * @property {number|null} n - The `n` attribute of the `<pb/>` if it is a positive integer, otherwise null
+ */
+
+/**
+ * Returns the page break at which a node starts, see {@link PageBreakHint}.
+ * @param {Node} node
+ * @returns {PageBreakHint|null} null if no `<pb/>` precedes the node
+ */
+export function getPageBreakHint(node) {
+  const doc = node.ownerDocument;
+  if (!doc) return null;
+  const DOCUMENT_POSITION_PRECEDING = 2;
+  const DOCUMENT_POSITION_CONTAINED_BY = 16;
+  const pbs = doc.getElementsByTagNameNS('*', 'pb');
+  /** @type {Element|null} */
+  let pb = null;
+  let ordinal = 0;
+  for (let i = 0; i < pbs.length; i++) {
+    const candidate = pbs[i];
+    const position = node.compareDocumentPosition(candidate);
+    if (candidate === node || (position & DOCUMENT_POSITION_PRECEDING && !(position & DOCUMENT_POSITION_CONTAINED_BY))) {
+      pb = candidate;
+      ordinal = i + 1;
+    } else {
+      // pbs are in document order: all further ones follow the node or lie inside it
+      break;
+    }
+  }
+  if (!pb) return null;
+  return { ordinal, n: getPageBreakNumber(pb) };
+}
+
+/**
+ * The `n` attribute of a `<pb/>` if it is a positive integer.
+ * @param {Element} pb
+ * @returns {number|null}
+ */
+function getPageBreakNumber(pb) {
+  const nAttr = (pb.getAttribute('n') ?? '').trim();
+  const n = /^\d+$/.test(nAttr) ? parseInt(nAttr, 10) : 0;
+  return n > 0 ? n : null;
+}
+
+/**
+ * Finds a `<pb/>` of a document by its `n` attribute or by its 1-based position among all
+ * `<pb/>` elements (the inverse of {@link getPageBreakHint}). Exactly one of the two must be given.
+ * @param {Document} doc
+ * @param {{n?: number, ordinal?: number}} query
+ * @returns {Element|null}
+ */
+export function findPageBreak(doc, { n, ordinal }) {
+  const pbs = doc.getElementsByTagNameNS('*', 'pb');
+  if (ordinal !== undefined) {
+    return pbs[ordinal - 1] ?? null;
+  }
+  for (let i = 0; i < pbs.length; i++) {
+    if (getPageBreakNumber(pbs[i]) === n) return pbs[i];
+  }
+  return null;
+}
+
+/**
+ * Returns the text that follows a `<pb/>` up to the next `<pb/>` (the text of the page),
+ * whitespace-normalized and cut at `maxLength` characters.
+ * @param {Element} pb
+ * @param {number} [maxLength=2000]
+ * @returns {string}
+ */
+export function getPageBreakText(pb, maxLength = 2000) {
+  const doc = pb.ownerDocument;
+  const SHOW_ALL = 0xFFFFFFFF;
+  const walker = doc.createTreeWalker(doc, SHOW_ALL);
+  walker.currentNode = pb;
+  let text = '';
+  for (let node = walker.nextNode(); node && text.length < maxLength; node = walker.nextNode()) {
+    if (node.nodeType === 1 && /** @type {Element} */ (node).localName === 'pb') break;
+    if (node.nodeType === 3) text += ' ' + node.textContent;
+  }
+  return text.replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+/**
  * Returns the <respStmt> containing a <persName> with the given xml:id or null if none can be found  
  * @param {Document} xmlDoc 
  * @param {string} id 

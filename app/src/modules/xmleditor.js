@@ -1369,6 +1369,19 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
+   * Scrolls the start of the given DOM node to the top of the editor, without changing the
+   * selection (and hence without emitting "selectionChanged").
+   * @param {Node} domNode - A node in the XML DOM
+   * @throws {Error} If the DOM node has no attached syntax node
+   */
+  scrollToNode(domNode) {
+    const { from } = this.getSyntaxNodeFromDomNode(domNode);
+    this.#view.dispatch({
+      effects: EditorView.scrollIntoView(from, { y: 'start', yMargin: 20 })
+    });
+  }
+
+  /**
    * @param {number} from
    * @param {number} to
    */

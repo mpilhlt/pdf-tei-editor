@@ -16,6 +16,7 @@ import {
   AccessTokensPlugin,
   AnnotationGuidePlugin,
   AuthenticationPlugin,
+  EditorSyncPlugin,
   BackendPluginsPlugin,
   ClientPlugin,
   ConfigEditorPlugin,
@@ -96,6 +97,7 @@ const plugins = [
   LayoutPlugin,
   PdfViewerPlugin,
   XmlEditorPlugin,
+  EditorSyncPlugin,       // "Sync with editor" switch in the PDF viewer statusbar: syncs XML selection and PDF page
   XpathNavigationPlugin,  // node navigation in the XML editor statusbar — depends on XmlEditorPlugin
   XmlAnnotationPlugin,    // annotation mode — depends on XmlEditorPlugin
   UnitReviewPlugin,       // review marks in the XML editor gutter — depends on XmlEditorPlugin

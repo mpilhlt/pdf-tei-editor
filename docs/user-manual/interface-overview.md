@@ -4,7 +4,7 @@ The PDF-TEI Editor features a two-panel layout designed for efficient comparison
 
 ![The main window: the toolbar at the top, the PDF viewer on the left with a highlighted footnote, and the XML editor on the right with the matching bibl element](../images/interface-overview.png)
 
-*The PDF viewer (left) and the XML editor (right). Autosearch highlights the entry of the current `<bibl>` in the PDF.*
+*The PDF viewer (left) and the XML editor (right). "Sync with editor" highlights the entry of the current `<bibl>` in the PDF.*
 
 ## Main Layout
 
@@ -24,7 +24,7 @@ The header bar of the PDF viewer provides the following information:
 
 Both values can be copied by single-click, in addition, administrators can change title and id by double-clicking.
 
-In the status bar of the PDF viewer, you can toggle the "Autosearch" feature, which tries to automatically navigate to the position within the PDF that corresponds to the cursor position in the XML Editor. It works well on most documents; results can be less reliable when the PDF's underlying text extraction is poor (e.g. scanned pages or unusual layouts).
+In the status bar of the PDF viewer, you can toggle the "Sync with editor" feature, which tries to automatically navigate to the position within the PDF that corresponds to the cursor position in the XML Editor. In documents with page markers (`<pb/>`), it also works the other way round: when you page through the PDF, the XML Editor scrolls to the page marker of that page, without moving the cursor. It works well on most documents; results can be less reliable when the PDF's underlying text extraction is poor (e.g. scanned pages or unusual layouts).
 
 ### Right Panel: XML Editor  
 
