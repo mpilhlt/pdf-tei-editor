@@ -2,6 +2,16 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.89.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.89.0...v0.89.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **deploy:** start without npm on the PATH and add systemd setup for git checkouts ([e197b48](https://github.com/mpilhlt/pdf-tei-editor/commit/e197b487cc968fb1fd12519bb664e573282036f6))
+* **ocr:** queue OCR runs server-wide and reject duplicate jobs per PDF ([b5a8f02](https://github.com/mpilhlt/pdf-tei-editor/commit/b5a8f02c3c79e489c789ec900c473da9172a4b2e)), closes [#887](https://github.com/mpilhlt/pdf-tei-editor/issues/887)
+* **ocr:** run OCR as a background job and demote library log noise ([8b3620d](https://github.com/mpilhlt/pdf-tei-editor/commit/8b3620db0063271b9c57bc108b6ba71f0ea36799)), closes [#886](https://github.com/mpilhlt/pdf-tei-editor/issues/886) [#887](https://github.com/mpilhlt/pdf-tei-editor/issues/887)
+* **ocr:** validate OCR job ids before building the job file path ([ca99675](https://github.com/mpilhlt/pdf-tei-editor/commit/ca99675e7db67c74bf845e66516636c064d69ceb)), closes [#92](https://github.com/mpilhlt/pdf-tei-editor/issues/92)
+
 # [0.89.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.88.1...v0.89.0) (2026-11-20)
 
 
