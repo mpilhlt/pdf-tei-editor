@@ -88,6 +88,8 @@ test.describe('Side-by-side diff window', () => {
       });
       expect(target).toBeGreaterThan(3);
       await expect.poll(windowTopLine).toBe(target);
+      // scroll events of the window shortly after it followed the editor are taken as caused by that
+      await popup.waitForTimeout(500);
       await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = Math.floor(el.scrollHeight / 3) });
       const lineAfterWindowScroll = await (async () => { await popup.waitForTimeout(300); return windowTopLine(); })();
       await expect.poll(() => page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getTopVisibleLine()))

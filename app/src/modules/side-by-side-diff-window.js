@@ -144,6 +144,16 @@ export class SideBySideDiffWindow {
     // that were not drawn yet would leave the target off by a few pixels)
     this.#ignoreScrollUntil = performance.now() + PROGRAMMATIC_SCROLL_MS
     view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 0 }) })
+    // CodeMirror scrolls in an animation frame, which browsers throttle in a window in the
+    // background: check the position afterwards and correct it directly if necessary
+    const container = this.#container
+    setTimeout(() => {
+      if (this.#container !== container || line.from > view.state.doc.length) return
+      const offset = view.lineBlockAt(line.from).top - (container.scrollTop - this.#documentOffset(view))
+      if (Math.abs(offset) < 1) return
+      this.#ignoreScrollUntil = performance.now() + PROGRAMMATIC_SCROLL_MS
+      container.scrollTop += offset
+    }, 100)
   }
 
   /** Closes the window if it is open */
