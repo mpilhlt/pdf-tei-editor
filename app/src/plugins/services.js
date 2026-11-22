@@ -39,6 +39,10 @@ class ServicesPlugin extends Plugin {
   #fileSelection
   /** @type {ServerChangeMonitor} */
   #serverChangeMonitor
+  /** Incremented by every {@link load} of an XML document, to recognize outdated loads */
+  #xmlLoadCount = 0
+  /** @type {string|null} The XML document of the latest {@link load} */
+  #latestXml = null
 
   /** @param {PluginContext} context */
   constructor(context) {
@@ -154,10 +158,13 @@ class ServicesPlugin extends Plugin {
   }
 
   /**
-   * Loads the given XML and/or PDF file(s) into the editor and viewer
+   * Loads the given XML and/or PDF file(s) into the editor and viewer. If another XML document is
+   * loaded before this load completes, the outdated XML document is not made the current one.
    * @param {{xml?: string | null, pdf?: string | null}} files An Object with one or more of the keys "xml" and "pdf"
    */
   async load({ xml, pdf }) {
+    const xmlLoad = xml ? ++this.#xmlLoadCount : 0
+    if (xml) this.#latestXml = xml
 
     // Signal loading state to disable selectboxes
     await this.context.invokePluginEndpoint(ep.filedata.loading, true)
@@ -263,6 +270,17 @@ class ServicesPlugin extends Plugin {
           }
         }
         throw error
+      }
+
+      if (xml && xmlLoad !== this.#xmlLoadCount) {
+        // A newer load started meanwhile: the editor shows its document (see XMLEditor.loadXml)
+        this.#logger.debug(`Load of ${xml} was superseded by a newer load`)
+        if (!file_is_locked && this.#latestXml !== xml) {
+          await this.#client.releaseLock(xml).catch(/** @param {unknown} error */ error => {
+            this.#logger.warn(`Could not release the lock of ${xml}: ${String(error)}`)
+          })
+        }
+        xml = null
       }
 
       if (pdf) {
