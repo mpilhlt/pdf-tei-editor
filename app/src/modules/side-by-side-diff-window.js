@@ -42,11 +42,12 @@ const WINDOW_STYLE = `
  * @property {boolean} [syncScroll] - Initial state of the "Sync with editor" checkbox
  * @property {(enabled: boolean) => void} [onSyncScrollChange] - Called when the user toggles the checkbox
  * @property {(lineNumber: number) => void} [onScrollLine] - Called with the line of the current
- *   document at the top of the window when the user scrolls the window while syncing is enabled
+ *   document at the top of the window when the window is scrolled while syncing is enabled and the
+ *   window leads (see `isLeading()`)
  */
 
-/** Time in ms during which scroll events caused by `scrollToLine()` are not reported */
-const PROGRAMMATIC_SCROLL_MS = 300
+/** User input that makes the window lead the scroll synchronization */
+const LEADING_EVENTS = ['focus', 'pointerdown', 'wheel', 'keydown', 'touchstart']
 
 export class SideBySideDiffWindow {
   /** @type {Window | null} */
@@ -70,8 +71,12 @@ export class SideBySideDiffWindow {
   /** @type {HTMLInputElement | null} */
   #syncCheckbox = null
 
-  /** Scroll events before this time (performance.now()) were caused by `scrollToLine()` */
-  #ignoreScrollUntil = 0
+  /**
+   * Whether the user works in this window, which then leads the scroll synchronization. Otherwise
+   * it follows (`scrollToLine()`) and its scroll events are not reported, so that the two sides do
+   * not scroll each other back and forth.
+   */
+  #leading = false
 
   /** @param {SideBySideDiffWindowOptions} [options] */
   constructor(options = {}) {
@@ -131,18 +136,35 @@ export class SideBySideDiffWindow {
   }
 
   /**
-   * Scrolls the window so that the given line of the current document is at the top, if syncing is
-   * enabled. The resulting scroll events are not reported to `onScrollLine`.
-   * @param {number} lineNumber - 1-based line number of the current document
+   * Whether the window leads the scroll synchronization (the user worked in it last)
+   * @returns {boolean}
    */
-  scrollToLine(lineNumber) {
-    if (!this.isSyncEnabled() || !this.#mergeView || !this.#container) return
+  isLeading() {
+    return this.isOpen() && this.#leading
+  }
+
+  /**
+   * Makes the window follow the scroll synchronization, e.g. when the user works in the opening
+   * window again. It leads again after the next user input in the window.
+   */
+  follow() {
+    this.#leading = false
+  }
+
+  /**
+   * Scrolls the window so that the given line of the current document is at the top, if syncing is
+   * enabled and the window does not lead.
+   * @param {number} lineNumber - 1-based line number of the current document
+   * @param {{force?: boolean}} [options] - `force`: scroll also while the window leads (e.g. right
+   *   after opening it, which focuses it)
+   */
+  scrollToLine(lineNumber, { force = false } = {}) {
+    if (!this.isSyncEnabled() || (this.#leading && !force) || !this.#mergeView || !this.#container) return
     const view = this.#mergeView.b
     const doc = view.state.doc
     const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)))
     // CodeMirror measures the lines before scrolling the container (estimated heights of lines
     // that were not drawn yet would leave the target off by a few pixels)
-    this.#ignoreScrollUntil = performance.now() + PROGRAMMATIC_SCROLL_MS
     view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 0 }) })
     // CodeMirror scrolls in an animation frame, which browsers throttle in a window in the
     // background: check the position afterwards and correct it directly if necessary
@@ -150,8 +172,7 @@ export class SideBySideDiffWindow {
     setTimeout(() => {
       if (this.#container !== container || line.from > view.state.doc.length) return
       const offset = view.lineBlockAt(line.from).top - (container.scrollTop - this.#documentOffset(view))
-      if (Math.abs(offset) < 1) return
-      this.#ignoreScrollUntil = performance.now() + PROGRAMMATIC_SCROLL_MS
+      if (Math.abs(offset) < 1 || (this.#leading && !force)) return
       container.scrollTop += offset
     }, 100)
   }
@@ -201,7 +222,11 @@ export class SideBySideDiffWindow {
     syncCheckbox.type = 'checkbox'
     syncCheckbox.name = 'syncScroll'
     syncCheckbox.checked = this.#options.syncScroll ?? true
-    syncCheckbox.addEventListener('change', () => this.#options.onSyncScrollChange?.(syncCheckbox.checked))
+    syncCheckbox.addEventListener('change', () => {
+      this.#options.onSyncScrollChange?.(syncCheckbox.checked)
+      // the checkbox is in this window, so the editor follows it
+      if (syncCheckbox.checked) this.#reportTopLine()
+    })
     syncLabel.append(syncCheckbox, doc.createTextNode('Sync with editor'))
     this.#syncCheckbox = syncCheckbox
     incomingCell.append(this.#incomingTitle)
@@ -245,6 +270,10 @@ export class SideBySideDiffWindow {
     container.addEventListener('scroll', () => this.#onScroll(), { passive: true })
     win.addEventListener('resize', measure)
     win.addEventListener('keydown', (evt) => { if (evt.key === 'Escape') this.close() })
+    for (const type of LEADING_EVENTS) {
+      win.addEventListener(type, () => { this.#leading = true }, { capture: true, passive: true })
+    }
+    this.#leading = false
 
     // the window content cannot be restored after a reload, as it is drawn from the opening window
     win.addEventListener('pagehide', () => {
@@ -255,10 +284,14 @@ export class SideBySideDiffWindow {
     })
   }
 
-  /** Reports the line at the top of the window to `onScrollLine` when the user scrolls */
+  /** Reports the line at the top of the window to `onScrollLine` when the window leads */
   #onScroll() {
+    if (this.#leading) this.#reportTopLine()
+  }
+
+  /** Reports the line at the top of the window to `onScrollLine` if syncing is enabled */
+  #reportTopLine() {
     if (!this.isSyncEnabled() || !this.#mergeView || !this.#container) return
-    if (performance.now() < this.#ignoreScrollUntil) return
     const view = this.#mergeView.b
     const block = view.lineBlockAtHeight(Math.max(0, this.#container.scrollTop - this.#documentOffset(view)))
     this.#options.onScrollLine?.(view.state.doc.lineAt(block.from).number)

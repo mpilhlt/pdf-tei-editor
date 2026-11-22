@@ -77,6 +77,8 @@ test.describe('Side-by-side diff window', () => {
         return Number(first?.textContent);
       });
       await expect(popup.locator('input[name="syncScroll"]')).toBeChecked();
+      // the side with the last user input leads, the other one follows without scrolling it back
+      await page.locator('#codemirror-container').dispatchEvent('pointerdown');
       // a line below the folded teiHeader
       const target = await page.evaluate(async () => {
         const xmleditor = (/** @type {any} */ (window)).app.getDependency('xmleditor');
@@ -88,8 +90,7 @@ test.describe('Side-by-side diff window', () => {
       });
       expect(target).toBeGreaterThan(3);
       await expect.poll(windowTopLine).toBe(target);
-      // scroll events of the window shortly after it followed the editor are taken as caused by that
-      await popup.waitForTimeout(500);
+      await popup.locator('.sbs-diff').dispatchEvent('pointerdown');
       await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = Math.floor(el.scrollHeight / 3) });
       const lineAfterWindowScroll = await (async () => { await popup.waitForTimeout(300); return windowTopLine(); })();
       await expect.poll(() => page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getTopVisibleLine()))

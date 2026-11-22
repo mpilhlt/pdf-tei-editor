@@ -127,9 +127,6 @@ class MergeViewPlugin extends Plugin {
   /** The read-only side-by-side diff window */
   #sideBySideWindow = new SideBySideDiffWindow()
 
-  /** XML editor scroll events before this time (performance.now()) were caused by the window */
-  #ignoreEditorScrollUntil = 0
-
   /** Whether a scroll sync to the window is scheduled */
   #editorScrollScheduled = false
 
@@ -193,6 +190,10 @@ class MergeViewPlugin extends Plugin {
     })
     xmlEditor.on(XMLEditor.EVENT_EDITOR_DELAYED_UPDATE, () => this.#updateSideBySideWindow())
     window.addEventListener('pagehide', () => this.#sideBySideWindow.close())
+    // user input in this window makes the XML editor lead the scroll synchronization again
+    for (const type of ['focus', 'pointerdown', 'wheel', 'keydown', 'touchstart']) {
+      window.addEventListener(type, () => this.#sideBySideWindow.follow(), { capture: true, passive: true })
+    }
     // scroll events do not bubble, and the editor may be scrolled by an ancestor element
     document.addEventListener('scroll', (evt) => {
       if (this.#xmlEditor.isScrollContainer(evt.target)) this.#onEditorScroll()
@@ -275,19 +276,13 @@ class MergeViewPlugin extends Plugin {
       theme: this.#xmlEditor.getTheme().extensions,
       title: `Diff: ${docs.titles.incoming} ↔ ${docs.titles.current}`,
       syncScroll: this.uiStorage.get('syncScroll', true),
-      onSyncScrollChange: (enabled) => {
-        this.uiStorage.set('syncScroll', enabled)
-        if (enabled) this.#syncWindowToEditor()
-      },
-      onScrollLine: (lineNumber) => {
-        this.#ignoreEditorScrollUntil = performance.now() + 300
-        this.#xmlEditor.scrollLineToTop(lineNumber)
-      }
+      onSyncScrollChange: (enabled) => this.uiStorage.set('syncScroll', enabled),
+      onScrollLine: (lineNumber) => this.#xmlEditor.scrollLineToTop(lineNumber)
     })
     if (opened) {
       // the window needs a layout pass before it can be scrolled. requestAnimationFrame() is not
       // used, as it does not run in this window while the new window is in front (Firefox)
-      setTimeout(() => this.#syncWindowToEditor(), 50)
+      setTimeout(() => this.#syncWindowToEditor({ force: true }), 50)
     } else {
       notify('The side-by-side diff window was blocked by the browser. Please allow popups for this site.', 'warning', 'exclamation-triangle')
     }
@@ -396,7 +391,8 @@ class MergeViewPlugin extends Plugin {
 
   /** Scrolls the side-by-side diff window along with the XML editor (at most every 16 ms) */
   #onEditorScroll() {
-    if (performance.now() < this.#ignoreEditorScrollUntil || this.#editorScrollScheduled) return
+    // while the window leads, the editor follows and its scroll events are not sent back
+    if (this.#editorScrollScheduled || this.#sideBySideWindow.isLeading()) return
     if (!this.#sideBySideWindow.isSyncEnabled()) return
     this.#editorScrollScheduled = true
     setTimeout(() => {
@@ -405,10 +401,13 @@ class MergeViewPlugin extends Plugin {
     }, 16)
   }
 
-  /** Scrolls the line at the top of the XML editor to the top of the side-by-side diff window */
-  #syncWindowToEditor() {
+  /**
+   * Scrolls the line at the top of the XML editor to the top of the side-by-side diff window
+   * @param {{force?: boolean}} [options] - `force`: also while the window leads
+   */
+  #syncWindowToEditor(options) {
     if (!this.#sideBySideWindow.isSyncEnabled()) return
-    this.#sideBySideWindow.scrollToLine(this.#xmlEditor.getTopVisibleLine())
+    this.#sideBySideWindow.scrollToLine(this.#xmlEditor.getTopVisibleLine(), options)
   }
 
   /** Shows the current merge view documents in the side-by-side diff window, if it is open */
