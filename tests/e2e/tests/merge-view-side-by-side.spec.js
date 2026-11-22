@@ -67,7 +67,7 @@ test.describe('Side-by-side diff window', () => {
       await expect(editors.nth(1).locator('.cm-content')).toContainText('</TEI>');
       await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = 0 });
 
-      // "Sync with editor" (checked by default): scrolling the editor scrolls the window to the same
+      // "Scroll with editor" (checked by default): scrolling the editor scrolls the window to the same
       // line of the current document, and scrolling the window scrolls the editor
       const windowTopLine = () => popup.locator('.sbs-diff').evaluate(container => {
         const top = container.getBoundingClientRect().top;

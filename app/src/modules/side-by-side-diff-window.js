@@ -39,7 +39,7 @@ const WINDOW_STYLE = `
  * @typedef {object} SideBySideDiffWindowOptions
  * @property {Extension[]} [theme] - CodeMirror theme extensions (e.g. the XML editor's theme)
  * @property {string} [title] - The window title
- * @property {boolean} [syncScroll] - Initial state of the "Sync with editor" checkbox
+ * @property {boolean} [syncScroll] - Initial state of the "Scroll with editor" checkbox
  * @property {(enabled: boolean) => void} [onSyncScrollChange] - Called when the user toggles the checkbox
  * @property {(lineNumber: number) => void} [onScrollLine] - Called with the line of the current
  *   document at the top of the window when the window is scrolled while syncing is enabled and the
@@ -128,7 +128,7 @@ export class SideBySideDiffWindow {
   }
 
   /**
-   * Whether the "Sync with editor" checkbox is checked
+   * Whether the "Scroll with editor" checkbox is checked
    * @returns {boolean}
    */
   isSyncEnabled() {
@@ -227,7 +227,7 @@ export class SideBySideDiffWindow {
       // the checkbox is in this window, so the editor follows it
       if (syncCheckbox.checked) this.#reportTopLine()
     })
-    syncLabel.append(syncCheckbox, doc.createTextNode('Sync with editor'))
+    syncLabel.append(syncCheckbox, doc.createTextNode('Scroll with editor'))
     this.#syncCheckbox = syncCheckbox
     incomingCell.append(this.#incomingTitle)
     currentCell.append(this.#currentTitle, syncLabel, closeBtn)
