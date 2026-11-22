@@ -44,6 +44,50 @@ class CategoryFilter(logging.Filter):
         return any(record.name.startswith(cat) for cat in self.categories)
 
 
+class DemoteToDebugFilter(logging.Filter):
+    """Log INFO messages of chatty third-party libraries at DEBUG level.
+
+    OCRmyPDF logs every page and fontTools every step of font subsetting at INFO level, which
+    floods the log during an OCR run. This filter changes such records to DEBUG, so that they
+    only appear when the handler logs DEBUG messages. Records whose message matches one of the
+    `keep` patterns of their logger prefix stay at INFO.
+
+    The filter changes the record itself, so all handlers that receive it after the first one
+    with this filter see the demoted level as well.
+    """
+
+    RULES: dict[str, tuple[str, ...]] = {
+        "fontTools": (),
+        "ocrmypdf": ("Postprocessing", "optimization", "file size ratio"),
+    }
+    """Logger name prefix -> message prefixes/substrings that stay at INFO."""
+
+    def __init__(self, threshold: int):
+        """
+        Args:
+            threshold: The level of the handler; demoted records below it are dropped
+        """
+        super().__init__()
+        self.threshold = threshold
+
+    @classmethod
+    def demote(cls, record: logging.LogRecord) -> None:
+        """Change the level of a record to DEBUG if it is a chatty third-party INFO message."""
+        if record.levelno != logging.INFO:
+            return
+        for prefix, keep in cls.RULES.items():
+            if record.name == prefix or record.name.startswith(prefix + "."):
+                message = record.getMessage()
+                if not any(pattern in message for pattern in keep):
+                    record.levelno = logging.DEBUG
+                    record.levelname = logging.getLevelName(logging.DEBUG)
+                return
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        self.demote(record)
+        return record.levelno >= self.threshold
+
+
 def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] = None):
     """
     Configure logging for the application.
@@ -75,6 +119,8 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
     console_handler.setLevel(getattr(logging, log_level.upper()))
     console_handler.setFormatter(formatter)
 
+    console_handler.addFilter(DemoteToDebugFilter(console_handler.level))
+
     # Add category filter if specified
     if log_categories:
         console_handler.addFilter(CategoryFilter(log_categories))
@@ -90,6 +136,7 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(getattr(logging, log_level.upper()))
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(DemoteToDebugFilter(file_handler.level))
 
     if log_categories:
         file_handler.addFilter(CategoryFilter(log_categories))
@@ -146,6 +193,7 @@ def install_sse_log_handler(sse_service: "SSEService") -> "SSELogHandler":
     from fastapi_app.lib.sse.sse_log_handler import SSELogHandler
 
     handler = SSELogHandler(sse_service)
+    handler.addFilter(DemoteToDebugFilter(handler.level))
     logging.getLogger().addHandler(handler)
     _sse_log_handler = handler
     return handler

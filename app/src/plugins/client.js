@@ -155,7 +155,37 @@ export default ClientPlugin;
 export const plugin = ClientPlugin;
 
 /**
- * A generic function to make API requests against the application backend. 
+ * Create the error for a response whose body is not JSON. Such responses come from a reverse
+ * proxy or web server in front of the application, typically an HTML error page.
+ *
+ * Gateway errors (502-504) of GET requests become a {@link ConnectionError}, which `callApi`
+ * retries. Other requests are not retried, since the server may still be processing them.
+ *
+ * @param {Response} response - The response
+ * @param {string} method - The HTTP method of the request
+ * @returns {ApiError|ServerError}
+ */
+function nonJsonResponseError(response, method) {
+  const status = `${response.status}${response.statusText ? ' ' + response.statusText : ''}`
+  if (response.status === 504) {
+    const message = `The server did not respond in time (${status})`
+    return method === 'GET' ? new ConnectionError(message, 504) : new ServerError(`${message}. The operation may still be running on the server.`, 504)
+  }
+  if (response.status === 502 || response.status === 503) {
+    const message = `The server is not available (${status})`
+    return method === 'GET' ? new ConnectionError(message, response.status) : new ServerError(message, response.status)
+  }
+  if (response.ok) {
+    return new ServerError(`The server sent an invalid response (${status})`, response.status)
+  }
+  if (response.status >= 400 && response.status < 500) {
+    return new ApiError(`Request failed (${status})`, response.status)
+  }
+  return new ServerError(`Server error (${status})`, response.status)
+}
+
+/**
+ * A generic function to make API requests against the application backend.
  * Expects a JSON response which is an arbitrary value in case of success or a 
  * `{errror: "Error message"}` object in case of an error handled by the API methods. 
  *
@@ -216,7 +246,8 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     try {
       result = await response.json()
     } catch (jsonError) {
-      throw new ServerError("Failed to parse error response as JSON");
+      // a reverse proxy in front of the server answers errors such as "504 Gateway Time-out" with an HTML page
+      throw nonJsonResponseError(response, method)
     }
 
     // Check for all 2XX success status codes (200, 201, 204, etc.)
