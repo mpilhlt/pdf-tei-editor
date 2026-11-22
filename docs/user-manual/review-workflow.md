@@ -171,7 +171,7 @@ Review mode is switched on with the **Review** button (clipboard icon). Then go 
 
 *A unit marked not OK.*
 
-The strip left of the line numbers shows the result: green for OK, red for not OK. The progress bar in the status bar shows the share of units that are OK, not OK and still open; hover over it to see the counts.
+The strip left of the line numbers shows the result: green for OK, red for not OK. The progress bar in the status bar shows the share of units that are OK, not OK and not reviewed yet; hover over it to see the counts.
 
 For questions and remarks that are not a verdict on a unit, use a [unit comment](unit-comments.md) (`Ctrl+Shift+M`, or **Comment…** in the context menu). A comment only notifies the users mentioned in it, so mention the annotator with `@` (for example `@annotator`) if they should react to it.
 
@@ -250,7 +250,7 @@ If the dispute comes from a wrong LLM review, consider whether the machine rules
 
 *Reviewer*
 
-When all units are OK (the tooltip of the progress bar shows *0 not OK · 0 open*, and the editor tells you *All units are reviewed*), approve the document: click **Save revision**, describe the result (for example "Review complete, approved"), set **Status** to *Approved* and click **Save Revision**.
+When all units are OK (the tooltip of the progress bar shows *0 not OK · 0 not reviewed*, and the editor tells you *All units are reviewed*), approve the document: click **Save revision**, describe the result (for example "Review complete, approved"), set **Status** to *Approved* and click **Save Revision**.
 
 ![Save Revision dialog: approving the document](../images/review-workflow-12-approve.png)
 
@@ -286,7 +286,7 @@ The approved version replaces the annotator's version in the review queue (which
 - Never edit an annotator's version. Give feedback with marks and comments, so that the annotator learns from it and the correction is documented.
 - One not-OK mark per problem, with a comment that says what to change. "Wrong" is not a comment.
 - Mention the annotator in comments that need an answer; comments without a mention notify nobody.
-- Approve only when the progress bar tooltip shows no not-OK and no open units.
+- Approve only when the progress bar tooltip shows no not-OK and no unreviewed units.
 - If several reviewers review the same document, agree on how marks are combined (see [Combining the marks of several reviewers](unit-review.md#combining-the-marks-of-several-reviewers)).
 
 ## For administrators

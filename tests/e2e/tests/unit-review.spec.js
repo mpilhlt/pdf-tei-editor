@@ -169,12 +169,34 @@ test.describe('Unit review', () => {
       await page.locator('[name="unitReviewToggle"]').click();
       await waitForTestMessage(consoleLogs, 'UNIT_REVIEW_MODE');
       await expect(page.locator('.cm-unit-review-gutter')).toBeVisible();
-      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 not reviewed');
+
+      // the tooltip of the meter is placed at the meter, not in the top left corner (#902)
+      await page.getByTestId('unit-review-meter').hover();
+      await expect.poll(() => page.evaluate(() => {
+        const meter = /** @type {HTMLElement} */ (document.querySelector('[data-testid="unit-review-meter"]'));
+        const tooltip = /** @type {any} */ (meter.querySelector('sl-tooltip'));
+        const popup = tooltip?.shadowRoot?.querySelector('sl-popup')?.popup;
+        if (!tooltip?.open || !popup) return null;
+        const m = meter.getBoundingClientRect();
+        const p = popup.getBoundingClientRect();
+        return p.width > 0 && p.bottom <= m.top + 1 && m.top - p.bottom < 40 && p.left < m.right && p.right > m.left;
+      })).toBe(true);
+      await page.mouse.move(0, 0);
+
+      // without units in the diagnostics drawer, clicking the meter goes to the next unit nobody
+      // has reviewed yet (#902)
+      await cursorTo(page, 'Beta');
+      await page.getByTestId('unit-review-meter').click();
+      await expect.poll(() => page.evaluate(() => {
+        const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
+        return view.state.doc.lineAt(view.state.selection.main.head).text;
+      })).toContain('Gamma');
 
       // Mod-Enter marks the unit OK and moves to the next one
       await cursorTo(page, 'Alpha');
       await page.keyboard.press('ControlOrMeta+Enter');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 2 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 2 not reviewed');
       let text = await editorText(page);
       expect(text).toMatch(/<standOff>\s*<listAnnotation type="unit-review" subtype="fp-sha256-8-v1">/);
       expect(text).toContain('<note type="unit-xpath">');
@@ -235,7 +257,7 @@ test.describe('Unit review', () => {
       await expect(prompt).toBeVisible();
       await prompt.locator('input').fill('wrong year');
       await prompt.locator('input').press('Enter');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 not reviewed');
       text = await editorText(page);
       const betaFp = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review').getUnits()[1].fingerprint);
       expect(text).toContain(`<note type="not-ok" n="${betaFp}">wrong year</note>`);
@@ -266,10 +288,10 @@ test.describe('Unit review', () => {
       await page.keyboard.press('Escape');
       await expect(page.getByTestId('unit-review-popover')).toHaveCount(0);
       await drawerItem.locator('.diagnostics-drawer-action', { hasText: 'OK' }).first().click();
-      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 0 not OK · 1 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 0 not OK · 1 not reviewed');
       await cursorTo(page, 'Gamma');
       await page.keyboard.press('ControlOrMeta+z');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 not reviewed');
 
       // a click on the strip opens the popover; mark the third unit OK there
       await cursorTo(page, 'Gamma');
@@ -285,12 +307,12 @@ test.describe('Unit review', () => {
       await popover.locator('button[data-state="ok"]').click();
       await popover.getByTestId('unit-review-save').click();
       await expect(popover).toHaveCount(0);
-      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 1 not OK · 0 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 1 not OK · 0 not reviewed');
 
       // undo removes the last mark
       await cursorTo(page, 'Gamma');
       await page.keyboard.press('ControlOrMeta+z');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 not reviewed');
 
       // the context menu row marks the right-clicked unit, not the one at the cursor
       await cursorTo(page, 'Alpha');
@@ -305,10 +327,10 @@ test.describe('Unit review', () => {
       await expect(menuRow.getByTestId('unit-review-menu-patch-check')).toBeHidden();
       await menuRow.getByTestId('unit-review-menu-check-lg').click();
       await expect(menuRow).toBeHidden();
-      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 1 not OK · 0 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('2 OK · 1 not OK · 0 not reviewed');
       await cursorTo(page, 'Gamma');
       await page.keyboard.press('ControlOrMeta+z');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 1 not OK · 1 not reviewed');
 
       // editing a reviewed unit keeps its marks as was- marks: the unit is stale
       await page.evaluate(() => {
@@ -347,7 +369,7 @@ test.describe('Unit review', () => {
       await waitForTestMessage(consoleLogs, 'NEW_VERSION_LOADED');
       await expect.poll(async () => editorText(page)).not.toContain('unit-review');
       expect(await editorText(page)).not.toContain('<standOff');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 3 not reviewed');
       // the new version opens with the header folded, as the toggle shows
       const headerFoldState = () => page.evaluate(() => {
         const w = /** @type {any} */ (window);
@@ -846,13 +868,13 @@ test.describe('Unit review', () => {
   </text>`);
       await page.locator('[name="unitReviewToggle"]').click();
       await waitForTestMessage(consoleLogs, 'UNIT_REVIEW_MODE');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 4 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('0 OK · 0 not OK · 4 not reviewed');
 
       // the cursor is in the first unit of the line: only it is marked, the cursor moves to the
       // second unit on the same line
       await cursorTo(page, 'Alpha');
       await page.keyboard.press('ControlOrMeta+Enter');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 3 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 3 not reviewed');
       const cursor = await page.evaluate(() => {
         const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
         return { head: view.state.selection.main.head, beta: view.state.doc.toString().indexOf('<bibl>Beta') };
@@ -868,7 +890,7 @@ test.describe('Unit review', () => {
       });
       await page.keyboard.press('ControlOrMeta+Enter');
       // Alpha, Gamma and Delta: Beta is still open
-      await expect(page.getByTestId('unit-review-meter')).toContainText('3 OK · 0 not OK · 1 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('3 OK · 0 not OK · 1 not reviewed');
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('unit-review')?.setEnabled(false)).catch(() => {});
       await releaseAllLocks(page);
@@ -915,7 +937,7 @@ test.describe('Unit review', () => {
       });
       await page.mouse.click(alpha.x, alpha.y);
       await page.keyboard.press('ControlOrMeta+Enter');
-      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 2 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('1 OK · 0 not OK · 2 not reviewed');
       const lines = await page.evaluate(() => {
         const view = (/** @type {any} */ (window)).app.getDependency('xmleditor').getView();
         return {
@@ -951,7 +973,7 @@ test.describe('Unit review', () => {
       await expect(page.locator('#codemirror-container .cm-content')).toContainText('Alpha 2001');
       await expect(page.locator('#codemirror-container .cm-content')).not.toContainText('unit-xpath');
       await page.locator('[name="unitReviewToggle"]').click();
-      await expect(page.getByTestId('unit-review-meter')).toContainText('3 open');
+      await expect(page.getByTestId('unit-review-meter')).toContainText('3 not reviewed');
       await cursorTo(page, 'Alpha');
       await page.keyboard.press('ControlOrMeta+Enter');
       await expect(page.locator('sl-alert', { hasText: 'Only reviewers can mark units.' })).toHaveCount(1);

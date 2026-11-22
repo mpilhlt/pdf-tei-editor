@@ -1006,10 +1006,11 @@ class UnitReviewPlugin extends Plugin {
   }
 
   /**
-   * Moves the cursor to the next unit the current user has not marked (`open`) or the next unit
-   * whose combined state is not OK or disputed, or that were changed after a not-OK review (`not-ok`),
-   * wrapping around.
-   * @param {'open'|'not-ok'} kind
+   * Moves the cursor to the next unit the current user has not marked (`open`), the next unit
+   * nobody has reviewed yet (`unreviewed`, the units the meter counts as not reviewed) or the next
+   * unit whose combined state is not OK or disputed, or that were changed after a not-OK review
+   * (`not-ok`), wrapping around.
+   * @param {'open'|'unreviewed'|'not-ok'} kind
    * @param {number} [afterLine] - Defaults to the cursor line
    * @param {number} [afterPos] - Instead of a line: the units starting at or after this position,
    *   e.g. the end of the unit just marked, which may share its line with the next unit
@@ -1025,13 +1026,14 @@ class UnitReviewPlugin extends Plugin {
     const wanted = unit => {
       const combined = this.#combined.get(unit.fingerprint)
       if (kind === 'not-ok') return combined?.state === 'not-ok' || combined?.state === 'disputed' || needsRecheck(combined)
+      if (kind === 'unreviewed') return !['ok', 'not-ok', 'disputed'].includes(combined?.state ?? 'open')
       return !this.#data.reviewers.get(me)?.marks.has(unit.fingerprint)
     }
     const units = this.#scan.units
     const after = units.filter(u => (afterPos === undefined ? doc.lineAt(u.from).number > line : u.from >= afterPos) && wanted(u))
     const target = after[0] ?? units.find(wanted)
     if (!target) {
-      notify(kind === 'open' ? 'All units are reviewed.' : 'No units are marked not OK.', 'success', 'check-circle')
+      notify(kind !== 'not-ok' ? 'All units are reviewed.' : 'No units are marked not OK.', 'success', 'check-circle')
       return true
     }
     const targetLine = doc.lineAt(target.from)
@@ -1268,11 +1270,33 @@ class UnitReviewPlugin extends Plugin {
     const meter = document.createElement('span')
     meter.className = 'unit-review-meter'
     meter.dataset.testid = 'unit-review-meter'
-    meter.dataset.revealsDiagnostics = '' // clicking it expands the diagnostics drawer
+    // clicking it expands the diagnostics drawer, which lists the units that are not OK or disputed
+    meter.dataset.revealsDiagnostics = ''
     meter.style.cssText = 'display:none;align-items:center;cursor:pointer;padding:4px 6px'
-    // The bar alone shows the progress; the counts are in the tooltip shown on hover
-    meter.innerHTML = '<sl-tooltip hoist placement="top"><div slot="content"><span class="ur-text"></span><br><small>Click to show the diagnostics drawer.</small></div><sl-icon class="ur-warning" name="exclamation-triangle" style="display:none;margin-right:4px;color:var(--sl-color-warning-600)"></sl-icon><span class="ur-bar" style="display:inline-flex;width:90px;height:7px;border-radius:4px;overflow:hidden;background:var(--sl-color-neutral-200,#e4e6ea)"><i style="background:#2f9e57"></i><i style="background:#d64545"></i><i style="background:#e0a020"></i></span></sl-tooltip>'
+    // The bar alone shows the progress; the counts are in the tooltip shown on hover. The tooltip
+    // content needs a single wrapper: sl-tooltip anchors its popup to the first element in its
+    // default slot, which would be the warning icon, hidden most of the time, so that the popup
+    // would be placed in the top left corner of the window (#902).
+    meter.innerHTML = '<sl-tooltip hoist placement="top"><div slot="content"><span class="ur-text"></span><br><small class="ur-hint"></small></div><span class="ur-anchor" style="display:inline-flex;align-items:center"><sl-icon class="ur-warning" name="exclamation-triangle" style="display:none;margin-right:4px;color:var(--sl-color-warning-600)"></sl-icon><span class="ur-bar" style="display:inline-flex;width:90px;height:7px;border-radius:4px;overflow:hidden;background:var(--sl-color-neutral-200,#e4e6ea)"><i style="background:#2f9e57"></i><i style="background:#d64545"></i><i style="background:#e0a020"></i></span></span></sl-tooltip>'
+    // the units nobody has reviewed yet are not listed in the diagnostics drawer: without units
+    // to list there, clicking goes to the next of them
+    meter.addEventListener('click', () => {
+      if (!this.#diagnosticsKey && this.getMissingLayoutMessage() === null) this.goToNext('unreviewed')
+    })
+    this.#updateMeterHint()
     return meter
+  }
+
+  /**
+   * Updates the tooltip hint on what clicking the meter does, which depends on whether the
+   * diagnostics drawer lists review entries.
+   */
+  #updateMeterHint() {
+    const hint = this.#meter?.querySelector('.ur-hint')
+    if (!hint) return
+    hint.textContent = this.#diagnosticsKey
+      ? 'Click to show the units that are not OK in the diagnostics drawer. F7: next unit you have not reviewed.'
+      : 'Click to go to the next unit not reviewed yet. F7: next unit you have not reviewed.'
   }
 
   #updateMeter() {
@@ -1296,7 +1320,7 @@ class UnitReviewPlugin extends Plugin {
     ;/** @type {HTMLElement} */ (bars[2]).style.width = pct(s.disputed)
     const parts = [`${s.ok} OK`, `${s.notOk} not OK`]
     if (s.disputed) parts.push(`${s.disputed} disputed`)
-    parts.push(`${s.open} open`)
+    parts.push(`${s.open} not reviewed`)
     ;/** @type {HTMLElement} */ (meter.querySelector('.ur-text')).textContent = parts.join(' · ')
   }
 
@@ -1352,6 +1376,7 @@ class UnitReviewPlugin extends Plugin {
     const key = own.length ? `${reviewer}|` + own.map(d => `${d.from}:${d.to}:${d.message}`).join('|') : ''
     if (key === this.#diagnosticsKey) return
     this.#diagnosticsKey = key
+    this.#updateMeterHint()
     // not from inside a dispatch
     setTimeout(() => {
       this.#renderingDiagnostics = true
