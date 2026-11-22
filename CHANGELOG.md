@@ -2,6 +2,16 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+## [0.90.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.90.0...v0.90.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **editor-sync:** do not jump to page 1 when the cursor is in whitespace between elements ([a92880a](https://github.com/mpilhlt/pdf-tei-editor/commit/a92880aecd283d65dcf7995749e62ce0c9f16dae)), closes [#900](https://github.com/mpilhlt/pdf-tei-editor/issues/900)
+* **unit-review:** anchor the review meter tooltip, make unreviewed units reachable ([02926ae](https://github.com/mpilhlt/pdf-tei-editor/commit/02926ae02c9b4556e084bf79ed0214b4bc9d71a5)), closes [#902](https://github.com/mpilhlt/pdf-tei-editor/issues/902)
+* **unit-review:** show the click hint in the review meter tooltip from the start ([8d3abc8](https://github.com/mpilhlt/pdf-tei-editor/commit/8d3abc814fe573942154e257970ee70ae87dadcb)), closes [#902](https://github.com/mpilhlt/pdf-tei-editor/issues/902)
+* **xmleditor:** keep a loaded document when other state changes arrive during the load ([460bee3](https://github.com/mpilhlt/pdf-tei-editor/commit/460bee35d676bf99aca11d62bf3b1257c89ae161)), closes [#893](https://github.com/mpilhlt/pdf-tei-editor/issues/893)
+
 # [0.90.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.89.1...v0.90.0) (2026-11-22)
 
 
