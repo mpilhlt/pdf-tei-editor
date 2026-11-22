@@ -2,7 +2,7 @@
 
 How to test code that touches the PDF Viewer (`app/src/modules/pdfviewer.js`,
 `app/src/modules/pdf-text-matcher.js`) without a browser. This pattern came
-out of building the PDF text lookup feature (the Autosearch switch) and its
+out of building the PDF text lookup feature (the "Sync with editor" switch, formerly "Autosearch") and its
 offline pipeline in `tests/pdf-match/`.
 
 ## The core idea: keep the algorithm DOM-free
@@ -162,7 +162,7 @@ exercise:
 - Re-running the highlight after a zoom change (`textlayerrendered`)
 
 Verify these by loading a real document in the running app, enabling
-Autosearch, and selecting a node — see
+"Sync with editor", and selecting a node — see
 [Testing Guide § Isolated Component Harness Tests](../code-assistant/testing-guide.md#isolated-component-harness-tests)
 for the general pattern (a standalone HTML harness served by the dev
 server, no login or app state) if this ever needs repeatable cross-browser

@@ -11,7 +11,9 @@
  * 2. findBestMatch(): locate the query in the streams via 4-gram seeding
  *    (findCandidateOffsets) + semi-global edit-distance alignment
  *    (alignQueryToWindow), then map the matched char range back to items
- *    and a PDF-unit bounding box.
+ *    and a PDF-unit bounding box. Long queries (whole pages or zones, e.g.
+ *    in segmentation documents) are matched by short head and tail anchors,
+ *    and the region between them is returned (findSpanMatch).
  *
  * Design spec: docs/superpowers/specs/2026-07-19-pdf-text-lookup-design.md
  *
@@ -277,21 +279,11 @@ export function buildPageModel(items, page) {
 const GRAM_SIZE = 4;
 
 /**
- * Finds candidate match start offsets of the query in a page text stream.
- *
- * Indexes all 4-grams of the page text, then votes on alignment diagonals
- * (pagePosition - queryPosition) for every query 4-gram occurrence. Grams
- * occurring too often in the page are skipped as non-distinctive. The
- * highest-voted diagonal buckets become candidate offsets.
- *
+ * Maps every 4-gram of a page text stream to its start positions.
  * @param {string} pageText - Normalized page stream
- * @param {string} query - Normalized query
- * @param {number} [maxCandidates=5] - Maximum offsets to return
- * @returns {number[]} Candidate start offsets in pageText, best first
+ * @returns {Map<string, number[]>}
  */
-export function findCandidateOffsets(pageText, query, maxCandidates = 5) {
-  if (pageText.length < GRAM_SIZE || query.length < GRAM_SIZE) return [];
-
+export function indexGrams(pageText) {
   /** @type {Map<string, number[]>} */
   const gramPositions = new Map();
   for (let p = 0; p + GRAM_SIZE <= pageText.length; p++) {
@@ -303,6 +295,44 @@ export function findCandidateOffsets(pageText, query, maxCandidates = 5) {
     }
     positions.push(p);
   }
+  return gramPositions;
+}
+
+/** @type {WeakMap<PageModel, Map<string, number[]>>} Gram indexes of page models */
+const gramIndexCache = new WeakMap();
+
+/**
+ * The gram index of a page model, computed once per model.
+ * @param {PageModel} model
+ * @returns {Map<string, number[]>}
+ */
+function getGramIndex(model) {
+  let index = gramIndexCache.get(model);
+  if (!index) {
+    index = indexGrams(model.text);
+    gramIndexCache.set(model, index);
+  }
+  return index;
+}
+
+/**
+ * Finds candidate match start offsets of the query in a page text stream.
+ *
+ * Indexes all 4-grams of the page text, then votes on alignment diagonals
+ * (pagePosition - queryPosition) for every query 4-gram occurrence. Grams
+ * occurring too often in the page are skipped as non-distinctive. The
+ * highest-voted diagonal buckets become candidate offsets.
+ *
+ * @param {string} pageText - Normalized page stream
+ * @param {string} query - Normalized query
+ * @param {number} [maxCandidates=5] - Maximum offsets to return
+ * @param {Map<string, number[]>} [gramPositions] - Precomputed result of
+ *   indexGrams(pageText), to avoid re-indexing the page for every query
+ * @returns {number[]} Candidate start offsets in pageText, best first
+ */
+export function findCandidateOffsets(pageText, query, maxCandidates = 5, gramPositions = undefined) {
+  if (pageText.length < GRAM_SIZE || query.length < GRAM_SIZE) return [];
+  gramPositions ??= indexGrams(pageText);
 
   const bucketSize = Math.max(8, Math.round(query.length * 0.1));
   /** @type {Map<number, number>} */
@@ -348,17 +378,19 @@ export function alignQueryToWindow(query, window) {
 
   // dp row over window positions; the parallel prevStart/curStart arrays
   // track where each alignment began in the window, so the range can be
-  // recovered without a traceback
-  let prev = new Array(n + 1).fill(0);
-  let prevStart = Array.from({ length: n + 1 }, (_, j) => j);
+  // recovered without a traceback. Rows are swapped, not reallocated.
+  let prev = new Int32Array(n + 1);
+  let prevStart = new Int32Array(n + 1);
+  let cur = new Int32Array(n + 1);
+  let curStart = new Int32Array(n + 1);
+  for (let j = 0; j <= n; j++) prevStart[j] = j;
 
   for (let i = 1; i <= m; i++) {
-    const cur = new Array(n + 1);
-    const curStart = new Array(n + 1);
     cur[0] = i;
     curStart[0] = 0;
+    const qc = query.charCodeAt(i - 1);
     for (let j = 1; j <= n; j++) {
-      const substitution = prev[j - 1] + (query[i - 1] === window[j - 1] ? 0 : 1);
+      const substitution = prev[j - 1] + (qc === window.charCodeAt(j - 1) ? 0 : 1);
       const deletion = prev[j] + 1; // skip a query char
       const insertion = cur[j - 1] + 1; // skip a window char
       let best = substitution;
@@ -374,8 +406,8 @@ export function alignQueryToWindow(query, window) {
       cur[j] = best;
       curStart[j] = start;
     }
-    prev = cur;
-    prevStart = curStart;
+    [prev, cur] = [cur, prev];
+    [prevStart, curStart] = [curStart, prevStart];
   }
 
   let bestJ = 0;
@@ -446,35 +478,28 @@ export function itemIndicesForRange(model, charRange) {
 }
 
 /**
- * Finds the region across all pages that best matches the query text.
- *
- * For every page, candidate offsets from 4-gram seeding are refined with
- * semi-global alignment inside a padded window. The best-scoring candidate
- * wins; page selection falls out of the global comparison. Queries longer
- * than maxQueryLength are truncated — matching the start of an entry is
- * sufficient to locate its region.
- *
- * @param {PageModel[]} pageModels - Models from buildPageModel(), one per page
- * @param {string} rawQuery - Ordered node text (un-normalized)
- * @param {Object} [options={}]
- * @param {number} [options.threshold=0.6] - Minimum score for a match
- * @param {number} [options.maxCandidatesPerPage=5]
- * @param {number} [options.maxQueryLength=600]
- * @returns {{match: MatchResult|null, candidates: CandidateSummary[]}} The
- *   accepted match (or null) plus the top 5 candidates for diagnostics
+ * @typedef {Object} ScoredCandidate
+ * @property {PageModel} model - Page model the candidate is on
+ * @property {number} page - 1-based page number
+ * @property {number} score - 1 - editDistance / queryLength
+ * @property {number[]} charRange - [start, end) range in the page model's text
  */
-export function findBestMatch(pageModels, rawQuery, options = {}) {
-  const { threshold = 0.6, maxCandidatesPerPage = 5, maxQueryLength = 600 } = options;
 
-  const query = normalizeQuery(rawQuery).slice(0, maxQueryLength);
-  if (query.length === 0) return { match: null, candidates: [] };
-
+/**
+ * Scores the 4-gram seeded candidate regions of a normalized query on the
+ * given pages by semi-global alignment inside a padded window.
+ * @param {PageModel[]} pageModels - Pages to search
+ * @param {string} query - Normalized query
+ * @param {number} maxCandidatesPerPage
+ * @returns {ScoredCandidate[]} Candidates, best first
+ */
+function scoreCandidates(pageModels, query, maxCandidatesPerPage) {
   const pad = Math.max(10, Math.ceil(query.length * 0.15));
+  /** @type {ScoredCandidate[]} */
   const scored = [];
-
   for (const model of pageModels) {
     if (!model.text) continue;
-    for (const offset of findCandidateOffsets(model.text, query, maxCandidatesPerPage)) {
+    for (const offset of findCandidateOffsets(model.text, query, maxCandidatesPerPage, getGramIndex(model))) {
       const winStart = Math.max(0, offset - pad);
       const winEnd = Math.min(model.text.length, offset + query.length + pad);
       const aligned = alignQueryToWindow(query, model.text.slice(winStart, winEnd));
@@ -486,29 +511,172 @@ export function findBestMatch(pageModels, rawQuery, options = {}) {
       });
     }
   }
-
   scored.sort((a, b) => b.score - a.score);
-  const candidates = scored.slice(0, 5).map(c => ({
+  return scored;
+}
+
+/**
+ * Summarizes the top 5 candidates for diagnostics.
+ * @param {ScoredCandidate[]} scored - Candidates, best first
+ * @returns {CandidateSummary[]}
+ */
+function summarizeCandidates(scored) {
+  return scored.slice(0, 5).map(c => ({
     page: c.page,
     score: Number(c.score.toFixed(3)),
     text: c.model.text.slice(c.charRange[0], c.charRange[1]).slice(0, 120)
   }));
+}
 
+/**
+ * Builds the match result for a character range on a page.
+ * @param {PageModel} model
+ * @param {number[]} charRange - [start, end)
+ * @param {number} score
+ * @returns {MatchResult}
+ */
+function toMatchResult(model, charRange, score) {
+  const itemIndices = itemIndicesForRange(model, charRange);
+  return {
+    page: model.page,
+    score,
+    charRange,
+    itemIndices,
+    bbox: computeBBox(model.items, itemIndices),
+    matchedText: model.text.slice(charRange[0], charRange[1])
+  };
+}
+
+/**
+ * Finds the region across all pages that best matches the query text.
+ *
+ * For every page, candidate offsets from 4-gram seeding are refined with
+ * semi-global alignment inside a padded window. The best-scoring candidate
+ * wins; page selection falls out of the global comparison.
+ *
+ * Queries longer than `maxQueryLength` (e.g. a whole page or zone of a
+ * segmentation document) are not aligned in full, which would be slow and
+ * cover only a prefix: see {@link findSpanMatch}.
+ *
+ * @param {PageModel[]} pageModels - Models from buildPageModel(), one per page
+ * @param {string} rawQuery - Ordered node text (un-normalized)
+ * @param {Object} [options={}]
+ * @param {number} [options.threshold=0.6] - Minimum score for a match
+ * @param {number} [options.maxCandidatesPerPage=5]
+ * @param {number} [options.maxQueryLength=600] - Longer queries are matched
+ *   by their head and tail anchors
+ * @param {number} [options.anchorLength=100] - Length of the head and tail
+ *   anchors of long queries
+ * @returns {{match: MatchResult|null, candidates: CandidateSummary[]}} The
+ *   accepted match (or null) plus the top 5 candidates for diagnostics
+ */
+export function findBestMatch(pageModels, rawQuery, options = {}) {
+  const { threshold = 0.6, maxCandidatesPerPage = 5, maxQueryLength = 600, anchorLength = 100 } = options;
+
+  const query = normalizeQuery(rawQuery);
+  if (query.length === 0) return { match: null, candidates: [] };
+  if (query.length > maxQueryLength) {
+    return findSpanMatch(pageModels, query, { threshold, maxCandidatesPerPage, anchorLength });
+  }
+
+  const scored = scoreCandidates(pageModels, query, maxCandidatesPerPage);
+  const candidates = summarizeCandidates(scored);
   const best = scored[0];
   if (!best || best.score < threshold) {
     return { match: null, candidates };
   }
+  return { match: toMatchResult(best.model, best.charRange, best.score), candidates };
+}
 
-  const itemIndices = itemIndicesForRange(best.model, best.charRange);
-  return {
-    match: {
-      page: best.page,
-      score: best.score,
-      charRange: best.charRange,
-      itemIndices,
-      bbox: computeBBox(best.model.items, itemIndices),
-      matchedText: best.model.text.slice(best.charRange[0], best.charRange[1])
-    },
-    candidates
-  };
+/** Number of head anchor candidates (on distinct pages) whose tail is checked */
+const MAX_HEAD_CANDIDATES = 3;
+
+/**
+ * Weight of the deviation of a span's length from the query length, relative
+ * to the query length, in the ranking of tail anchor candidates
+ */
+const SPAN_LENGTH_PENALTY = 0.5;
+
+/**
+ * Matches a long normalized query by its head and tail anchors and returns
+ * the contiguous region between them.
+ *
+ * The head anchor is searched on all pages. Since the head of a page-sized
+ * query can be dominated by text that repeats on many pages (running
+ * headers), the best head candidates on up to MAX_HEAD_CANDIDATES distinct
+ * pages are each checked for the tail anchor, which is searched only on the
+ * head's page and the page after it, behind the head. The pair with the best
+ * combined score wins; its match spans from the start of the head to the end
+ * of the tail, or to the end of the head's page when the tail is on the next
+ * page (a match covers one page). Among tail candidates, those that yield a
+ * span of about the query's length are preferred. When no tail is found, or the span is
+ * implausibly long for the query, the best head match alone is returned; when
+ * only the tail is found, the tail match. The score of a span is the lower of
+ * the two anchor scores.
+ *
+ * @param {PageModel[]} pageModels
+ * @param {string} query - Normalized query
+ * @param {{threshold: number, maxCandidatesPerPage: number, anchorLength: number}} options
+ * @returns {{match: MatchResult|null, candidates: CandidateSummary[]}}
+ */
+function findSpanMatch(pageModels, query, { threshold, maxCandidatesPerPage, anchorLength }) {
+  anchorLength = Math.min(anchorLength, Math.floor(query.length / 2));
+  const headQuery = query.slice(0, anchorLength);
+  const tailQuery = query.slice(-anchorLength);
+  const headScored = scoreCandidates(pageModels, headQuery, maxCandidatesPerPage);
+  const candidates = summarizeCandidates(headScored);
+
+  /** @type {ScoredCandidate[]} Best head candidate per page */
+  const heads = [];
+  for (const c of headScored) {
+    if (c.score < threshold || heads.length >= MAX_HEAD_CANDIDATES) break;
+    if (!heads.some(h => h.page === c.page)) heads.push(c);
+  }
+
+  if (heads.length === 0) {
+    // The beginning may be garbled in the text layer: try the end alone
+    const tail = scoreCandidates(pageModels, tailQuery, maxCandidatesPerPage)[0];
+    if (!tail || tail.score < threshold) {
+      return { match: null, candidates };
+    }
+    return { match: toMatchResult(tail.model, tail.charRange, tail.score), candidates };
+  }
+
+  /** @type {{head: ScoredCandidate, end: number, score: number, rank: number}|null} */
+  let best = null;
+  for (const head of heads) {
+    const nextModel = pageModels.find(m => m.page === head.page + 1);
+    const tailPages = nextModel ? [head.model, nextModel] : [head.model];
+    // Text similar to the tail can occur elsewhere on the page: prefer the
+    // tail candidate that yields a span of about the query's length
+    const expectedEnd = head.charRange[0] + query.length;
+    /** @type {{tail: ScoredCandidate, end: number, rank: number}|null} */
+    let bestTail = null;
+    for (const tail of scoreCandidates(tailPages, tailQuery, maxCandidatesPerPage)) {
+      if (tail.score < threshold) break;
+      if (tail.page === head.page && tail.charRange[0] < head.charRange[1]) continue;
+      const end = tail.page === head.page ? tail.charRange[1] : head.model.text.length;
+      if (end - head.charRange[0] > 2 * query.length) continue;
+      // a tail on the next page is ranked by its distance from the end of the head page
+      const tailEnd = tail.page === head.page ? end : head.model.text.length + tail.charRange[1];
+      const rank = tail.score - SPAN_LENGTH_PENALTY * Math.abs(tailEnd - expectedEnd) / query.length;
+      if (!bestTail || rank > bestTail.rank) {
+        bestTail = { tail, end, rank };
+      }
+    }
+    if (!bestTail) continue;
+    if (!best || head.score + bestTail.rank > best.head.score + best.rank) {
+      best = { head, end: bestTail.end, score: bestTail.tail.score, rank: bestTail.rank };
+    }
+  }
+
+  if (best) {
+    const { head, end, score: tailScore } = best;
+    return {
+      match: toMatchResult(head.model, [head.charRange[0], end], Math.min(head.score, tailScore)),
+      candidates
+    };
+  }
+  const head = heads[0];
+  return { match: toMatchResult(head.model, head.charRange, head.score), candidates };
 }
