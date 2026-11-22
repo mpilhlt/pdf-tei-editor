@@ -37,6 +37,7 @@
 
 import { EditorView } from '@codemirror/view'
 import { Plugin } from '../modules/plugin-base.js'
+import ep from '../extension-points.js'
 import ui, { registerTemplate, createFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import { linkifyNodes } from '../modules/linkify.js'
@@ -561,9 +562,10 @@ class DiagnosticsDrawerPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   async #switchOffMergeView() {
-    if (this.#xmlEditor.isMergeViewActive()) {
-      await this.getDependency('services').removeMergeView()
-    }
+    if (!this.#xmlEditor.isMergeViewActive()) return
+    await this.context.invokePluginEndpoint(ep.mergeView.hide, [], { throws: true })
+    // a merge view shown without the merge-view plugin (e.g. directly by a backend plugin extension)
+    await this.#xmlEditor.hideMergeView()
   }
 
   /**

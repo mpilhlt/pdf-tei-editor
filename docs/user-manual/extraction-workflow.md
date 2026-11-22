@@ -80,11 +80,11 @@ Edits are always be done in copies, which merged by the reviewers into the "gold
 
 - Work on this document as instructed by the annotation rules until you are ready to submit it to a reviewer. 
 
-- By toggling "Autosearch" (![The Autosearch switch, turned on](../images/extraction-workflow-autosearch.png)) in the footer of the PDF Viewer, you can search the contents of the current entry (e.g. a `<bibl>` or `<biblStruct>`) in the PDF automatically, for any extraction. It works well in most documents; results can be off if the PDF's underlying text extraction is poor (e.g. scanned pages, unusual column layouts, or heavy OCR artifacts), so treat the highlighted region as a starting point and verify it against the page. If no sufficiently similar text is found, a message next to the switch says so for five seconds, or until a later search finds a match.
+- By toggling "Sync with editor" (![The "Sync with editor" switch, turned on](../images/extraction-workflow-autosearch.png)) in the footer of the PDF Viewer, you can search the contents of the current entry (e.g. a `<bibl>` or `<biblStruct>`) in the PDF automatically, for any extraction. It works well in most documents; results can be off if the PDF's underlying text extraction is poor (e.g. scanned pages, unusual column layouts, or heavy OCR artifacts), so treat the highlighted region as a starting point and verify it against the page. If no sufficiently similar text is found, a message next to the switch says so for five seconds, or until a later search finds a match.
 
 ![The PDF viewer with footnote 5 highlighted in yellow, next to the XML editor with the cursor in the matching bibl element](../images/extraction-workflow-autosearch-result.png)
 
-*Autosearch highlights the text of the current entry in the PDF.*
+*"Sync with editor" highlights the text of the current entry in the PDF.*
 
 
 - Use XML comments (`<!-- this is a comment -->`) only for remarks that must stay in the document permanently and become part of the published dataset, for example a note explaining an anomaly in the source that is preserved on purpose. For all other remarks, such as questions to the reviewer or notes on open issues, use [unit comments](unit-comments.md).

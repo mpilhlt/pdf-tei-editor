@@ -8,6 +8,7 @@
 import { openDocumentAtLine as xmlEditorOpenDocumentAtLine } from '../plugins/xmleditor.js';
 import { findCorrespondingSource } from '../modules/file-data-utils.js';
 import { notify as notifyUser } from './sl-utils.js';
+import ep from '../extension-points.js';
 
 /**
  * @import { ApplicationState } from '../state.js'
@@ -283,7 +284,7 @@ export class PluginSandbox {
    */
   async openDiff(stableId1, stableId2, closeDialog = true) {
     await this.context.getDependency('services').load({xml: stableId1});
-    await this.context.getDependency('services').showMergeView(stableId2);
+    await this.context.invokePluginEndpoint(ep.mergeView.show, [stableId2], { throws: true });
     if (closeDialog) {
       this.closeDialog();
     } 

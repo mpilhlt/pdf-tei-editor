@@ -7,7 +7,6 @@
  * @property {import('../ui.js').SlSelect} variant
  * @property {import('../ui.js').SlSelect} pdf
  * @property {import('../ui.js').SlSelect} xml
- * @property {import('../ui.js').SlSelect} diff
  */
 
 export {}

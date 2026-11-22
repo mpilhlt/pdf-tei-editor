@@ -17,6 +17,10 @@ import {
   computeBBox
 } from '../../../app/src/modules/pdf-text-matcher.js';
 
+/**
+ * @import { PageModel } from '../../../app/src/modules/pdf-text-matcher.js'
+ */
+
 describe('foldChar', () => {
   test('lowercases and strips accents', () => {
     assert.strictEqual(foldChar('É'), 'e');
@@ -255,6 +259,72 @@ describe('findBestMatch', () => {
     // items at y=664 and y=652, height 10: bbox spans y 652..674
     assert.ok(match.bbox.y0 <= 652 && match.bbox.y1 >= 664);
     assert.ok(match.bbox.x0 <= 10);
+  });
+});
+
+describe('findBestMatch with long queries', () => {
+  const HEADER = 'Journal of Legal Theory, Volume 12';
+  const WORDS = ['law', 'norm', 'court', 'judge', 'statute', 'reason', 'rule', 'right', 'duty', 'claim',
+    'order', 'state', 'power', 'party', 'case', 'trial', 'appeal', 'remedy', 'treaty', 'custom'];
+
+  /**
+   * Builds pages that all start with the same running header followed by
+   * 40 lines of page-specific pseudo-random text.
+   * @param {number} pageCount
+   * @returns {{models: PageModel[], lines: string[][]}}
+   */
+  function makeLongPages(pageCount) {
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const models = [];
+    const lines = [];
+    for (let p = 1; p <= pageCount; p++) {
+      const pageLines = [HEADER];
+      for (let l = 0; l < 40; l++) {
+        pageLines.push(Array.from({ length: 6 }, () => WORDS[Math.floor(rnd() * WORDS.length)]).join(' '));
+      }
+      lines.push(pageLines);
+      models.push(buildPageModel(pageLines.map((str, i) => item(str, 10, 800 - i * 12)), p));
+    }
+    return { models, lines };
+  }
+
+  test('matches the whole region of a page-sized query, not only its start', () => {
+    const { models, lines } = makeLongPages(5);
+    const query = lines[2].join(' ');
+    const { match } = findBestMatch(models, query);
+    assert.ok(match, 'expected a match');
+    assert.strictEqual(match.page, 3);
+    assert.strictEqual(match.charRange[0], 0);
+    assert.strictEqual(match.charRange[1], models[2].text.length);
+    assert.strictEqual(match.itemIndices.length, lines[2].length);
+  });
+
+  test('a running header shared by all pages does not mislead the page choice', () => {
+    const { models, lines } = makeLongPages(5);
+    for (const pageIndex of [0, 4]) {
+      const { match } = findBestMatch(models, lines[pageIndex].join(' '), { anchorLength: 60 });
+      assert.ok(match);
+      assert.strictEqual(match.page, pageIndex + 1);
+    }
+  });
+
+  test('returns the span between head and tail of a passage within a page', () => {
+    const { models, lines } = makeLongPages(3);
+    const query = lines[1].slice(10, 30).join(' ');
+    const { match } = findBestMatch(models, query);
+    assert.ok(match);
+    assert.strictEqual(match.page, 2);
+    assert.deepStrictEqual(match.itemIndices, Array.from({ length: 20 }, (_, i) => i + 10));
+  });
+
+  test('falls back to the tail when the start of the query is not in the PDF', () => {
+    const { models, lines } = makeLongPages(3);
+    const query = 'x'.repeat(150) + ' ' + lines[1].slice(1).join(' ');
+    const { match } = findBestMatch(models, query);
+    assert.ok(match);
+    assert.strictEqual(match.page, 2);
+    assert.ok(match.itemIndices.includes(lines[1].length - 1));
   });
 });
 

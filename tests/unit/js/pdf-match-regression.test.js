@@ -20,7 +20,7 @@ const MIN_IOU = 0.3;
 // confirmed-correct match with a low score (e.g. slr-003, ~0.58: right page,
 // exact bbox, but scored below RUNTIME_THRESHOLD by the alignment metric);
 // that is a real, accepted limitation, not a regression. How many gold cases
-// would actually surface via Autosearch is tracked separately below.
+// would actually surface via "Sync with editor" is tracked separately below.
 const RUNTIME_THRESHOLD = 0.6;
 
 const goldCases = loadCases().filter(c => c.expected);

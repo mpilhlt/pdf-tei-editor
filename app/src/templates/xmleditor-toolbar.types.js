@@ -3,11 +3,6 @@
 
 /**
  * @typedef {object} xmleditorToolbarPart
- * @property {HTMLElement} prevDiffBtn
- * @property {HTMLElement} nextDiffBtn
- * @property {HTMLElement} rejectAllBtn
- * @property {HTMLElement} acceptAllBtn
- * @property {HTMLElement} strictDiffToggle
  * @property {HTMLElement} wrapToggle
  * @property {HTMLSpanElement & headerGroupPart} headerGroup
  */

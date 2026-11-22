@@ -7,6 +7,9 @@
 
 import { buildPageModel, findBestMatch } from './pdf-text-matcher.js';
 
+/** Maximum number of cached search results per document */
+const SEARCH_CACHE_SIZE = 500;
+
 /**
  * @import { MatchResult, PageModel, TextItem } from './pdf-text-matcher.js'
  */
@@ -148,9 +151,25 @@ export class PDFJSViewer {
       }, { passive: true });
     }
 
+    // Times of the last navigation by the user (in the pages or the thumbnail
+    // sidebar, or reported with markUserNavigation()) and by the viewer
+    // itself, see isUserNavigation()
+    this._lastUserNavigation = 0;
+    this._lastProgrammaticNavigation = 0;
+    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+      this.viewerWrapper.addEventListener(type, () => {
+        this._lastUserNavigation = performance.now();
+      }, { passive: true });
+    }
+
     // Cached page models for the loaded document (built on first search)
     /** @type {PageModel[]|null} */
     this._pageModels = null;
+
+    // Cached search results for the loaded document, keyed by threshold and
+    // query text, so that looking up the same node again is instant
+    /** @type {Map<string, MatchResult|null>} */
+    this._searchCache = new Map();
   }
 
   show() {
@@ -303,7 +322,9 @@ export class PDFJSViewer {
     // Invalidate per-document caches: a new document invalidates page models
     // and any highlighted match from the previous one
     this._pageModels = null;
+    this._searchCache.clear();
     this._highlightMatch = null;
+    this._lastProgrammaticNavigation = performance.now();
 
     this.loadPromise = new Promise(async (resolve, reject) => {
       try {
@@ -362,6 +383,7 @@ export class PDFJSViewer {
       throw new Error(`Invalid page number: ${pageNumber}`);
     }
 
+    this._lastProgrammaticNavigation = performance.now();
     this.pdfViewer.currentPageNumber = pageNumber;
   }
 
@@ -572,6 +594,7 @@ export class PDFJSViewer {
       await this.pdfDoc.destroy();
       this.pdfDoc = null;
       this._pageModels = null;
+      this._searchCache.clear();
       this._highlightMatch = null;
       this.pdfViewer.setDocument(null);
       this.linkService.setDocument(null);
@@ -599,20 +622,71 @@ export class PDFJSViewer {
     await this.close();
     this._highlightMatch = null;
     this._pageModels = null;
+    this._searchCache.clear();
+  }
+
+  /**
+   * Finds the region of the loaded PDF best matching the given text, without
+   * highlighting or scrolling to it. Results are cached per document.
+   *
+   * @param {string} queryText - The text to find
+   * @param {Object} [options={}]
+   * @param {number} [options.threshold=0.6] - Minimum similarity score in [0,1]
+   * @param {number[]} [options.pages] - 1-based numbers of the pages to search; all pages if omitted
+   * @returns {Promise<MatchResult|null>} The match, or null if none scored above the threshold
+   */
+  async findMatch(queryText, options = {}) {
+    const { threshold = 0.6, pages } = options;
+    const cacheKey = `${threshold}\u0000${pages ? pages.join(',') : ''}\u0000${queryText}`;
+    const cached = this._searchCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const allModels = await this._getPageModels();
+    const pageModels = pages ? allModels.filter(model => pages.includes(model.page)) : allModels;
+    const { match } = findBestMatch(pageModels, queryText, { threshold });
+    if (this._searchCache.size >= SEARCH_CACHE_SIZE) {
+      // Maps iterate in insertion order: drop the oldest entry
+      this._searchCache.delete(this._searchCache.keys().next().value);
+    }
+    this._searchCache.set(cacheKey, match);
+    return match;
+  }
+
+  /**
+   * Whether the user has interacted with the viewer (scrolling, clicking,
+   * typing, see {@link markUserNavigation}) since the viewer last navigated
+   * by itself (loading a document, {@link goToPage}, {@link search}).
+   * @returns {boolean}
+   */
+  isUserNavigation() {
+    return this._lastUserNavigation > this._lastProgrammaticNavigation;
+  }
+
+  /**
+   * Records a navigation requested by the user through controls outside the
+   * viewer, e.g. the page buttons of a toolbar, which are implemented with
+   * {@link goToPage}. Call it after the navigation.
+   */
+  markUserNavigation() {
+    this._lastUserNavigation = performance.now();
   }
 
   /**
    * Searches the loaded PDF for the region best matching the given text
-   * and highlights it. Page models are built once per document and cached.
+   * and highlights it. Page models are built once per document and cached,
+   * as are the results of the searches.
    *
    * @param {string} queryText - Ordered text of the selected TEI node
    * @param {Object} [options={}] - Search options
    * @param {number} [options.threshold=0.6] - Minimum similarity score in [0,1]
+   * @param {number[]} [options.pages] - 1-based numbers of the pages to search;
+   *   all pages if omitted. If nothing is found, the current highlight is kept.
    * @returns {Promise<MatchResult|null>} The match, or null if none scored
    *   above the threshold
    */
   async search(queryText, options = {}) {
-    const { threshold = 0.6 } = options;
+    const { threshold = 0.6, pages } = options;
 
     if (!queryText || !queryText.trim()) {
       console.warn("No search text provided.");
@@ -627,17 +701,18 @@ export class PDFJSViewer {
       await this.loadPromise;
     }
 
-    const pageModels = await this._getPageModels();
-    const { match, candidates } = findBestMatch(pageModels, queryText, { threshold });
-    // console.log("PDF text match candidates:", candidates);
+    const match = await this.findMatch(queryText, { threshold, pages });
 
     if (!match) {
-      this._highlightMatch = null;
-      this._clearClusterHighlights();
+      if (!pages) {
+        this._highlightMatch = null;
+        this._clearClusterHighlights();
+      }
       return null;
     }
 
     this._highlightMatch = match;
+    this._lastProgrammaticNavigation = performance.now();
 
     // Scroll from the current position to the match. The target is computed
     // from the match's PDF coordinates, so it does not depend on the text

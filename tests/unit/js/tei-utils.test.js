@@ -18,6 +18,9 @@ import {
   decodeXmlIdToFileId,
   getEditorialDeclGuides,
   isInTeiText,
+  getPageBreakHint,
+  findPageBreak,
+  getPageBreakText,
   addRevisionChange,
   getRevisionLabel,
   getRevisionStatus,
@@ -560,5 +563,57 @@ describe('document history ignores stand-off revisionDesc', () => {
     assert.strictEqual(headerChanges.length, 1);
     assert.strictEqual(headerChanges[0].getAttribute('status'), 'draft');
     assert.strictEqual(doc.querySelectorAll('standOff revisionDesc > change').length, 1);
+  });
+});
+
+describe('getPageBreakHint', () => {
+  const doc = new JSDOM(`<?xml version="1.0"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0"><text>
+  <front id="f">Title</front>
+  <pb n="1"/>
+  <body id="b1">First page <lb/>text</body>
+  <pb n="x"/>
+  <body id="b2">Second page</body>
+  <body id="b3">Starts on the second page <pb n="3"/> and continues on the third</body>
+  <pb/>
+  <note id="n4">Fourth page</note>
+</text></TEI>`, { contentType: 'text/xml' }).window.document;
+  const byId = (/** @type {string} */ id) => /** @type {Element} */ (doc.querySelector(`[id="${id}"]`));
+  const pbs = doc.getElementsByTagNameNS('*', 'pb');
+
+  it('returns null for a node before the first page break', () => {
+    assert.strictEqual(getPageBreakHint(byId('f')), null);
+  });
+
+  it('returns the ordinal and n of the nearest preceding page break', () => {
+    assert.deepStrictEqual(getPageBreakHint(byId('b1')), { ordinal: 1, n: 1 });
+    assert.deepStrictEqual(getPageBreakHint(/** @type {Node} */ (byId('b1').firstChild)), { ordinal: 1, n: 1 });
+  });
+
+  it('ignores a non-numeric or missing n', () => {
+    assert.deepStrictEqual(getPageBreakHint(byId('b2')), { ordinal: 2, n: null });
+    assert.deepStrictEqual(getPageBreakHint(byId('n4')), { ordinal: 4, n: null });
+  });
+
+  it('does not count page breaks inside the node', () => {
+    assert.deepStrictEqual(getPageBreakHint(byId('b3')), { ordinal: 2, n: null });
+  });
+
+  it('returns the page break itself for a pb', () => {
+    assert.deepStrictEqual(getPageBreakHint(pbs[2]), { ordinal: 3, n: 3 });
+  });
+
+  it('findPageBreak finds a pb by n or by ordinal', () => {
+    assert.strictEqual(findPageBreak(doc, { n: 3 }), pbs[2]);
+    assert.strictEqual(findPageBreak(doc, { n: 2 }), null);
+    assert.strictEqual(findPageBreak(doc, { ordinal: 4 }), pbs[3]);
+    assert.strictEqual(findPageBreak(doc, { ordinal: 5 }), null);
+  });
+
+  it('getPageBreakText returns the text up to the next pb', () => {
+    assert.strictEqual(getPageBreakText(pbs[0]), 'First page text');
+    assert.strictEqual(getPageBreakText(pbs[1]), 'Second page Starts on the second page');
+    assert.strictEqual(getPageBreakText(pbs[3]), 'Fourth page');
+    assert.strictEqual(getPageBreakText(pbs[1], 6), 'Second');
   });
 });

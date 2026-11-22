@@ -379,16 +379,18 @@ class ToolBar extends BasePanel {
   }
 
   /**
-   * Appends a row of named sections to the toolbar, separated by `<status-separator>`s:
+   * Appends a group of named sections to the toolbar, separated by `<status-separator>`s:
    * `[a] | [b] | [c]`. Widgets are added to a section with {@link ToolBar#addToSection}.
    * A section separator is only shown while there is a visible widget on both of its sides,
-   * so that an empty section leaves no stray or doubled separator.
+   * so that an empty section leaves no stray or doubled separator. Each call appends a new
+   * group whose first section has no leading separator, so that groups can be placed at
+   * different positions of the toolbar (e.g. one at the start and one after a spacer).
    * @param {string[]} names - Section names, from left to right
    * @param {number} [separatorPriority] - Overflow priority of the separators (default: 0)
    */
   defineSections(names, separatorPriority = 0) {
     if (!this.sections) {
-      /** @type {Map<string, {index: number, separator: HTMLElement|null}>} */
+      /** @type {Map<string, {index: number, group: number, separator: HTMLElement|null}>} */
       this.sections = new Map();
       // follow widgets that appear, disappear or are hidden by overflow
       this.sectionObserver = new MutationObserver(records => {
@@ -398,17 +400,18 @@ class ToolBar extends BasePanel {
       });
       this.sectionObserver.observe(this, { childList: true, attributes: true, attributeFilter: ['style', 'hidden', 'data-overflow-hidden'] });
     }
-    for (const name of names) {
+    const group = this.sectionGroups = (this.sectionGroups ?? 0) + 1;
+    names.forEach((name, position) => {
       if (this.sections.has(name)) throw new Error(`Toolbar section "${name}" is already defined`);
       let separator = null;
-      if (this.sections.size > 0) {
+      if (position > 0) {
         separator = document.createElement('status-separator');
         separator.setAttribute('variant', 'vertical');
         separator.dataset.sectionSeparator = name;
         this.add(separator, separatorPriority);
       }
-      this.sections.set(name, { index: this.sections.size, separator });
-    }
+      this.sections.set(name, { index: this.sections.size, group, separator });
+    });
     this.syncSectionSeparators();
   }
 
@@ -437,8 +440,8 @@ class ToolBar extends BasePanel {
     } else if (definition.separator) {
       id = this.addAfter(widget, priority, definition.separator);
     } else {
-      // first section without widgets yet: right before the next section's separator
-      const next = [...this.sections.values()].find(s => s.index === definition.index + 1);
+      // first section of its group without widgets yet: right before the next section's separator
+      const next = [...this.sections.values()].find(s => s.index === definition.index + 1 && s.group === definition.group);
       id = next?.separator ? this.addBefore(widget, priority, next.separator) : this.add(widget, priority);
     }
     this.syncSectionSeparators();

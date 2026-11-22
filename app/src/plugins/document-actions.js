@@ -47,6 +47,14 @@ class DocumentActionsPlugin extends Plugin {
   get #logger() { return this.getDependency('logger') }
   get #filedata() { return this.getDependency('filedata') }
   get #services() { return this.getDependency('services') }
+
+  /**
+   * Hides the merge view, if the merge-view plugin is active
+   * @returns {Promise<void>}
+   */
+  async #hideMergeView() {
+    await this.context.invokePluginEndpoint(ep.mergeView.hide, [], { throws: true })
+  }
   get #xmlEditor() { return this.getDependency('xmleditor') }
 
   /**
@@ -161,7 +169,7 @@ class DocumentActionsPlugin extends Plugin {
       const msg = `Are you sure you want to delete the current version "${versionName}"?`
       if (!confirm(msg)) return
 
-      this.#services.removeMergeView()
+      await this.#hideMergeView()
       await this.#client.deleteFiles(/** @type {string[]} */ (filePathsToDelete))
       try {
         await this.dispatchStateChange({ xml: null })
@@ -220,7 +228,7 @@ class DocumentActionsPlugin extends Plugin {
       : `No other version would be deleted with "${describe(xml)}": its earlier versions are shared with other versions. Delete the current version?`
     if (!confirm(msg)) return
 
-    this.#services.removeMergeView()
+    await this.#hideMergeView()
     const result = await api.filesDeleteHistory({ file_id: xml })
     try {
       await this.dispatchStateChange({ xml: null })
@@ -271,7 +279,7 @@ class DocumentActionsPlugin extends Plugin {
       return
     }
 
-    this.#services.removeMergeView()
+    await this.#hideMergeView()
     try {
       await this.#client.deleteFiles(filePathsToDelete)
     } catch (err) {
@@ -331,7 +339,6 @@ class DocumentActionsPlugin extends Plugin {
     const filePathsToDelete = Array.from(new Set(
       [state.pdf]
         .concat(fileSelection.getOptionValues('xml').map(o => o.value))
-        .concat(fileSelection.getOptionValues('diff').map(o => o.value))
     )).filter(Boolean)
 
     if (filePathsToDelete.length > 0) {
@@ -339,7 +346,7 @@ class DocumentActionsPlugin extends Plugin {
       if (!confirm(msg)) return
     }
 
-    this.#services.removeMergeView()
+    await this.#hideMergeView()
     this.#logger.debug("Deleting files:" + filePathsToDelete.join(", "))
 
     try {

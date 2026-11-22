@@ -12,11 +12,10 @@ import ep from '../extension-points.js'
 import ui from '../ui.js'
 import { SsePlugin } from '../plugin-registry.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
-import { UrlHash } from '../modules/browser-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror/codemirror-utils.js'
 import { ApiError } from '../modules/utils.js'
-import { encodeXmlEntities, isInTeiText } from '../modules/tei-utils.js'
+import { encodeXmlEntities } from '../modules/tei-utils.js'
 import { ServerChangeMonitor } from '../modules/server-change-monitor.js'
 
 class ServicesPlugin extends Plugin {
@@ -235,8 +234,10 @@ class ServicesPlugin extends Plugin {
           ui.spinner.hide()
         }
 
-        // Always load XML content and update state
-        await this.removeMergeView()
+        // Always load XML content and update state. The merge view of the previous document ends;
+        // the editor's own merge view is hidden too, in case it was shown without the merge-view plugin
+        await this.context.invokePluginEndpoint(ep.mergeView.hide, [], { throws: true })
+        await this.#xmlEditor.hideMergeView()
         await this.dispatchStateChange({
           xml: null,
           diff: null,
@@ -284,9 +285,6 @@ class ServicesPlugin extends Plugin {
 
           // Check source id
           if (pdf && fileData.source && fileData.source.id === pdf) {
-            if (!currentState.collection) {
-              stateChanges.collection = fileData.collections[0]
-            }
             foundMatch = true
           }
 
@@ -294,9 +292,6 @@ class ServicesPlugin extends Plugin {
           if (xml) {
             const matchingArtifact = fileData.artifacts && fileData.artifacts.find(/** @param {any} artifact */ artifact => artifact.id === xml)
             if (matchingArtifact) {
-              if (!currentState.collection) {
-                stateChanges.collection = fileData.collections[0]
-              }
               // Always set variant from artifact (it's the source of truth for the loaded document)
               if (matchingArtifact.variant) {
                 stateChanges.variant = matchingArtifact.variant
@@ -307,6 +302,7 @@ class ServicesPlugin extends Plugin {
 
           // Only break if we found what we're looking for
           if (foundMatch) {
+            Object.assign(stateChanges, this.#getCollectionChanges(currentState, fileData.collections || []))
             break
           }
         }
@@ -318,6 +314,33 @@ class ServicesPlugin extends Plugin {
       // Clear loading state
       await this.context.invokePluginEndpoint(ep.filedata.loading, false)
     }
+  }
+
+  /**
+   * Returns the state changes that make the collection state match the loaded document: `collection`
+   * (and `project`) if the current collection is not one of the document's, and `collectionFilter` if
+   * the file selection is filtered by a collection that does not contain the document (e.g. a filter
+   * restored from the session when the document comes from the URL hash), which would otherwise hide
+   * the document in the selectboxes.
+   * @param {ApplicationState} currentState
+   * @param {string[]} docCollections - The collections of the loaded document
+   * @returns {Partial<ApplicationState>}
+   */
+  #getCollectionChanges(currentState, docCollections) {
+    /** @type {Partial<ApplicationState>} */
+    const changes = {}
+    if (docCollections.length === 0) return changes
+    const filter = currentState.collectionFilter
+    if (filter && !docCollections.includes(filter)) {
+      changes.collectionFilter = docCollections[0]
+    }
+    if (!currentState.collection || !docCollections.includes(currentState.collection)) {
+      const collection = changes.collectionFilter || docCollections[0]
+      const project = (currentState.projects || []).find(p => p.collections && p.collections.includes(collection))
+      changes.collection = collection
+      changes.project = project ? project.id : null
+    }
+    return changes
   }
 
   async #startAutocomplete() {
@@ -365,43 +388,6 @@ class ServicesPlugin extends Plugin {
   async validateXml() {
     this.#logger.info("Validating XML...")
     return await this.#validation.validate() // todo use endpoint instead
-  }
-
-  /**
-   * Creates a diff between the current and the given document and shows a merge view
-   * @param {string} diff The path to the xml document with which to compare the current xml doc
-   */
-  async showMergeView(diff) {
-    if (!diff || typeof diff != "string") {
-      throw new TypeError("Invalid diff value")
-    }
-    this.#logger.info("Loading diff XML: " + diff)
-    ui.spinner.show('Computing file differences, please wait...')
-    try {
-      // Convert document identifier to static file URL
-      const diffUrl = `/api/files/${diff}`
-      await this.#xmlEditor.showMergeView(diffUrl)
-      if (!this.state || this.state.diff !== diff) {
-        await this.dispatchStateChange({ diff: diff })
-      }
-      // turn validation off as it creates too much visual noise
-      this.#validation.configure({ mode: "off" })
-    } finally {
-      ui.spinner.hide()
-    }
-  }
-
-  /**
-   * Removes all remaining diffs
-   */
-  async removeMergeView() {
-    this.#xmlEditor.hideMergeView()
-    // re-enable validation
-    this.#validation.configure({ mode: "auto" })
-    if (this.state && this.state.diff) {
-      UrlHash.remove("diff")
-      await this.dispatchStateChange({ diff: null })
-    }
   }
 
   /**
@@ -463,117 +449,19 @@ class ServicesPlugin extends Plugin {
   }
 
   /**
-   * Given a node in the XML, locate and highlight the region of the PDF
-   * it was extracted from, using fuzzy sequence matching on the node's
-   * ordered text content. Nodes outside `/TEI/text` (e.g. in the teiHeader)
-   * are ignored, since they have no counterpart in the PDF. Nodes without text
-   * (e.g. `<pb/>`) and nodes whose text is not found are passed to the
-   * `pdfSearch.fallback` handlers.
+   * Given a node in the XML, locates and highlights the region of the PDF
+   * it was extracted from. The lookup is done by the handlers of the
+   * `pdfSearch.searchNode` extension point (see EditorSyncPlugin).
    * @param {Element} node
+   * @returns {Promise<void>}
    */
   async searchNodeContentsInPdf(node) {
-    if (!isInTeiText(node)) {
-      return
-    }
-    const queryText = getNodeText(node).join(' ')
-    if (!queryText.trim()) {
-      // Empty elements such as <pb/> have no text to search for, but a
-      // pdfSearch.fallback handler may still know their page
-      if (await this.#searchFallback(node)) {
-        this.#logger.debug('PDF position of an element without text found by a pdfSearch.fallback handler')
-        this.#pdfViewer.clearStatusMessage()
-      }
-      return
-    }
-    // If the node originates from a footnote, prepend the printed footnote
-    // number: the footnote text in the PDF physically starts with it
-    const footnoteId = getSourceFootnoteId(node)
-    const query = footnoteId ? `${footnoteId} ${queryText}` : queryText
-    const match = await this.#pdfViewer.search(query)
-    if (match) {
-      this.#logger.debug(`PDF match: page ${match.page}, score ${match.score.toFixed(3)}`)
-      this.#pdfViewer.clearStatusMessage()
-    } else if (await this.#searchFallback(node)) {
-      this.#logger.debug('PDF position found by a pdfSearch.fallback handler')
-      this.#pdfViewer.clearStatusMessage()
-    } else {
-      this.#logger.debug(`No PDF match for query: ${query.slice(0, 80)}...`)
-      this.#pdfViewer.showStatusMessage('No sufficiently similar text found in the PDF')
-    }
-  }
-
-  /**
-   * Asks the `pdfSearch.fallback` handlers of other plugins for the PDF page of a node
-   * whose text could not be found in the PDF, and scrolls to the first page returned.
-   * @param {Element} node
-   * @returns {Promise<boolean>} Whether a page was found
-   */
-  async #searchFallback(node) {
-    const pageCount = this.#pdfViewer.pdfDoc?.numPages ?? 0
-    const results = await this.context.invokePluginEndpoint(
-      ep.pdfSearch.fallback, [node, { xml: this.state?.xml ?? null, pageCount }], { result: 'values', throws: false }
-    )
-    const pages = (Array.isArray(results) ? results : []).map(r => r?.page)
-    const page = pages.find(p => Number.isInteger(p) && p >= 1 && p <= pageCount)
-    if (!page) {
-      return false
-    }
-    await this.#pdfViewer.goToPage(page)
-    return true
+    await this.context.invokePluginEndpoint(ep.pdfSearch.searchNode, [node], { throws: true, result: 'values' })
   }
 }
 
 export default ServicesPlugin
 
-
-/**
- * Returns a list of non-empty text content from all text nodes contained in the given node
- * @param {Element} node
- * @returns {Array<string>}
- */
-function getNodeText(node) {
-  // @ts-ignore
-  return getTextNodes(node).map(node => node.textContent?.trim()).filter(Boolean)
-}
-
-/**
- * Recursively extracts all text nodes contained in the given node into a flat list
- * @param {Node} node
- * @return {Array<Node>}
- */
-function getTextNodes(node) {
-  /** @type {Node[]} */
-  let textNodes = []
-  if (node.nodeType === Node.TEXT_NODE) {
-    textNodes.push(node)
-  } else {
-    for (let i = 0; i < node.childNodes.length; i++) {
-      textNodes = textNodes.concat(getTextNodes(node.childNodes[i]))
-    }
-  }
-  return textNodes
-}
-
-/**
- * Returns the printed footnote identifier for a node, if the project's
- * ad-hoc convention applies: a `source="fnNN"` attribute on the node or an
- * ancestor marks the footnote the node was extracted from. This convention
- * is non-standard and may change - keep ALL knowledge of it inside this
- * function; callers only see "text to prepend to the PDF search query".
- * @param {Element} node
- * @returns {string|null} The printed footnote number, or null
- */
-export function getSourceFootnoteId(node) {
-  let current = node
-  while (current && current.nodeType === 1 /* ELEMENT_NODE */) {
-    const source = current.getAttribute('source')
-    if (source && /^fn\d+$/.test(source)) {
-      return source.slice(2)
-    }
-    current = current.parentElement
-  }
-  return null
-}
 
 /**
  * The session storage, or null where it is not accessible (e.g. blocked site data).

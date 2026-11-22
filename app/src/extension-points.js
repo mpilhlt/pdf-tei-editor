@@ -142,14 +142,55 @@ const extensionPoints = {
      */
     contextMenuItems: "xmlEditor.contextMenuItems",
   },
+  mergeView: {
+    /**
+     * Shows the merge view, which compares the open document with another version of it.
+     * Implemented by MergeViewPlugin; without it, nothing happens. Throws if the version cannot be
+     * loaded when invoked with `throws: true`.
+     * Function signature: (diff: string) => Promise<void> — `diff` is the stable id of the version to compare with
+     */
+    show: "mergeView.show",
+    /**
+     * Hides the merge view, if it is shown, and keeps the open document unchanged.
+     * Implemented by MergeViewPlugin; without it, nothing happens.
+     * Function signature: () => Promise<void>
+     */
+    hide: "mergeView.hide"
+  },
+  pdfViewer: {
+    /**
+     * Contribute widgets to the statusbar (footer) of the PDF viewer.
+     * Called by PdfViewerPlugin.start() on all plugins that declare this extension point.
+     * Function signature: () => Array<{element: HTMLElement, position?: 'left'|'center'|'right', priority?: number}>
+     * `priority` (default 0) also decides the order within the position: higher comes first.
+     */
+    statusbarItems: "pdfViewer.statusbarItems",
+    /**
+     * Invoked by PdfViewerPlugin when the current page of the PDF viewer has changed and
+     * stayed the same for a short while (a scroll over several pages counts as one change).
+     * `userInitiated` is true if the user navigated (scrolling, clicking in the pages or
+     * thumbnails, page buttons), false if the viewer did (loading a document, showing a
+     * search result). Handled by EditorSyncPlugin to scroll the XML editor to the page.
+     * Function signature: (page: number, info: {userInitiated: boolean}) => Promise<void>|void
+     */
+    pageChanged: "pdfViewer.pageChanged"
+  },
   pdfSearch: {
     /**
-     * Fallback for the "Autosearch" synchronization of the XML selection with the PDF,
-     * invoked by ServicesPlugin.searchNodeContentsInPdf() when the text of the selected
-     * node was not found in the PDF (e.g. because the PDF has no text layer) or when the
-     * node has no text at all (e.g. an empty `<pb/>` selected via the navigation). Handlers
-     * return `{page}` (1-based PDF page) to scroll the PDF to that page, or null/undefined
-     * if they do not apply to the document. The first handler returning a page wins.
+     * Locates the PDF region a node of the XML document was extracted from and highlights
+     * it in the PDF viewer. Invoked by ServicesPlugin.searchNodeContentsInPdf(); handled by
+     * EditorSyncPlugin, which also does the lookup itself when the XML selection changes
+     * while the "Sync with editor" switch is on.
+     * Function signature: (node: Element) => Promise<void>
+     */
+    searchNode: "pdfSearch.searchNode",
+    /**
+     * Fallback for the synchronization of the XML selection with the PDF ("Sync with
+     * editor" switch), invoked by EditorSyncPlugin when the text of the selected node was not found in
+     * the PDF (e.g. because the PDF has no text layer) or when the node has no text at
+     * all (e.g. an empty `<pb/>` selected via the navigation). Handlers return `{page}`
+     * (1-based PDF page) to scroll the PDF to that page, or null/undefined if they do not
+     * apply to the document. The first handler returning a page wins.
      * Function signature: (node: Element, info: {xml: string|null, pageCount: number}) => Promise<{page: number}|null>|{page: number}|null
      */
     fallback: "pdfSearch.fallback"
