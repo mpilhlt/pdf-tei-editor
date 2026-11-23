@@ -2,9 +2,18 @@
 Repair of footnote markers that Tesseract misrecognizes (#904).
 
 Tesseract reads small superscript footnote markers as punctuation, independent of the
-resolution and of the model: `tut³¹²⁾` becomes `tut?!?)`. Recognizing the part of the word
-after its letters again, upscaled and with a digits-only whitelist, mostly yields the
-digits, sometimes with an extra leading digit from the last letter.
+resolution and of the model: `tut³¹²⁾` becomes `tut?!?)`, `Regel¹²` becomes `Regel"`,
+`vor.¹⁴` becomes `vor.'*`. Recognizing the part of the word after its letters again,
+upscaled and with a digits-only whitelist, mostly yields the digits, sometimes with an
+extra leading digit from the last letter.
+
+Candidates are words that end in a run of non-letters: with a closing parenthesis
+(`tut?!?)`), which is evidence enough, or without one (`Regel"`, `vor.'*`, `streng’;`),
+where the run must be raised above the baseline in the page image and the marker must be
+the next number of the sequence. Raised words of their own (`Regel "`) are candidates too.
+Footnote numbers at the start of footnotes that are set as superscripts as well (`» Vgl.`,
+`“Vgl.` for `¹⁴ Vgl.`) are recognized again in the same way, used for the numbering, and
+repaired.
 
 Which number a marker has is decided from the numbering of the footnotes. The numbers at
 the start of the footnotes are set at normal size but are not reliable either (`13)` for
@@ -51,8 +60,24 @@ EXACT_SCORE = 3.0
 EDIT_SCORE = 1.0
 """Score of a footnote number read with one wrong, missing or extra digit."""
 
+RECOVERED_SCORE_FACTOR = 1 / 3
+"""Factor on the scores of footnote numbers that were misrecognized and read again: their
+readings are less reliable than numbers read as digits in the first pass."""
+STRICT_MAX_STEP = 3
+"""Most numbers a marker without parenthesis may advance the sequence by. These markers have
+less evidence than parenthesized ones, so they are only accepted as the next number or close
+to it (a marker or two may have been missed)."""
+RAISED_BASELINE_FRACTION = 0.3
+"""A word of its own is raised if its bottom lies at least this fraction of the x-height
+above the baseline of its line."""
+
 _FOOTNOTE_START_RE = re.compile(r"^(\d{1,5})(\)?)$")
 _TRAILING_PUNCTUATION = ".,;:"
+_KEPT_PUNCTUATION = ".,;:)"
+"""Punctuation directly after the letters of a word that belongs to the text, not the marker."""
+_OPENING_QUOTES = "„‚“‘»«\""
+_CLOSING_QUOTES = "“”‘’\"'«»"
+_DASHES = "-‐‑–—"
 
 Box = tuple[int, int, int, int]
 """Pixel bounding box: left, top, right, bottom."""
@@ -66,8 +91,28 @@ class FootnoteStart:
     """A line that starts with a number, possibly the start of a footnote."""
 
     digits: str
+    """The number as read, empty for a misrecognized number (see `readings`)."""
     parenthesized: bool
     """Whether the number is followed by `)`."""
+    readings: list[str] = field(default_factory=list)
+    """Digits read by the second pass for a misrecognized number."""
+    word_id: str = ""
+    """The `id` of the first word of the line, set for a misrecognized number."""
+    text: str = ""
+    """The first word of the line, set for a misrecognized number."""
+    marker: str = ""
+    """The misrecognized characters at the start of `text`."""
+
+    @property
+    def recovered(self) -> bool:
+        """Whether the number was misrecognized and read again."""
+        return not self.digits
+
+    def repaired_text(self, number: int) -> str:
+        """Return the first word with the misrecognized characters replaced by `number`."""
+        rest = self.text[len(self.marker) :]
+        separator = " " if rest[:1].isalpha() else ""
+        return f"{number}{separator}{rest}"
 
 
 @dataclass
@@ -85,6 +130,9 @@ class MarkerCandidate:
     """The closing parenthesis and any punctuation after it."""
     readings: list[str] = field(default_factory=list)
     """Digits read by the second pass, empty for markers recognized as digits."""
+    strict: bool = False
+    """Whether the marker has no closing parenthesis, so it is only accepted as the next
+    number of the sequence (see `STRICT_MAX_STEP`)."""
 
     @property
     def is_number(self) -> bool:
@@ -154,6 +202,119 @@ def split_marker(text: str) -> tuple[str, str, str] | None:
     if any(char.isspace() or char == "(" for char in marker):
         return None
     return prefix, marker, suffix
+
+
+def _is_marker_run(marker: str) -> bool:
+    """Whether a run of non-letters can be a misrecognized or correct marker."""
+    if not marker or len(marker) > MAX_MARKER_LENGTH:
+        return False
+    if any(char.isspace() or char.isalpha() or char in "()" for char in marker):
+        return False
+    return not all(char in _DASHES for char in marker)
+
+
+def split_trailing_marker(text: str) -> tuple[str, str, str] | None:
+    """
+    Split a word that ends in a marker without closing parenthesis.
+
+    Punctuation directly after the letters (`.,;:)`) belongs to the text, and so does a
+    closing quotation mark if the word has an opening one. Hyphens and dashes are no markers.
+
+    Args:
+        text: The recognized word, e.g. `Regel"`, `vor.'*` or `streng’;`
+
+    Returns:
+        (prefix, marker, suffix), e.g. ("vor.", "'*", ""), or None if the word does not end in
+        a run of non-letters after a letter
+    """
+    core = text.rstrip(_TRAILING_PUNCTUATION)
+    suffix = text[len(core) :]
+    end = len(core)
+    while end > 0 and not core[end - 1].isalpha():
+        end -= 1
+    prefix, run = core[:end], core[end:]
+    if not prefix:
+        return None
+    kept = 0
+    while kept < len(run) and run[kept] in _KEPT_PUNCTUATION:
+        kept += 1
+    if kept < len(run) and run[kept] in _CLOSING_QUOTES and any(char in _OPENING_QUOTES for char in prefix):
+        kept += 1
+    prefix, marker = prefix + run[:kept], run[kept:]
+    if not _is_marker_run(marker):
+        return None
+    return prefix, marker, suffix
+
+
+def split_standalone_marker(text: str) -> tuple[str, str] | None:
+    """
+    Split a word without letters into the marker and the punctuation after it.
+
+    Args:
+        text: The recognized word, e.g. `"` or `?!?).`
+
+    Returns:
+        (marker, suffix), e.g. ("?!?", ")."), or None
+    """
+    core = text.rstrip(_TRAILING_PUNCTUATION)
+    if core.endswith(")"):
+        core = core[:-1]
+    if not _is_marker_run(core):
+        return None
+    return core, text[len(core) :]
+
+
+def split_leading_marker(text: str) -> tuple[str, bool] | None:
+    """
+    Split off the non-letters at the start of the first word of a line.
+
+    Args:
+        text: The recognized word, e.g. `“Vgl.`, `»` or `"®)`
+
+    Returns:
+        (marker, parenthesized), e.g. ("“", False), or None if the word does not start with a
+        possible misrecognized number
+    """
+    end = 0
+    while end < len(text) and not text[end].isalpha():
+        end += 1
+    run = text[:end]
+    parenthesized = run.endswith(")")
+    marker = run[:-1] if parenthesized else run
+    if marker.isdigit() or not _is_marker_run(marker):
+        return None
+    if end < len(text) and parenthesized is False and marker[-1] in _TRAILING_PUNCTUATION:
+        return None
+    return marker, parenthesized
+
+
+@dataclass(frozen=True)
+class LineGeometry:
+    """Baseline and x-height of an hOCR line."""
+
+    left: int
+    bottom: int
+    slope: float
+    offset: float
+    x_height: float
+
+    @classmethod
+    def from_title(cls, title: str) -> "LineGeometry | None":
+        """Read the geometry from the `title` of an `ocr_line` element."""
+        box = parse_bbox(title)
+        baseline = re.search(r"baseline (-?[\d.]+) (-?[\d.]+)", title)
+        if not box or not baseline:
+            return None
+        values = {key: float(value) for key, value in re.findall(r"(x_size|x_ascenders|x_descenders) ([\d.]+)", title)}
+        x_height = values.get("x_size", 0) - values.get("x_ascenders", 0) - values.get("x_descenders", 0)
+        if x_height <= 0:
+            x_height = (box[3] - box[1]) / 2
+        return cls(box[0], box[3], float(baseline.group(1)), float(baseline.group(2)), x_height)
+
+    def is_raised(self, box: Box) -> bool:
+        """Whether a word box lies well above the baseline, like a superscript."""
+        baseline = self.bottom + self.slope * ((box[0] + box[2]) / 2 - self.left) + self.offset
+        return box[3] <= baseline - RAISED_BASELINE_FRACTION * self.x_height
 
 
 def marker_box(word_box: Box, text: str, prefix: str) -> Box:
@@ -276,14 +437,14 @@ def _classes(element: etree._Element) -> set[str]:
     return set((element.get("class") or "").split())
 
 
-def _page_lines(root: etree._Element) -> list[list[etree._Element]]:
-    """Return the words of every line, in reading order."""
+def _page_lines(root: etree._Element) -> list[tuple[LineGeometry | None, list[etree._Element]]]:
+    """Return the geometry and the words of every line, in reading order."""
     lines = []
     for element in root.iter(f"{{{XHTML_NS}}}span", "span"):
         if _classes(element) & LINE_CLASSES:
             words = [word for word in element.iter(f"{{{XHTML_NS}}}span", "span") if "ocrx_word" in _classes(word)]
             if words:
-                lines.append(words)
+                lines.append((LineGeometry.from_title(element.get("title") or ""), words))
     return lines
 
 
@@ -291,12 +452,85 @@ def _word_text(word: etree._Element) -> str:
     return "".join(str(text) for text in word.itertext())
 
 
+def _padded(image: Image.Image, box: Box) -> Box:
+    """Return a word box with some margin, for recognizing a word of its own."""
+    left, top, right, bottom = box
+    padding = max(2, (bottom - top) // 4)
+    return max(0, left - padding), max(0, top - padding), min(image.width, right + padding), min(image.height, bottom + padding)
+
+
+def _recovered_start(words: Sequence[etree._Element], geometry: LineGeometry | None, image: Image.Image, recognize: DigitRecognizer) -> FootnoteStart | None:
+    """
+    Recognize a superscript footnote number at the start of a line again.
+
+    The first word must start with non-letters that are raised: as a word of its own
+    (`» Vgl.`), judged against the baseline of the line, or followed by letters (`“Vgl.`),
+    judged within the word.
+    """
+    word = words[0]
+    text = _word_text(word)
+    box = parse_bbox(word.get("title") or "")
+    word_id = word.get("id")
+    parts = split_leading_marker(text)
+    if not parts or not box or not word_id:
+        return None
+    marker, parenthesized = parts
+    run_length = len(marker) + int(parenthesized)
+    if run_length == len(text):
+        if len(words) < 2 or geometry is None or not geometry.is_raised(box):
+            return None
+        region: Box | None = _padded(image, box)
+    else:
+        left, top, right, bottom = box
+        end = left + (right - left) * len(marker) // len(text)
+        estimate = (left, top, min(right, end + (bottom - top) // 4), bottom)
+        region = raised_region(image, box, estimate)
+    if region is None:
+        return None
+    return FootnoteStart("", parenthesized, recognize(image, region), word_id, text, marker)
+
+
+def _candidate(word: etree._Element, position: int, geometry: LineGeometry | None, image: Image.Image, recognize: DigitRecognizer) -> MarkerCandidate | None:
+    """Return the word as a marker candidate, with its second-pass readings, or None."""
+    text = _word_text(word)
+    box = parse_bbox(word.get("title") or "")
+    word_id = word.get("id")
+    if not box or not word_id:
+        return None
+    if parts := split_marker(text):
+        # Followed by a parenthesis: a candidate even if nothing raised is found
+        candidate = MarkerCandidate(word_id, text, *parts)
+        if not candidate.is_number:
+            region = marker_box(box, text, candidate.prefix)
+            raised = raised_region(image, box, region)
+            candidate.readings = (recognize(image, raised) if raised else []) + recognize(image, region)
+        return candidate
+    if position > 0 and (standalone := split_standalone_marker(text)):
+        if geometry is None or not geometry.is_raised(box):
+            return None
+        candidate = MarkerCandidate(word_id, text, "", *standalone, strict=True)
+        if not candidate.is_number:
+            candidate.readings = recognize(image, _padded(image, box))
+        return candidate
+    if parts := split_trailing_marker(text):
+        region = marker_box(box, text, parts[0])
+        raised = raised_region(image, box, region)
+        if raised is None:
+            # Without parenthesis, only raised glyphs are evidence of a superscript
+            return None
+        candidate = MarkerCandidate(word_id, text, *parts, strict=True)
+        if not candidate.is_number:
+            candidate.readings = recognize(image, raised) + recognize(image, region)
+        return candidate
+    return None
+
+
 def analyze_page(root: etree._Element, image: Image.Image, recognize: DigitRecognizer) -> PageAnalysis:
     """
     Collect the footnote starts and marker candidates of an hOCR page.
 
-    Misrecognized markers are recognized again here, since this is the step that has the
-    page image.
+    Misrecognized markers and footnote numbers are recognized again here, since this is the
+    step that has the page image.
 
     Args:
         root: The root of the hOCR document
@@ -304,22 +538,17 @@ def analyze_page(root: etree._Element, image: Image.Image, recognize: DigitRecog
         recognize: Recognizes the digits in a region of the image
     """
     analysis = PageAnalysis()
-    for words in _page_lines(root):
+    for geometry, words in _page_lines(root):
+        first = 0
         if match := _FOOTNOTE_START_RE.match(_word_text(words[0])):
             analysis.footnote_starts.append(FootnoteStart(match.group(1), bool(match.group(2))))
-        for word in words:
-            text = _word_text(word)
-            parts = split_marker(text)
-            box = parse_bbox(word.get("title") or "")
-            word_id = word.get("id")
-            if not parts or not box or not word_id:
-                continue
-            candidate = MarkerCandidate(word_id, text, *parts)
-            if not candidate.is_number:
-                region = marker_box(box, text, candidate.prefix)
-                raised = raised_region(image, box, region)
-                candidate.readings = (recognize(image, raised) if raised else []) + recognize(image, region)
-            analysis.candidates.append(candidate)
+            first = 1
+        elif start := _recovered_start(words, geometry, image, recognize):
+            analysis.footnote_starts.append(start)
+            first = 1
+        for position, word in enumerate(words[first:], start=first):
+            if candidate := _candidate(word, position, geometry, image, recognize):
+                analysis.candidates.append(candidate)
     return analysis
 
 
@@ -362,7 +591,31 @@ class _PrefixMax:
         return best, payload
 
 
+def _start_variants(start: FootnoteStart) -> list[tuple[int, float]]:
+    """Return the numbers a footnote start can be, with their scores."""
+    if not start.recovered:
+        return _read_variants(start.digits)
+    best: dict[int, float] = {}
+    for reading in start.readings:
+        if reading:
+            for value, score in _read_variants(reading):
+                best[value] = max(best.get(value, 0.0), score * RECOVERED_SCORE_FACTOR)
+    return list(best.items())
+
+
 def fit_footnote_numbers(pages: Sequence[Sequence[FootnoteStart]]) -> list[list[int]]:
+    """
+    Fit the numbers at the start of lines to increasing footnote sequences.
+
+    See `fit_footnote_starts`.
+
+    Returns:
+        The footnote numbers found on every page, in document order
+    """
+    return [[value for value in page if value is not None] for page in fit_footnote_starts(pages)]
+
+
+def fit_footnote_starts(pages: Sequence[Sequence[FootnoteStart]]) -> list[list[int | None]]:
     """
     Fit the numbers at the start of lines to increasing footnote sequences.
 
@@ -371,19 +624,19 @@ def fit_footnote_numbers(pages: Sequence[Sequence[FootnoteStart]]) -> list[list[
     numbers taken minus a penalty for every number the sequence skips, up to a maximum. The
     sequence may also restart near 1 at a higher cost, for documents whose numbering
     restarts with every article or chapter. If most numbers are followed by `)`, numbers
-    without it are not considered.
+    without it are not considered. Misrecognized numbers that were read again count less.
 
     Args:
         pages: The footnote starts of every page, in reading order
 
     Returns:
-        The footnote numbers found on every page, in document order
+        The number fitted to every footnote start, or None if it was left out
     """
-    starts = [(page, start) for page, page_starts in enumerate(pages) for start in page_starts]
-    parenthesized = sum(1 for _, start in starts if start.parenthesized)
+    starts = [(page, position, start) for page, page_starts in enumerate(pages) for position, start in enumerate(page_starts)]
+    parenthesized = sum(1 for _, _, start in starts if start.parenthesized)
     if parenthesized * 2 >= len(starts):
-        starts = [(page, start) for page, start in starts if start.parenthesized]
-    variants = [_read_variants(start.digits) for _, start in starts]
+        starts = [entry for entry in starts if entry[2].parenthesized]
+    variants = [_start_variants(start) for _, _, start in starts]
     values = sorted({value for options in variants for value, _ in options})
     index = {value: i for i, value in enumerate(values)}
     # Best totals of the numbers taken so far, by their value: with the gap penalty folded in
@@ -412,14 +665,12 @@ def fit_footnote_numbers(pages: Sequence[Sequence[FootnoteStart]]) -> list[list[
             plain.update(position, total, node)
             if total > best_score:
                 best_score, best_node = total, node
-    chain = []
+    result: list[list[int | None]] = [[None] * len(page_starts) for page_starts in pages]
     node = best_node
     while node is not None:
         start_index, value, node = nodes[node]
-        chain.append((starts[start_index][0], value))
-    result: list[list[int]] = [[] for _ in pages]
-    for page, value in reversed(chain):
-        result[page].append(value)
+        page, position, _ = starts[start_index]
+        result[page][position] = value
     return result
 
 
@@ -488,7 +739,8 @@ def plan_repairs(pages: Sequence[PageAnalysis]) -> list[list[MarkerRepair]]:
     Returns:
         The repairs of every page
     """
-    fitted = fit_footnote_numbers([page.footnote_starts for page in pages])
+    assigned = fit_footnote_starts([page.footnote_starts for page in pages])
+    fitted = [[value for value in page if value is not None] for page in assigned]
     repairs: list[list[MarkerRepair]] = [[] for _ in pages]
     if not any(fitted):
         # Without footnote numbers there is nothing to check the readings against
@@ -499,13 +751,22 @@ def plan_repairs(pages: Sequence[PageAnalysis]) -> list[list[MarkerRepair]]:
         # Continue from the previous page unless the page's range lies elsewhere
         if not low - 1 <= last <= high:
             last = low - 1
+        for start, value in zip(page.footnote_starts, assigned[page_index]):
+            # A misrecognized footnote number is repaired if the fit took it and a reading has it
+            if start.recovered and value is not None and any(str(value) in reading for reading in start.readings):
+                repairs[page_index].append(MarkerRepair(start.word_id, start.text, start.repaired_text(value)))
+        # Markers refer to footnotes on their own page, so a marker without parenthesis is not
+        # given a number below the page's first footnote number
+        floor = fitted[page_index][0] - 1 if fitted[page_index] else low - 1
         for candidate in page.candidates:
+            after = max(last, floor) if candidate.strict else last
+            limit = min(high, after + STRICT_MAX_STEP) if candidate.strict else high
             if candidate.is_number:
                 number = int(candidate.marker)
-                if last < number <= high:
+                if after < number <= limit:
                     last = number
                 continue
-            chosen = _choose_number(candidate.readings, last, high)
+            chosen = _choose_number(candidate.readings, after, limit)
             if chosen is None:
                 continue
             last = chosen
