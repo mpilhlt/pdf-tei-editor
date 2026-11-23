@@ -250,13 +250,13 @@ class OcrmypdfEngine(OcrEngine):
             tmp_dir = Path(tmp)
             source = self._decrypt(input_path, tmp_dir)
             if mode != MODE_VECTORIZE:
-                self._run_ocrmypdf(source, output_path, tesseract_languages, mode, deskew, options)
-                return OcrResult(message=self._message(mode, tesseract_languages), method=METHODS[mode])
+                repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, mode, deskew, options)
+                return OcrResult(message=self._message(mode, tesseract_languages, repaired), method=METHODS[mode])
 
             reason = self._vectorize(input_path, source, tmp_dir)
             if reason is None:
-                self._run_ocrmypdf(tmp_dir / "outlined.pdf", output_path, tesseract_languages, MODE_SKIP, False, options)
-                message = self._message(MODE_VECTORIZE, tesseract_languages)
+                repaired = self._run_ocrmypdf(tmp_dir / "outlined.pdf", output_path, tesseract_languages, MODE_SKIP, False, options)
+                message = self._message(MODE_VECTORIZE, tesseract_languages, repaired)
                 if deskew:
                     message += " Skewed pages were not straightened, since the pages were kept as vector graphics."
                 return OcrResult(message=message, method="vectorize")
@@ -264,12 +264,12 @@ class OcrmypdfEngine(OcrEngine):
             if not options.get("rasterize_fallback", True):
                 raise ValueError(f"The text layer could not be replaced without rasterizing the pages: {reason}.")
             logger.info(f"Rasterizing {input_path.name} instead of converting the text to outlines: {reason}")
-            self._run_ocrmypdf(source, output_path, tesseract_languages, MODE_FORCE, deskew, options)
-            message = self._message(MODE_FORCE, tesseract_languages) + f" The pages were converted to images, since {reason}."
+            repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, MODE_FORCE, deskew, options)
+            message = self._message(MODE_FORCE, tesseract_languages, repaired) + f" The pages were converted to images, since {reason}."
             return OcrResult(message=message, method="force", fallback_reason=reason)
 
     @staticmethod
-    def _message(mode: str, tesseract_languages: list[str]) -> str:
+    def _message(mode: str, tesseract_languages: list[str], repaired_markers: int = 0) -> str:
         """Return the message reporting a finished run."""
         descriptions: dict[str, str] = {
             MODE_SKIP: "pages without text were recognized",
@@ -277,7 +277,10 @@ class OcrmypdfEngine(OcrEngine):
             MODE_FORCE: "all pages were rasterized and recognized",
             MODE_VECTORIZE: "the text layer was replaced, the pages were kept as vector graphics",
         }
-        return f"Text recognition finished: {descriptions.get(mode, mode)} (languages: {', '.join(tesseract_languages)})."
+        message = f"Text recognition finished: {descriptions.get(mode, mode)} (languages: {', '.join(tesseract_languages)})."
+        if repaired_markers:
+            message += f" {repaired_markers} misrecognized footnote markers were corrected."
+        return message
 
     @staticmethod
     def _decrypt(input_path: Path, tmp_dir: Path) -> Path:
@@ -335,9 +338,15 @@ class OcrmypdfEngine(OcrEngine):
         mode: str,
         deskew: bool,
         options: dict[str, OcrOptionValue],
-    ) -> None:
+    ) -> int:
         """
-        Run OCRmyPDF.
+        Run OCRmyPDF, with the plugin that repairs misrecognized footnote markers (#904).
+
+        The plugin is always loaded: OCRmyPDF serializes jobs with different plugin sets,
+        and it changes a marker only where the footnote numbering confirms the number.
+
+        Returns:
+            The number of repaired footnote markers
 
         Raises:
             RuntimeError: If OCRmyPDF fails
@@ -345,7 +354,10 @@ class OcrmypdfEngine(OcrEngine):
         import ocrmypdf
         from ocrmypdf.exceptions import ExitCodeException
 
+        from . import ocrmypdf_plugin
+
         logger.info(f"Running OCRmyPDF on {input_path.name} (mode={mode}, languages={tesseract_languages})")
+        ocrmypdf_plugin.reset_repair_count()
         try:
             ocrmypdf.ocr(
                 input_path,
@@ -358,9 +370,11 @@ class OcrmypdfEngine(OcrEngine):
                 tagged_pdf_mode="ignore",
                 invalidate_digital_signatures=True,
                 progress_bar=False,
+                plugins=[ocrmypdf_plugin.__name__],
             )
         except ExitCodeException as e:
             raise RuntimeError(f"OCRmyPDF failed: {type(e).__name__}: {e}") from e
+        return ocrmypdf_plugin.repair_count()
 
 
 def parse_tesseract_tsv(tsv: str) -> list[OcrWord]:

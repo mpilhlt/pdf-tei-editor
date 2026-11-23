@@ -58,6 +58,8 @@ The OCRmyPDF engine has these parameters:
 - **Straighten skewed pages**: rotates crooked scans by small angles before recognition. It is not applied when the pages are kept as vector graphics.
 - **Fix page orientation**: turns pages that are upside down or sideways. This changes the page orientation, so coordinates in existing annotations may no longer match.
 
+Tesseract, which the OCRmyPDF engine uses, reads small superscript footnote markers as punctuation: `tut³¹²⁾` becomes `tut?!?)`. The engine corrects such markers: it reads them again on their own and takes the number that fits the numbering of the footnotes in the document. A marker is only changed if the document has numbered footnotes and the number read fits them, so other text is left as it is. The message at the end of the recognition says how many markers were corrected. Markers that cannot be read are left unchanged and have to be corrected by hand. Currently this works for markers followed by a parenthesis (`Wort¹²)`), as common in German legal publications.
+
 Text recognition replaces the stored PDF with the result. The PDF keeps its identifier, so the existing TEI documents stay linked to it, and the improved text layer is also used by the PDF viewer, for example by Autosearch. The original PDF is not kept. Text recognition can take a minute or more for long documents.
 
 ### 2. Versions, corrections and revisions

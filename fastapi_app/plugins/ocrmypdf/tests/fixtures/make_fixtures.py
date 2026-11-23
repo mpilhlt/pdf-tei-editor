@@ -9,6 +9,8 @@ Run from the project root (requires Ghostscript):
   characters, so the page looks fine but the extracted text is garbled
 - misplaced-text.pdf: the page shows the text as vector outlines, and a text
   layer with the same words is drawn in white, shifted down by two lines
+- footnote-markers.pdf: German text with superscript footnote markers in the
+  style `Regel¹²)` and the footnotes `12) ...` below (#904)
 """
 
 import subprocess
@@ -80,7 +82,36 @@ def make_misplaced_text(target: Path) -> None:
             pdf.save(target)
 
 
+FOOTNOTE_SENTENCES = [
+    ("Die Gesellschaft haftet nach der neuen Regel", "12"),
+    ("und die Gesellschafter haften daneben persönlich", "13"),
+    ("wie es das Gesetz jetzt ausdrücklich vorsieht", "14"),
+]
+
+
+def make_footnote_markers(target: Path) -> None:
+    """Write a PDF with superscript footnote markers like `Regel¹²)`, which Tesseract reads as punctuation, and the footnotes."""
+    pdf = FPDF(format="A5")
+    pdf.set_margins(15, 20)
+    pdf.add_page()
+    for text, marker in FOOTNOTE_SENTENCES:
+        pdf.set_font("Times", size=11)
+        pdf.write(6, text)
+        pdf.set_font("Times", size=7)
+        pdf.char_vpos = "SUP"
+        pdf.write(6, marker)
+        pdf.char_vpos = "LINE"
+        pdf.set_font("Times", size=11)
+        pdf.write(6, "). Weitere Ausführungen folgen im nächsten Abschnitt der Darstellung.\n")
+    pdf.ln(10)
+    pdf.set_font("Times", size=9)
+    for _, marker in FOOTNOTE_SENTENCES:
+        pdf.write(5, f"{marker}) Vgl. die Begründung des Entwurfs, S. {marker}0.\n")
+    pdf.output(str(target))
+
+
 if __name__ == "__main__":
     make_broken_tounicode(HERE / "broken-tounicode.pdf")
     make_misplaced_text(HERE / "misplaced-text.pdf")
+    make_footnote_markers(HERE / "footnote-markers.pdf")
     print("Fixtures written to", HERE)
