@@ -141,7 +141,7 @@ Generates nginx configuration with:
 - Reverse proxy to container port
 - API endpoint no-cache headers (fixes #114)
 - SSE support with extended timeouts
-- File upload size limits (100MB)
+- File upload size limits (200MB)
 - Proxy headers preservation
 
 Writes to `/etc/nginx/sites-available/pdf-tei-editor-{fqdn}` and symlinks to `sites-enabled`.
@@ -394,7 +394,7 @@ The generated nginx config includes:
 2. **SSE support** - Extended timeouts for `/sse/` paths
 3. **General proxy** - Standard reverse proxy for all other paths
 4. **Security headers** - X-Forwarded-* headers for backend
-5. **Upload limits** - 100MB max body size
+5. **Upload limits** - 200MB max body size
 6. **Timeouts** - 300s read/connect/send timeouts
 
 See [nginx-cache-control.md](./nginx-cache-control.md) for caching implementation details.
