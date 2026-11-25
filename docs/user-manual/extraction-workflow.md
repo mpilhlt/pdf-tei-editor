@@ -62,6 +62,24 @@ Tesseract, which the OCRmyPDF engine uses, reads small superscript footnote mark
 
 Text recognition replaces the stored PDF with the result. The PDF keeps its identifier, and the improved text layer is used by new extractions and by the PDF viewer, for example by Autosearch. If the document already has TEI versions, the original PDF is kept: these versions were made from its text layer, so they are shown with the original PDF, and the footer of the PDF viewer says "Original PDF (before text recognition)". New versions copied from them keep the original PDF as well. The original PDF is not listed as a document of its own; garbage collection removes it once no version made from it is left. Text recognition can take a minute or more for long documents.
 
+#### Writing text corrections to the PDF
+
+If you corrected words in the TEI document that the text recognition got wrong, you can write these corrections back into the text layer of the PDF, so that Autosearch, the PDF viewer's text selection and new extractions use the corrected text. This is available to reviewers and administrators, in the menu "Tools > OCR > Write text corrections to PDF".
+
+The action compares the text of the open TEI version with the text layer of its PDF. A dialog lists the words that would be corrected, the differences that cannot be written, and the other versions of the document that are affected. Only words that were replaced by other words are corrected; the position and size of the words in the layer do not change. Differences that are only a matter of splitting or joining words or of the order of text blocks are ignored.
+
+After you confirm, the stored PDF is replaced by the corrected one and the original PDF is archived, as after text recognition. The version you are editing is kept with the corrected text and stays linked to the archived original PDF. The action then creates a new version for the corrected PDF, with the line coordinates updated for it, and opens it. Other versions of the document stay linked to the archived original PDF and are shown with it. The corrections are recorded in the metadata of the PDF.
+
+The action is refused, with a message that says why, in these cases:
+
+- The open version was made from an earlier PDF than the current one. Open a version that is based on the current PDF.
+- Text recognition is running for the PDF of the document.
+- The document has no text corrections, or the PDF has no invisible text layer from text recognition. Visible text of the PDF is never changed.
+- The text layer cannot be changed, for example because of an unusual font encoding.
+- Some differences cannot be written (a different number of words in a line, unrelated text, pages without text layer). You can skip them and write the other corrections.
+- The PDF was changed while the corrections were written. Try again.
+- The extraction service of the document's variant is not reachable, or reports that the corrected PDF no longer matches lines of the document that matched before. Nothing is replaced in these cases.
+
 ### 2. Versions, corrections and revisions
 
 (Annotator role)
