@@ -147,15 +147,21 @@ class TextCorrectionsPlugin extends Plugin {
   async #apply(stableId, skipUnwritable) {
     const result = await this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipUnwritable })
     const xmlEditor = this.getDependency('xmleditor')
-    // the editor autosaves on change: the old version must not receive the new XML
-    await xmlEditor.loadXml(result.xml)
-    xmlEditor.markAsClean()
-    const { file_id: newFileId } = await this.getDependency('filedata').saveXml(stableId, true)
-    xmlEditor.markAsClean()
-    await this.getDependency('file-selection').reload({ refresh: true })
-    await this.getDependency('services').load({ xml: newFileId })
-    notify('Corrections written to the PDF. You are now editing a new version based on the corrected PDF.', 'success', 'check-circle')
-    testLog('TEXT_CORRECTIONS_APPLIED', { newFileId, corrections: result.corrections })
+    try {
+      // the editor autosaves on change: the old version must not receive the new XML
+      await xmlEditor.loadXml(result.xml)
+      xmlEditor.markAsClean()
+      const { file_id: newFileId } = await this.getDependency('filedata').saveXml(stableId, true)
+      xmlEditor.markAsClean()
+      await this.getDependency('file-selection').reload({ refresh: true })
+      await this.getDependency('services').load({ xml: newFileId })
+      notify('Corrections written to the PDF. You are now editing a new version based on the corrected PDF.', 'success', 'check-circle')
+      testLog('TEXT_CORRECTIONS_APPLIED', { newFileId, corrections: result.corrections })
+    } catch (error) {
+      const reason = /** @type {Error} */ (error)?.message ?? String(error)
+      notify(`The corrections were already written to the PDF and the corrected document is in the editor, but it could not be saved or loaded as a new version (${reason}). Save it as a new version with the "Save revision" button, checking "Save to a new copy".`, 'danger', 'exclamation-octagon', 15000)
+      testLog('TEXT_CORRECTIONS_FAILED', { message: reason, afterApply: true })
+    }
   }
 
   /**

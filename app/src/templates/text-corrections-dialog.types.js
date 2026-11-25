@@ -7,7 +7,6 @@
  * @property {HTMLDivElement & correctionsSectionPart} correctionsSection
  * @property {HTMLDivElement & unwritableSectionPart} unwritableSection
  * @property {HTMLDivElement & affectedSectionPart} affectedSection
- * @property {HTMLElement} error
  * @property {import('../ui.js').SlButton} close
  * @property {import('../ui.js').SlButton} write
  */
