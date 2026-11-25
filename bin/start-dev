@@ -18,6 +18,7 @@ from fastapi_app.lib.utils.server_startup import (
     get_pid_on_port,
     get_host_and_port,
     setup_log_directory,
+    trim_log_file,
     print_server_running_message,
     print_server_starting_message,
     kill_server_on_port
@@ -73,13 +74,13 @@ if __name__ == '__main__':
 
     # Set up logging
     log_file = setup_log_directory(project_root)
-    # Start the application log afresh on every explicit start or --restart, as server.log below.
-    # Reloads after file changes only restart the uvicorn worker, which appends to it.
+    # Shorten the application log to the end of the previous run on every explicit start or
+    # --restart. Reloads after file changes only restart the uvicorn worker, which appends to it.
     app_log = log_file.with_name('app.log')
     try:
-        app_log.write_text('', encoding='utf-8')
+        trim_log_file(app_log, keep_lines=1000)
     except OSError as e:
-        print(f"Warning: could not clear {app_log}: {e}", file=sys.stderr)
+        print(f"Warning: could not trim {app_log}: {e}", file=sys.stderr)
 
     # On Windows, uvicorn's auto-reload doesn't work properly - it shuts down but doesn't restart
     # See: https://github.com/fastapi/fastapi/discussions/13817
