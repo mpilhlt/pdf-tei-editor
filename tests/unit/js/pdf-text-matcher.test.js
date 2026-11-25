@@ -262,6 +262,45 @@ describe('findBestMatch', () => {
   });
 });
 
+describe('findBestMatch with short queries', () => {
+  /** A page with a running head, a page number above the body and a reference to "355" in the body */
+  function makePage(page, pageNumber) {
+    return buildPageModel([
+      item('Gierke und die Gesamthand', 10, 760),
+      item(String(pageNumber), 400, 760),
+      item('Text with 1355 and S. 355 inside the body', 10, 700),
+      item('and some more running text of the page', 10, 688),
+      item('end of the page body text', 10, 676)
+    ], page);
+  }
+
+  test('finds a page number shorter than a 4-gram', () => {
+    const { match } = findBestMatch([makePage(2, 356)], '356');
+    assert.ok(match, 'expected a match');
+    assert.strictEqual(match.page, 2);
+    assert.strictEqual(match.matchedText, '356');
+    assert.deepStrictEqual(match.itemIndices, [1]);
+    assert.strictEqual(match.score, 1);
+  });
+
+  test('prefers the occurrence nearest to the start or end of the page stream', () => {
+    // "355" is the page number and also occurs in the body
+    const { match } = findBestMatch([makePage(2, 355)], '355');
+    assert.ok(match);
+    assert.deepStrictEqual(match.itemIndices, [1]);
+  });
+
+  test('requires token boundaries', () => {
+    const page = buildPageModel([item('Text with 1355 inside the body', 10, 700)], 1);
+    assert.strictEqual(findBestMatch([page], '355').match, null);
+  });
+
+  test('returns no match if the query occurs on several pages', () => {
+    const { match } = findBestMatch([makePage(2, 356), makePage(3, 357)], '355');
+    assert.strictEqual(match, null);
+  });
+});
+
 describe('findBestMatch with long queries', () => {
   const HEADER = 'Journal of Legal Theory, Volume 12';
   const WORDS = ['law', 'norm', 'court', 'judge', 'statute', 'reason', 'rule', 'right', 'duty', 'claim',

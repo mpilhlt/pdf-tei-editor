@@ -14,6 +14,8 @@
  *    and a PDF-unit bounding box. Long queries (whole pages or zones, e.g.
  *    in segmentation documents) are matched by short head and tail anchors,
  *    and the region between them is returned (findSpanMatch).
+ *    Queries shorter than a 4-gram (e.g. printed page numbers) are looked
+ *    up as exact, token-bounded strings instead (findShortMatch).
  *
  * Design spec: docs/superpowers/specs/2026-07-19-pdf-text-lookup-design.md
  *
@@ -575,6 +577,9 @@ export function findBestMatch(pageModels, rawQuery, options = {}) {
 
   const query = normalizeQuery(rawQuery);
   if (query.length === 0) return { match: null, candidates: [] };
+  if (query.length < GRAM_SIZE) {
+    return findShortMatch(pageModels, query);
+  }
   if (query.length > maxQueryLength) {
     return findSpanMatch(pageModels, query, { threshold, maxCandidatesPerPage, anchorLength });
   }
@@ -586,6 +591,47 @@ export function findBestMatch(pageModels, rawQuery, options = {}) {
     return { match: null, candidates };
   }
   return { match: toMatchResult(best.model, best.charRange, best.score), candidates };
+}
+
+/**
+ * Finds a query shorter than a 4-gram, such as a printed page number, which
+ * cannot be seeded or scored by alignment. Only exact occurrences bounded by
+ * non-alphanumeric characters count. Such short strings are rarely unique, so
+ * the match is accepted only if all occurrences are on a single page; callers
+ * restrict the search to the page a node belongs to (e.g. via the preceding
+ * `<pb/>`) to make it unambiguous. On that page, the occurrence nearest to the
+ * start or end of the page stream wins, where running heads, footers and page
+ * numbers are placed.
+ * @param {PageModel[]} pageModels
+ * @param {string} query - Normalized query, shorter than GRAM_SIZE
+ * @returns {{match: MatchResult|null, candidates: CandidateSummary[]}}
+ */
+function findShortMatch(pageModels, query) {
+  const isWordChar = (/** @type {string|undefined} */ ch) => ch !== undefined && /[\p{L}\p{N}]/u.test(ch);
+  /** @type {ScoredCandidate[]} Best occurrence per page */
+  const scored = [];
+  for (const model of pageModels) {
+    const { text } = model;
+    /** @type {number[]|null} */
+    let best = null;
+    let bestDistance = Infinity;
+    for (let p = text.indexOf(query); p !== -1; p = text.indexOf(query, p + 1)) {
+      const end = p + query.length;
+      if (isWordChar(text[p - 1]) || isWordChar(text[end])) continue;
+      const distance = Math.min(p, text.length - end);
+      if (distance < bestDistance) {
+        best = [p, end];
+        bestDistance = distance;
+      }
+    }
+    if (best) scored.push({ page: model.page, model, score: 1, charRange: best });
+  }
+  const candidates = summarizeCandidates(scored);
+  if (scored.length !== 1) {
+    return { match: null, candidates };
+  }
+  const [only] = scored;
+  return { match: toMatchResult(only.model, only.charRange, only.score), candidates };
 }
 
 /** Number of head anchor candidates (on distinct pages) whose tail is checked */
