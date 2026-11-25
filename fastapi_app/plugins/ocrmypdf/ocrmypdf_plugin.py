@@ -60,7 +60,8 @@ PHASES: dict[str, str] = {
     "Deflating JPEGs": "Optimizing images",
 }
 """Descriptions of OCRmyPDF's steps for the user, by OCRmyPDF's description."""
-REPAIR_PHASE = "Repairing footnote markers"
+REPAIR_PHASE = "Repairing footnote numbers"
+"""Description of the repair for the user."""
 
 # OCRmyPDF runs the executor in the thread that called `ocrmypdf.ocr()`, so the count of a
 # run is kept per thread; several OCR jobs may run concurrently in their own threads
@@ -103,26 +104,33 @@ def repair_document(hocr_files: dict[int, Path]) -> int:
     """
     Repair the footnote markers in the hOCR files of a document.
 
+    Reports the progress of the repair (`REPAIR_PHASE`) after every repaired page, counting the
+    pages that have markers to repair.
+
     Args:
         hocr_files: The hOCR file of every recognized page, by page number
 
     Returns:
         The number of repaired markers
     """
+    report_progress(REPAIR_PHASE)
     pages = sorted(hocr_files)
     analyses = []
     for page in pages:
         path = analysis_path(hocr_files[page])
         analyses.append(PageAnalysis.from_json(path.read_text(encoding="utf-8")) if path.exists() else PageAnalysis())
+    to_repair = [(page, repairs) for page, repairs in zip(pages, plan_repairs(analyses)) if repairs]
+    if not to_repair:
+        return 0
+    report_progress(REPAIR_PHASE, 0, len(to_repair), "page")
     count = 0
-    for page, repairs in zip(pages, plan_repairs(analyses)):
-        if not repairs:
-            continue
+    for done, (page, repairs) in enumerate(to_repair, start=1):
         tree = parse_hocr(hocr_files[page])
         apply_repairs(tree.getroot(), repairs)
         write_hocr(tree, hocr_files[page])
         count += len(repairs)
         logger.debug(f"Page {page + 1}: repaired footnote markers " + ", ".join(f"{repair.old!r} -> {repair.new!r}" for repair in repairs))
+        report_progress(REPAIR_PHASE, done, len(to_repair), "page")
     return count
 
 
@@ -176,7 +184,7 @@ class FootnoteMarkerExecutor(StandardExecutor):
         )
         if not hocr_files:
             return
-        report_progress(REPAIR_PHASE)
+        # Runs in the thread that called `ocrmypdf.ocr()`, which has the progress reporter
         try:
             count = repair_document(hocr_files)
         except Exception as e:

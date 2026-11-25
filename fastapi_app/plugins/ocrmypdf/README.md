@@ -70,7 +70,7 @@ The plugin is passed to every OCRmyPDF run: OCRmyPDF serializes runs with differ
 
 The details of a run (OCRmyPDF's steps and subprocesses, the repaired markers of every page) are written to `ocr-last-run.log` in the log directory, which the next run overwrites (`run_log.py`). Only warnings and errors of these loggers, and a summary line at the start and the end of the run, reach `app.log`.
 
-The engine reports the progress of the run with `fastapi_app.lib.ocr.progress.report_progress()`: its own steps (text layer analysis, conversion to outlines) and every step of OCRmyPDF that runs on its executor, with the pages done (`FootnoteMarkerExecutor`). The router records the reports in the OCR job, and the extraction dialog shows them with the estimated remaining time.
+The engine reports the progress of the run with `fastapi_app.lib.ocr.progress.report_progress()`: its own steps (text layer analysis, conversion to outlines) and every step of OCRmyPDF that runs on its executor, with the pages done (`FootnoteMarkerExecutor`), and the footnote marker repair ("Repairing footnote numbers") after every repaired page, counting the pages with markers to repair (`repair_document()`). Reports only reach the router from the thread that called `ocrmypdf.ocr()`, which inherits the reporter from `asyncio.to_thread()`; the executor's `task_finished` callbacks and the repair run there, OCRmyPDF's worker processes do not report. The router records the reports in the OCR job, and the extraction dialog shows them with the estimated remaining time.
 
 ## Word recognition
 

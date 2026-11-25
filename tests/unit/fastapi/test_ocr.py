@@ -561,7 +561,7 @@ class TestProgressTracker(unittest.TestCase):
         # 2 pages in 20 s: 8 pages left take 80 s
         self.assertEqual(reports[-1].eta_seconds, 80)
         # a new phase starts its own clock; phases without counts have no estimate
-        tracker.report("Repairing footnote markers")
+        tracker.report("Repairing footnote numbers")
         self.assertIsNone(reports[-1].eta_seconds)
         now[0] = 130.0
         tracker.report("Optimizing images", 5, 5, "image")
