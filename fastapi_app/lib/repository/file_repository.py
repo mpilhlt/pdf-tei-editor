@@ -863,6 +863,25 @@ class FileRepository:
                     )
         return updated, archived
 
+    def get_current_pdf_teis(self, doc_id: str) -> List[FileMetadata]:
+        """
+        Get the non-deleted TEI files of a document that are based on its current PDF
+        (`pdf_stable_id IS NULL`), i.e. those that `replace_pdf_content()` would link to the
+        archived PDF.
+
+        Args:
+            doc_id: Document identifier
+
+        Returns:
+            List of FileMetadata models ordered by creation time
+        """
+        with self.db.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM files WHERE doc_id = ? AND file_type = 'tei' AND pdf_stable_id IS NULL AND deleted = 0 ORDER BY created_at",
+                (doc_id,),
+            ).fetchall()
+        return [self._row_to_model(row) for row in rows]
+
     def get_unreferenced_archived_pdfs(self) -> List[FileMetadata]:
         """
         Get the non-deleted archived PDFs that no file record references through `pdf_stable_id`

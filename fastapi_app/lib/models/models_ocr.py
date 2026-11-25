@@ -52,6 +52,57 @@ class OcrResponse(BaseModel):
     quality: "TextQualityReport" = Field(..., description="Text layer quality after OCR")
 
 
+class TextCorrectionsRequest(BaseModel):
+    """Request to preview or write the text corrections of a TEI document into the PDF's OCR text layer."""
+
+    stable_id: str = Field(..., min_length=1, description="stable_id of the TEI document")
+    skip_unwritable: bool = Field(False, description="Write the corrections even though some differences cannot be written (they are skipped)")
+
+
+class TextCorrectionItem(BaseModel):
+    """A word of the text layer that is replaced by the TEI's word."""
+
+    page: int = Field(..., description="Page index (0-based)")
+    line: int = Field(..., description="Index of the TEI line")
+    old: str = Field(..., description="Word of the text layer")
+    new: str = Field(..., description="Word of the TEI")
+
+
+class UnwritableItem(BaseModel):
+    """A difference between text layer and TEI that cannot be written into the layer."""
+
+    page: int = Field(..., description="Page index (0-based)")
+    line: Optional[int] = Field(None, description="Index of the TEI line, if the TEI has words there")
+    layer_text: str = Field(..., description="Text of the text layer")
+    tei_text: str = Field(..., description="Text of the TEI")
+    reason: str = Field(..., description="Why the difference cannot be written")
+
+
+class AffectedFile(BaseModel):
+    """Another TEI file of the document that stays linked to the old PDF."""
+
+    stable_id: str = Field(..., description="stable_id of the TEI file")
+    label: str = Field(..., description="Label of the file")
+
+
+class TextCorrectionsPreview(BaseModel):
+    """What writing the text corrections would do, or why it is not possible."""
+
+    corrections: list[TextCorrectionItem] = Field(default_factory=list, description="Corrections that would be written")
+    unwritable: list[UnwritableItem] = Field(default_factory=list, description="Differences that cannot be written")
+    affected_files: list[AffectedFile] = Field(default_factory=list, description="Other TEI files of the document that would stay linked to the old PDF")
+    reason: Optional[str] = Field(default=None, description="Why the corrections cannot be written; set means the action is not possible")
+
+
+class TextCorrectionsResult(BaseModel):
+    """Result of writing the text corrections into the PDF."""
+
+    xml: str = Field(..., description="The TEI document updated for the corrected PDF")
+    pdf_stable_id: str = Field(..., description="stable_id of the PDF (unchanged)")
+    archived_stable_id: Optional[str] = Field(None, description="stable_id of the archived old PDF, if versions were made from it")
+    corrections: int = Field(..., description="Number of corrections written")
+
+
 TextQualityStatus = Literal["missing", "poor", "good"]
 
 
