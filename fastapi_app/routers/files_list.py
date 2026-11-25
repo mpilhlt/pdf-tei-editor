@@ -273,7 +273,8 @@ def _build_artifact(file_metadata) -> ArtifactModel:
         is_locked=False,  # Will be updated later
         access_control=None,  # Will be updated later if needed
         created_by=file_metadata.created_by,  # Owner for access control
-        parent_id=file_metadata.parent_stable_id
+        parent_id=file_metadata.parent_stable_id,
+        pdf_id=file_metadata.pdf_stable_id
     )
 
     # Store content hash as private attribute for internal use (e.g., locking)

@@ -230,7 +230,7 @@ class FileRepository:
         # Return the inserted file
         return self.get_file_by_id(file_data.id)
 
-    def update_file(self, file_id: str, updates: FileUpdate) -> FileMetadata:
+    def update_file(self, file_id: str, updates: FileUpdate, stable_id: Optional[str] = None) -> FileMetadata:
         """
         Update an existing file record.
 
@@ -244,6 +244,8 @@ class FileRepository:
         Args:
             file_id: File ID (hash)
             updates: FileUpdate model with fields to update
+            stable_id: Only update the row with this stable_id. Without it, every non-deleted row
+                with the content hash is updated (rows of different documents can share content)
 
         Returns:
             Updated FileMetadata model
@@ -287,12 +289,12 @@ class FileRepository:
                 local_modified_at = CURRENT_TIMESTAMP,
                 sync_status = 'modified',
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 {"AND stable_id = ?" if stable_id else ""}
         """
 
         with self.db.transaction() as conn:
             cursor = conn.cursor()
-            params = tuple(update_data.values()) + (file_id,)
+            params = tuple(update_data.values()) + (file_id,) + ((stable_id,) if stable_id else ())
             cursor.execute(query, params)
 
             if cursor.rowcount == 0:
@@ -327,6 +329,8 @@ class FileRepository:
             if self.logger:
                 self.logger.info(f"Hash changed: {file_id[:8]}... -> {new_hash[:8]}... (refs updated)")
 
+        if stable_id:
+            return self.get_file_by_stable_id(stable_id)
         return self.get_file_by_id(new_hash if hash_changed else file_id)
 
     def get_file_by_id(self, file_id: str, include_deleted: bool = False) -> Optional[FileMetadata]:
@@ -425,6 +429,7 @@ class FileRepository:
             SELECT * FROM files
             WHERE id = ?
               AND doc_id = ?
+              AND superseded_by IS NULL
               {variant_filter}
               {deleted_filter}
         """
@@ -466,7 +471,7 @@ class FileRepository:
 
             return [self._row_to_model(row) for row in rows]
 
-    def delete_file(self, file_id: str) -> None:
+    def delete_file(self, file_id: str, stable_id: Optional[str] = None) -> None:
         """
         Soft delete a file (sets deleted = 1).
 
@@ -477,22 +482,23 @@ class FileRepository:
 
         Args:
             file_id: File ID (hash)
+            stable_id: Only delete the row with this stable_id (rows can share content)
 
         Raises:
             ValueError: If file_id not found
         """
-        query = """
+        query = f"""
             UPDATE files
             SET deleted = 1,
                 local_modified_at = CURRENT_TIMESTAMP,
                 sync_status = 'pending_delete',
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND deleted = 0
+            WHERE id = ? AND deleted = 0 {"AND stable_id = ?" if stable_id else ""}
         """
 
         with self.db.transaction() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, (file_id,))
+            cursor.execute(query, (file_id, stable_id) if stable_id else (file_id,))
 
             if cursor.rowcount == 0:
                 raise ValueError(f"File not found or already deleted: {file_id}")
@@ -523,7 +529,7 @@ class FileRepository:
             if self.logger:
                 self.logger.info(f"Deleted physical file {file_id[:8]}... (ref_count reached 0)")
 
-    def undelete_file(self, file_id: str, label: Optional[str] = None) -> FileMetadata:
+    def undelete_file(self, file_id: str, label: Optional[str] = None, stable_id: Optional[str] = None) -> FileMetadata:
         """
         Restore a soft-deleted file (sets deleted = 0).
 
@@ -536,6 +542,7 @@ class FileRepository:
         Args:
             file_id: File ID (hash)
             label: Optional new label to set
+            stable_id: Only restore the row with this stable_id (rows can share content)
 
         Returns:
             Updated FileMetadata
@@ -544,7 +551,12 @@ class FileRepository:
             ValueError: If file_id not found or not deleted
         """
         # Get file metadata first (need file_type for reference counting)
-        file_metadata = self.get_file_by_id(file_id, include_deleted=True)
+        if stable_id:
+            file_metadata = self.get_file_by_stable_id(stable_id, include_deleted=True)
+            if file_metadata and file_metadata.id != file_id:
+                file_metadata = None
+        else:
+            file_metadata = self.get_file_by_id(file_id, include_deleted=True)
         if not file_metadata:
             raise ValueError(f"File not found: {file_id}")
         if not file_metadata.deleted:
@@ -564,11 +576,13 @@ class FileRepository:
             params.append(label)
 
         params.append(file_id)
+        if stable_id:
+            params.append(stable_id)
 
         query = f"""
             UPDATE files
             SET {', '.join(set_parts)}
-            WHERE id = ? AND deleted = 1
+            WHERE id = ? AND deleted = 1 {"AND stable_id = ?" if stable_id else ""}
         """
 
         with self.db.transaction() as conn:
@@ -585,6 +599,8 @@ class FileRepository:
         self.ref_manager.increment_reference(file_id, file_metadata.file_type)
 
         # Return updated file metadata
+        if stable_id:
+            return self.get_file_by_stable_id(stable_id)
         return self.get_file_by_id(file_id)
 
     # List and Filter Operations
@@ -594,7 +610,8 @@ class FileRepository:
         collection: Optional[str] = None,
         variant: Optional[str] = None,
         file_type: Optional[str] = None,
-        include_deleted: bool = False
+        include_deleted: bool = False,
+        include_superseded: bool = False
     ) -> List[FileMetadata]:
         """
         List files with optional filters.
@@ -604,6 +621,7 @@ class FileRepository:
             variant: Filter by variant
             file_type: Filter by file type
             include_deleted: If True, include soft-deleted files
+            include_superseded: If True, include archived PDFs (replaced by text recognition)
 
         Returns:
             List of FileMetadata models
@@ -613,6 +631,9 @@ class FileRepository:
 
         if not include_deleted:
             conditions.append("deleted = 0")
+
+        if not include_superseded:
+            conditions.append("superseded_by IS NULL")
 
         if file_type:
             conditions.append("file_type = ?")
@@ -662,19 +683,23 @@ class FileRepository:
 
     # Document-Centric Queries
 
-    def get_files_by_doc_id(self, doc_id: str, include_deleted: bool = False) -> List[FileMetadata]:
+    def get_files_by_doc_id(
+        self, doc_id: str, include_deleted: bool = False, include_superseded: bool = False
+    ) -> List[FileMetadata]:
         """
         Get all files for a document.
 
         Args:
             doc_id: Document identifier
             include_deleted: If True, include soft-deleted files
+            include_superseded: If True, include archived PDFs (replaced by text recognition)
 
         Returns:
             List of FileMetadata models
         """
         deleted_filter = "" if include_deleted else "AND deleted = 0"
-        query = f"SELECT * FROM files WHERE doc_id = ? {deleted_filter} ORDER BY created_at"
+        superseded_filter = "" if include_superseded else "AND superseded_by IS NULL"
+        query = f"SELECT * FROM files WHERE doc_id = ? {deleted_filter} {superseded_filter} ORDER BY created_at"
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -704,7 +729,7 @@ class FileRepository:
 
     def get_pdf_for_document(self, doc_id: str) -> Optional[FileMetadata]:
         """
-        Get PDF file for a document.
+        Get the current PDF file of a document (not an archived one, see `get_pdf_for_file`).
 
         Args:
             doc_id: Document identifier
@@ -717,6 +742,7 @@ class FileRepository:
             WHERE doc_id = ?
               AND file_type = 'pdf'
               AND deleted = 0
+              AND superseded_by IS NULL
         """
 
         with self.db.get_connection() as conn:
@@ -728,22 +754,155 @@ class FileRepository:
                 return self._row_to_model(row)
             return None
 
-    def get_files_by_collection(self, collection_id: str, include_deleted: bool = False) -> List[FileMetadata]:
+    # Archived PDFs (#924): text recognition replaces the PDF of a document; the original is kept as
+    # an archived PDF row (superseded_by = current PDF) for the versions made from it (pdf_stable_id)
+
+    def get_pdf_for_file(self, file: FileMetadata) -> Optional[FileMetadata]:
+        """
+        Get the PDF a version was made from: its archived PDF if it has one, else the document's
+        current PDF.
+
+        Args:
+            file: The (TEI) file
+
+        Returns:
+            FileMetadata of the PDF, or None if there is none
+        """
+        if file.pdf_stable_id:
+            archived = self.get_file_by_stable_id(file.pdf_stable_id)
+            if archived is not None:
+                return archived
+        return self.get_pdf_for_document(file.doc_id)
+
+    def replace_pdf_content(
+        self,
+        stable_id: str,
+        new_file_id: str,
+        file_size: int,
+        file_metadata: dict,
+    ) -> tuple[FileMetadata, Optional[FileMetadata]]:
+        """
+        Replace the content of a current PDF (e.g. after text recognition). If versions of the
+        document are based on the current PDF (`pdf_stable_id IS NULL`, deleted ones included), the
+        old content is kept as an archived PDF row with a new stable_id, and these versions are
+        linked to it. The current PDF keeps its stable_id.
+
+        Args:
+            stable_id: Stable ID of the current PDF
+            new_file_id: Content hash of the new content (already in storage)
+            file_size: Size of the new content
+            file_metadata: File metadata of the current PDF after the replacement; the archived
+                row keeps the old file metadata
+
+        Returns:
+            The updated current PDF and the archived PDF (None if nothing was archived)
+
+        Raises:
+            ValueError: If the PDF is not found, is not a current PDF, or the content is unchanged
+        """
+        current = self.get_file_by_stable_id(stable_id)
+        if current is None or current.file_type != 'pdf':
+            raise ValueError(f"PDF not found: {stable_id}")
+        if current.superseded_by:
+            raise ValueError(f"PDF {stable_id} is an archived PDF and cannot be replaced")
+        if new_file_id == current.id:
+            raise ValueError(f"The content of PDF {stable_id} is unchanged")
+
+        with self.db.get_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM files WHERE doc_id = ? AND file_type = 'tei' AND pdf_stable_id IS NULL",
+                (current.doc_id,),
+            ).fetchone()
+        has_versions = bool(row and row['n'])
+
+        archived: Optional[FileMetadata] = None
+        if has_versions:
+            from fastapi_app.lib.utils.stable_id import generate_stable_id
+            archived_stable_id = generate_stable_id(self._get_all_stable_ids())
+            # Inserting first holds a storage reference on the old content, so the update below
+            # does not delete it
+            self.insert_file(FileCreate(
+                id=current.id,
+                stable_id=archived_stable_id,
+                filename=current.filename,
+                doc_id=current.doc_id,
+                file_type='pdf',
+                file_size=current.file_size,
+                label=current.label,
+                doc_collections=current.doc_collections,
+                doc_metadata=current.doc_metadata,
+                file_metadata=current.file_metadata,
+                created_by=current.created_by,
+                superseded_by=current.stable_id,
+            ))
+            archived = self.get_file_by_stable_id(archived_stable_id)
+
+        updated = self.update_file(
+            current.id,
+            FileUpdate(id=new_file_id, file_size=file_size, file_metadata=file_metadata),
+            stable_id=current.stable_id,
+        )
+
+        if archived is not None:
+            with self.db.transaction() as conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE files
+                    SET pdf_stable_id = ?,
+                        sync_status = CASE WHEN deleted = 0 THEN 'modified' ELSE sync_status END,
+                        local_modified_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE doc_id = ? AND file_type = 'tei' AND pdf_stable_id IS NULL
+                    """,
+                    (archived.stable_id, current.doc_id),
+                )
+                if self.logger:
+                    self.logger.info(
+                        f"Archived PDF {current.stable_id} ({current.id[:8]}) as {archived.stable_id}; "
+                        f"linked {cursor.rowcount} version(s) to it"
+                    )
+        return updated, archived
+
+    def get_unreferenced_archived_pdfs(self) -> List[FileMetadata]:
+        """
+        Get the non-deleted archived PDFs that no file record references through `pdf_stable_id`
+        (garbage-collection candidates). Soft-deleted versions still count: they can be restored,
+        so their archived PDF goes only once they are purged.
+
+        Returns:
+            List of FileMetadata models
+        """
+        query = """
+            SELECT pdf.* FROM files pdf
+            WHERE pdf.file_type = 'pdf'
+              AND pdf.superseded_by IS NOT NULL
+              AND pdf.deleted = 0
+              AND NOT EXISTS (SELECT 1 FROM files ref WHERE ref.pdf_stable_id = pdf.stable_id)
+        """
+        with self.db.get_connection() as conn:
+            return [self._row_to_model(row) for row in conn.execute(query).fetchall()]
+
+    def get_files_by_collection(
+        self, collection_id: str, include_deleted: bool = False, include_superseded: bool = False
+    ) -> List[FileMetadata]:
         """
         Get all files that belong to a specific collection.
 
         Args:
             collection_id: Collection identifier
             include_deleted: If True, include soft-deleted files
+            include_superseded: If True, include archived PDFs (replaced by text recognition)
 
         Returns:
             List of FileMetadata models
         """
         deleted_filter = "" if include_deleted else "AND deleted = 0"
+        superseded_filter = "" if include_superseded else "AND superseded_by IS NULL"
         query = f"""
             SELECT * FROM files
             WHERE json_extract(doc_collections, '$') LIKE ?
             {deleted_filter}
+            {superseded_filter}
             ORDER BY created_at
         """
 
@@ -947,7 +1106,7 @@ class FileRepository:
                 pdf.doc_collections as inherited_doc_collections,
                 pdf.doc_metadata as inherited_doc_metadata
             FROM files tei
-            LEFT JOIN files pdf ON tei.doc_id = pdf.doc_id AND pdf.file_type = 'pdf' AND pdf.deleted = 0
+            LEFT JOIN files pdf ON tei.doc_id = pdf.doc_id AND pdf.file_type = 'pdf' AND pdf.deleted = 0 AND pdf.superseded_by IS NULL
             WHERE tei.id = ? AND tei.deleted = 0
         """
 
@@ -1144,18 +1303,24 @@ class FileRepository:
 
             return row['count'] if row else 0
 
-    def get_all_files(self, include_deleted: bool = False) -> List[FileMetadata]:
+    def get_all_files(self, include_deleted: bool = False, include_superseded: bool = False) -> List[FileMetadata]:
         """
         Get all files (for metadata comparison during sync).
 
         Args:
             include_deleted: If True, include soft-deleted files
+            include_superseded: If True, include archived PDFs (replaced by text recognition)
 
         Returns:
             List of all FileMetadata models
         """
-        deleted_filter = "" if include_deleted else "WHERE deleted = 0"
-        query = f"SELECT * FROM files {deleted_filter}"
+        conditions = []
+        if not include_deleted:
+            conditions.append("deleted = 0")
+        if not include_superseded:
+            conditions.append("superseded_by IS NULL")
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"SELECT * FROM files {where_clause}"
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -1434,6 +1599,7 @@ class FileRepository:
             LEFT JOIN files pdf ON xml.doc_id = pdf.doc_id
                 AND pdf.file_type = 'pdf'
                 AND pdf.deleted = 0
+                AND pdf.superseded_by IS NULL
             WHERE xml.file_type = 'tei'
                 AND xml.deleted = 0
                 AND pdf.id IS NULL
@@ -1466,6 +1632,7 @@ class FileRepository:
                 WHERE pdf.doc_id = files.doc_id
                     AND pdf.file_type = 'pdf'
                     AND pdf.deleted = 0
+                    AND pdf.superseded_by IS NULL
                 ORDER BY pdf.created_at DESC
                 LIMIT 1
             )
@@ -1478,6 +1645,7 @@ class FileRepository:
                     WHERE pdf.doc_id = files.doc_id
                         AND pdf.file_type = 'pdf'
                         AND pdf.deleted = 0
+                        AND pdf.superseded_by IS NULL
                         AND pdf.doc_collections != files.doc_collections
                 )
         """
@@ -1561,7 +1729,7 @@ class FileRepository:
 
             return count
 
-    def permanently_delete_file(self, file_id: str) -> None:
+    def permanently_delete_file(self, file_id: str, stable_id: Optional[str] = None) -> None:
         """
         Permanently delete a file record from the database.
 
@@ -1571,15 +1739,17 @@ class FileRepository:
 
         Args:
             file_id: File ID (hash)
+            stable_id: Only delete the row with this stable_id. Without it, all rows with the
+                content hash are deleted (rows of different documents can share content)
 
         Raises:
             ValueError: If file_id not found
         """
-        query = "DELETE FROM files WHERE id = ?"
+        query = f"DELETE FROM files WHERE id = ? {'AND stable_id = ?' if stable_id else ''}"
 
         with self.db.transaction() as conn:
             cursor = conn.cursor()
-            cursor.execute(query, (file_id,))
+            cursor.execute(query, (file_id, stable_id) if stable_id else (file_id,))
 
             if cursor.rowcount == 0:
                 raise ValueError(f"File not found: {file_id}")

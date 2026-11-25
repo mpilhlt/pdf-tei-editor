@@ -44,6 +44,7 @@ class ArtifactModel(FileItemModel):
     created_by: Optional[str] = None           # Username of user who created this file
     parent_id: Optional[str] = None            # Stable ID of the version this file was copied from
     is_frozen: bool = False                    # True if a version was copied from this file (read-only history)
+    pdf_id: Optional[str] = None               # Stable ID of the archived PDF the version was made from (null: the document's current PDF)
 
 
 class DocumentGroupModel(BaseModel):

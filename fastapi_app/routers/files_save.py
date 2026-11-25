@@ -533,7 +533,9 @@ async def save_file(
                 file_metadata={},
                 file_size=file_size,
                 created_by=user.get('username'),  # Track file creator for access control
-                parent_stable_id=source_file.stable_id if source_file and source_file.doc_id == doc_id else None
+                parent_stable_id=source_file.stable_id if source_file and source_file.doc_id == doc_id else None,
+                # A copy keeps the text of its source, so it stays with the source's (archived) PDF
+                pdf_stable_id=source_file.pdf_stable_id if source_file and source_file.doc_id == doc_id else None
             ))
 
         # Now acquire lock using stable_id

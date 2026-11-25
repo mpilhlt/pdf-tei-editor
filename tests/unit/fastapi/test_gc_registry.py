@@ -187,7 +187,7 @@ class TestFileTasks(RegistryTestCase):
         self.assertEqual(response.files_deleted, 2)
         self.assertEqual(response.orphaned_xml_deleted, 1)
         self.assertEqual(response.storage_freed, sum(r.result.bytes_freed for r in runs))
-        self.assertEqual([t.id for t in response.tasks][:2], ["deleted-files", "orphaned-storage-files"])
+        self.assertEqual([t.id for t in response.tasks][:3], ["deleted-files", "superseded-pdfs", "orphaned-storage-files"])
 
 
 if __name__ == "__main__":

@@ -76,6 +76,8 @@ def _get_pdf(repo: FileRepository, stable_id: str, user: dict[str, Any], operati
         raise HTTPException(status_code=404, detail=f"PDF not found: {stable_id}")
     if not check_file_access(file, user, operation):
         raise HTTPException(status_code=403, detail="Access denied")
+    if operation == "edit" and file.superseded_by:
+        raise HTTPException(status_code=400, detail=f"PDF {stable_id} is the archived original of {file.superseded_by} and cannot be changed")
     return file
 
 
@@ -366,16 +368,21 @@ async def _recognize(
         record["fallback_reason"] = result.fallback_reason
     new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
     changed = new_hash != file.id
-    update = FileUpdate(file_size=len(content), file_metadata={**file.file_metadata, OCR_METADATA_KEY: record})
+    file_metadata = {**file.file_metadata, OCR_METADATA_KEY: record}
+    archived_stable_id: str | None = None
     if changed:
-        # FileRepository moves the storage reference from the old to the new content hash
-        update.id = new_hash
-    repo.update_file(file.id, update)
-    logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {new_hash[:8]}")
+        # Moves the storage reference to the new content; the old content is kept as an archived
+        # PDF if versions were made from it (#924)
+        _, archived = repo.replace_pdf_content(file.stable_id, new_hash, len(content), file_metadata)
+        archived_stable_id = archived.stable_id if archived else None
+    else:
+        repo.update_file(file.id, FileUpdate(file_metadata=file_metadata), stable_id=file.stable_id)
+    logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {new_hash[:8]}" + (f", original archived as {archived_stable_id}" if archived_stable_id else ""))
     quality.ocr_applied = record
     return OcrResponse(
         stable_id=file.stable_id,
         changed=changed,
+        archived_stable_id=archived_stable_id,
         message=result.message,
         method=result.method,
         fallback_reason=result.fallback_reason,
