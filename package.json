@@ -3,7 +3,7 @@
     "version": "0.90.1",
     "type": "module",
     "engines": {
-        "node": ">=24"
+        "node": ">=26"
     },
     "scripts": {
         "ci": "uv sync && npm install",
