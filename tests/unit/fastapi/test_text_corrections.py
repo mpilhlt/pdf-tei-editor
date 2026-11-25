@@ -46,6 +46,23 @@ class TestDeriveCorrections(unittest.TestCase):
     def test_nfc_equal_words_are_not_corrections(self):
         self.assertEqual(derive_corrections(tei(0, "u\u0308"), layer(0, "\u00fc")), CorrectionPlan([], []))
 
+    def test_shifted_token_boundaries_are_not_corrections(self):
+        self.assertEqual(derive_corrections(tei(0, "ab c d"), layer(0, "a bc d")), CorrectionPlan([], []))
+
+    def test_unrelated_block_is_unwritable(self):
+        plan = derive_corrections(tei(0, "x alpha beta y"), layer(0, "x qqqq zzzz y"))
+        self.assertEqual(plan.corrections, [])
+        self.assertEqual([(u.reason, u.layer_text, u.tei_text) for u in plan.unwritable], [("words differ too much", "qqqq zzzz", "alpha beta")])
+
+    def test_single_dissimilar_word_is_corrected(self):
+        plan = derive_corrections(tei(0, "x 312) y"), layer(0, "x ?!?) y"))
+        self.assertEqual([(c.old, c.new) for c in plan.corrections], [("?!?)", "312)")])
+
+    def test_tei_page_without_layer_page_is_unwritable(self):
+        plan = derive_corrections({0: [TeiWord(0, 0, "a")], 3: [TeiWord(3, 7, "b"), TeiWord(3, 7, "c")]}, layer(0, "a"))
+        self.assertEqual(plan.corrections, [])
+        self.assertEqual([(u.page, u.line, u.layer_text, u.tei_text, u.reason) for u in plan.unwritable], [(3, 7, "", "b c", "no text layer page")])
+
 
 class TestTeiWords(unittest.TestCase):
     def test_words_are_grouped_by_page_of_their_line(self):

@@ -19,6 +19,11 @@ from fastapi_app.lib.tei.layout import LineLayout, get_zone_labels
 from fastapi_app.lib.tei.zone_lines import read_zone_document
 
 DIFFERENT_WORD_COUNT = "different number of words"
+WORDS_DIFFER_TOO_MUCH = "words differ too much"
+NO_LAYER_PAGE = "no text layer page"
+
+MIN_BLOCK_SIMILARITY = 0.5
+"""Replaced blocks of two or more words in which every pair of words is less similar than this are not corrected (unrelated text)."""
 
 
 @dataclass(frozen=True)
@@ -61,7 +66,10 @@ class CorrectionPlan:
 
 
 def tei_words(xml: str, variant_id: str, layout: LineLayout) -> dict[int, list[TeiWord]]:
-    """The words of the TEI by page; raises ValueError if the variant has no zone labels."""
+    """
+    The words of the TEI by page; raises ValueError if the variant has no zone labels. Lines
+    beyond `layout.pages` have no page and are skipped.
+    """
     labels = get_zone_labels(variant_id)
     if labels is None:
         raise ValueError(f"Variant '{variant_id}' has no zone labels")
@@ -79,6 +87,10 @@ def _norm(text: str) -> str:
     return unicodedata.normalize("NFC", text)
 
 
+def _similarity(a: str, b: str) -> float:
+    return difflib.SequenceMatcher(None, _norm(a), _norm(b)).ratio()
+
+
 def _joined(words: Sequence[LayerWord] | Sequence[TeiWord]) -> str:
     return _norm("".join(w.text for w in words))
 
@@ -86,6 +98,10 @@ def _joined(words: Sequence[LayerWord] | Sequence[TeiWord]) -> str:
 def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[LayerPage]) -> CorrectionPlan:
     """Compare the words of each page of the layer with those of the TEI and derive corrections."""
     plan = CorrectionPlan()
+    layer_indices = {page.index for page in layer}
+    for index in sorted(set(tei) - layer_indices):
+        if tei[index]:
+            plan.unwritable.append(UnwritableChange(index, tei[index][0].line, "", " ".join(w.text for w in tei[index]), NO_LAYER_PAGE))
     for page in layer:
         if page.index not in tei:
             continue
@@ -95,11 +111,17 @@ def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[Lay
         corrections: list[WordCorrection] = []
         # differences that are not word-for-word replacements: (layer words, tei words)
         leftovers: list[tuple[list[LayerWord], list[TeiWord]]] = []
+        unrelated: list[tuple[list[LayerWord], list[TeiWord]]] = []
         for op, i1, i2, j1, j2 in matcher.get_opcodes():
             if op == "equal":
                 continue
             old, new = lws[i1:i2], tws[j1:j2]
             if op == "replace" and len(old) == len(new):
+                if _joined(old) == _joined(new):
+                    continue  # shifted token boundaries only
+                if len(old) >= 2 and all(_similarity(o.text, n.text) < MIN_BLOCK_SIMILARITY for o, n in zip(old, new)):
+                    unrelated.append((old, new))
+                    continue
                 corrections.extend(WordCorrection(page.index, n.line, o.text, n.text, o) for o, n in zip(old, new) if _norm(o.text) != _norm(n.text))
             else:
                 leftovers.append((old, new))
@@ -125,6 +147,10 @@ def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[Lay
             )
             for idx, (o, n) in enumerate(leftovers)
             if idx not in cancelled
+        ]
+        unwritable += [
+            UnwritableChange(page.index, n[0].line, " ".join(w.text for w in o), " ".join(w.text for w in n), page.unpatchable or WORDS_DIFFER_TOO_MUCH)
+            for o, n in unrelated
         ]
         if page.unpatchable:
             unwritable = [UnwritableChange(page.index, c.line, c.old, c.new, page.unpatchable) for c in corrections] + unwritable
