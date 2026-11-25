@@ -1,0 +1,134 @@
+"""
+Word-level corrections of the OCR text layer derived from a TEI document.
+
+The words of each TEI page are compared with the words of the PDF's text layer. Where a word of
+the layer was replaced by a word of the TEI (same number of words), the difference is a correction
+that can be written back into the layer. Differences that are only tokenization or reading order
+are ignored; all others cannot be written and are reported as unwritable.
+"""
+
+from __future__ import annotations
+
+import difflib
+import unicodedata
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+
+from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord
+from fastapi_app.lib.tei.layout import LineLayout, get_zone_labels
+from fastapi_app.lib.tei.zone_lines import read_zone_document
+
+DIFFERENT_WORD_COUNT = "different number of words"
+
+
+@dataclass(frozen=True)
+class TeiWord:
+    """A word of the TEI: its page (0-based), the index of its line in `ZoneDocument.lines`, and its text."""
+
+    page: int
+    line: int
+    text: str
+
+
+@dataclass(frozen=True)
+class WordCorrection:
+    """A word of the text layer (`old`, located by `word`) to be replaced by the TEI's `new`."""
+
+    page: int
+    line: int
+    old: str
+    new: str
+    word: LayerWord
+
+
+@dataclass(frozen=True)
+class UnwritableChange:
+    """A difference between layer and TEI that cannot be written into the layer, with the reason."""
+
+    page: int
+    line: int | None
+    layer_text: str
+    tei_text: str
+    reason: str
+
+
+@dataclass
+class CorrectionPlan:
+    """The corrections to write and the differences that cannot be written."""
+
+    corrections: list[WordCorrection] = field(default_factory=list)
+    unwritable: list[UnwritableChange] = field(default_factory=list)
+
+
+def tei_words(xml: str, variant_id: str, layout: LineLayout) -> dict[int, list[TeiWord]]:
+    """The words of the TEI by page; raises ValueError if the variant has no zone labels."""
+    labels = get_zone_labels(variant_id)
+    if labels is None:
+        raise ValueError(f"Variant '{variant_id}' has no zone labels")
+    doc = read_zone_document(xml, labels)
+    result: dict[int, list[TeiWord]] = {}
+    for line in doc.lines:
+        if line.index >= len(layout.pages):
+            continue
+        page = layout.pages[line.index]
+        result.setdefault(page, []).extend(TeiWord(page, line.index, word) for word in line.text.split())
+    return result
+
+
+def _norm(text: str) -> str:
+    return unicodedata.normalize("NFC", text)
+
+
+def _joined(words: Sequence[LayerWord] | Sequence[TeiWord]) -> str:
+    return _norm("".join(w.text for w in words))
+
+
+def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[LayerPage]) -> CorrectionPlan:
+    """Compare the words of each page of the layer with those of the TEI and derive corrections."""
+    plan = CorrectionPlan()
+    for page in layer:
+        if page.index not in tei:
+            continue
+        tws = list(tei[page.index])
+        lws = list(page.words)
+        matcher = difflib.SequenceMatcher(None, [_norm(w.text) for w in lws], [_norm(w.text) for w in tws], autojunk=False)
+        corrections: list[WordCorrection] = []
+        # differences that are not word-for-word replacements: (layer words, tei words)
+        leftovers: list[tuple[list[LayerWord], list[TeiWord]]] = []
+        for op, i1, i2, j1, j2 in matcher.get_opcodes():
+            if op == "equal":
+                continue
+            old, new = lws[i1:i2], tws[j1:j2]
+            if op == "replace" and len(old) == len(new):
+                corrections.extend(WordCorrection(page.index, n.line, o.text, n.text, o) for o, n in zip(old, new) if _norm(o.text) != _norm(n.text))
+            else:
+                leftovers.append((old, new))
+
+        # tokenization differences: both sides read the same without whitespace
+        leftovers = [(o, n) for o, n in leftovers if _joined(o) != _joined(n)]
+        # moved blocks: a pure deletion and a pure insertion of the same text
+        cancelled: set[int] = set()
+        for d, (d_old, d_new) in enumerate(leftovers):
+            if d_new or d in cancelled:
+                continue
+            for i, (i_old, i_new) in enumerate(leftovers):
+                if not i_old and i not in cancelled and _joined(i_new) == _joined(d_old):
+                    cancelled.update((d, i))
+                    break
+        unwritable = [
+            UnwritableChange(
+                page.index,
+                n[0].line if n else None,
+                " ".join(w.text for w in o),
+                " ".join(w.text for w in n),
+                page.unpatchable or DIFFERENT_WORD_COUNT,
+            )
+            for idx, (o, n) in enumerate(leftovers)
+            if idx not in cancelled
+        ]
+        if page.unpatchable:
+            unwritable = [UnwritableChange(page.index, c.line, c.old, c.new, page.unpatchable) for c in corrections] + unwritable
+            corrections = []
+        plan.corrections.extend(corrections)
+        plan.unwritable.extend(unwritable)
+    return plan
