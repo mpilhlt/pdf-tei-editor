@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import difflib
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord
 from fastapi_app.lib.tei.layout import LineLayout, get_zone_labels
@@ -158,3 +159,37 @@ def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[Lay
         plan.corrections.extend(corrections)
         plan.unwritable.extend(unwritable)
     return plan
+
+
+CorrectedPdfHandler = Callable[[str, str, Path, str, frozenset[int]], str]
+"""
+`handler(xml, doc_id, pdf_path, pdf_hash, corrected_lines)`: regenerates the feature file of a corrected PDF and returns the XML with updated labels. Called in a worker thread.
+"""
+
+
+class CorrectedPdfMismatch(Exception):
+    """A corrected PDF does not match the document; `lines` are the zone lines that could not be matched."""
+
+    def __init__(self, message: str, lines: list[int]) -> None:
+        super().__init__(message)
+        self.lines = lines
+
+
+_corrected_pdf_handlers: dict[str, tuple[str, CorrectedPdfHandler]] = {}
+
+
+def register_corrected_pdf_handler(variant_id: str, plugin_id: str, handler: CorrectedPdfHandler) -> None:
+    """Register (or replace) the corrected-PDF handler of a variant."""
+    _corrected_pdf_handlers[variant_id] = (plugin_id, handler)
+
+
+def unregister_corrected_pdf_handler(variant_id: str) -> None:
+    """Remove the corrected-PDF handler of a variant, if any."""
+    _corrected_pdf_handlers.pop(variant_id, None)
+
+
+def get_corrected_pdf_handler(variant_id: str | None) -> CorrectedPdfHandler | None:
+    """The corrected-PDF handler registered for the variant, or None."""
+    if not variant_id or variant_id not in _corrected_pdf_handlers:
+        return None
+    return _corrected_pdf_handlers[variant_id][1]

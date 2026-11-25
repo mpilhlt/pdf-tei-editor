@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 MANIFEST_FILE = "pte-plugin.json"
 
-PLUGIN_API_VERSION = "1.7.0"
+PLUGIN_API_VERSION = "1.8.0"
 """Version of the supported plugin API (``fastapi_app.plugin_api``); the major changes only for breaking changes."""
 
 

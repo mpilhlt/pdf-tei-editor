@@ -5,9 +5,20 @@ Unit tests for deriving text layer corrections from the TEI.
 """
 
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from fastapi_app.lib.ocr.text_corrections import CorrectionPlan, TeiWord, derive_corrections, tei_words
+from fastapi_app import plugin_api
+from fastapi_app.lib.ocr.text_corrections import (
+    CorrectedPdfMismatch,
+    CorrectionPlan,
+    TeiWord,
+    derive_corrections,
+    get_corrected_pdf_handler,
+    register_corrected_pdf_handler,
+    tei_words,
+    unregister_corrected_pdf_handler,
+)
 from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord
 from fastapi_app.lib.tei.layout import LineLayout
 from fastapi_app.lib.tei.zone_lines import ZoneLabel
@@ -78,6 +89,45 @@ class TestTeiWords(unittest.TestCase):
         with patch("fastapi_app.lib.ocr.text_corrections.get_zone_labels", return_value=None):
             with self.assertRaises(ValueError):
                 tei_words("<TEI/>", "v", LineLayout(pages=[]))
+
+
+class TestCorrectedPdfHandlers(unittest.TestCase):
+    VARIANT = "test.corrected-pdf"
+
+    def tearDown(self):
+        unregister_corrected_pdf_handler(self.VARIANT)
+
+    def test_register_get_unregister_round_trip(self):
+        def handler(xml: str, doc_id: str, pdf_path: Path, pdf_hash: str, corrected_lines: frozenset[int]) -> str:
+            return xml
+
+        self.assertIsNone(get_corrected_pdf_handler(self.VARIANT))
+        register_corrected_pdf_handler(self.VARIANT, "fake-plugin", handler)
+        self.assertIs(get_corrected_pdf_handler(self.VARIANT), handler)
+        unregister_corrected_pdf_handler(self.VARIANT)
+        self.assertIsNone(get_corrected_pdf_handler(self.VARIANT))
+
+    def test_none_and_unknown_variant_have_no_handler(self):
+        self.assertIsNone(get_corrected_pdf_handler(None))
+        self.assertIsNone(get_corrected_pdf_handler("unknown.variant"))
+        unregister_corrected_pdf_handler("unknown.variant")
+
+    def test_mismatch_carries_message_and_lines(self):
+        error = CorrectedPdfMismatch("PDF does not match", [3, 5])
+        self.assertEqual(str(error), "PDF does not match")
+        self.assertEqual(error.lines, [3, 5])
+
+    def test_plugin_api_exports_names(self):
+        for name in (
+            "CorrectedPdfHandler",
+            "CorrectedPdfMismatch",
+            "register_corrected_pdf_handler",
+            "unregister_corrected_pdf_handler",
+            "get_corrected_pdf_handler",
+        ):
+            with self.subTest(name=name):
+                self.assertTrue(hasattr(plugin_api, name))
+                self.assertIn(name, plugin_api.__all__)
 
 
 if __name__ == "__main__":
