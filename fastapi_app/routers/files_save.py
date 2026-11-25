@@ -45,19 +45,10 @@ from ..lib.sse.sse_service import SSEService
 from ..lib.core.sessions import SessionManager
 from ..lib.sse.sse_utils import broadcast_to_other_sessions
 from ..lib.permissions.acl_utils import set_default_permissions_for_new_file
+from ..lib.services.tei_versions import create_tei_version, emit_document_saved, validate_collection_access as _validate_collection_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
-
-
-async def _emit_document_saved(stable_id: str, doc_id: str, user: dict[str, Any]) -> None:
-    """Emit the `document.saved` event after a TEI file has been saved successfully.
-
-    Unlike `document.save`, which fires before the file is written (and has no stable_id
-    for new versions), this event carries the saved file's stable_id and the saving user.
-    """
-    from ..lib.sse.event_bus import get_event_bus
-    await get_event_bus().emit("document.saved", stable_id=stable_id, doc_id=doc_id, username=user.get('username'))
 
 
 def _user_has_role(user: dict, role: str) -> bool:
@@ -74,44 +65,6 @@ def _user_has_role(user: dict, role: str) -> bool:
     result = '*' in user_roles or role in user_roles
     logger.debug(f"_user_has_role: user={user.get('username')}, roles={user_roles}, checking role={role} -> {result}")
     return result
-
-
-def _validate_collection_access(user: dict, doc_collections: list, db_dir, logger_inst) -> list:
-    """Validate that user has access to at least one of the document's collections.
-
-    Args:
-        user: User dictionary
-        doc_collections: List of collection IDs the document belongs to
-        db_dir: Path to db directory
-        logger_inst: Logger instance
-
-    Returns:
-        List of collection IDs (may be modified to include "_inbox" if empty)
-
-    Raises:
-        HTTPException: If user doesn't have access to any of the document's collections
-    """
-    # If document has no collections, assign to "_inbox" by default
-    if not doc_collections:
-        logger_inst.info(f"Document has no collections, assigning to '_inbox' by default")
-        doc_collections = ["_inbox"]
-
-    # Check if user has access to any of the document's collections
-    has_access = any(
-        user_has_collection_access(user, col_id, db_dir)
-        for col_id in doc_collections
-    )
-
-    if not has_access:
-        logger_inst.warning(
-            f"User {user.get('username')} denied access to collections {doc_collections}"
-        )
-        raise HTTPException(
-            status_code=403,
-            detail=f"You do not have access to any of this document's collections: {', '.join(doc_collections)}"
-        )
-
-    return doc_collections
 
 
 def _extract_metadata_from_xml(xml_string: str, file_id_hint: Optional[str], logger) -> tuple[str, Optional[str]]:
@@ -453,7 +406,7 @@ async def save_file(
                 logger=logger_inst
             )
 
-            await _emit_document_saved(existing_file.stable_id, doc_id, user)
+            await emit_document_saved(existing_file.stable_id, doc_id, user)
             return SaveFileResponse(status="saved", file_id=existing_file.stable_id)
 
         elif request.new_version or (not existing_file and existing_gold and existing_gold.variant == variant):
@@ -464,103 +417,27 @@ async def save_file(
                     detail="Only annotators or reviewers can create version files"
                 )
 
-        # Get next version number
-            latest_version = file_repo.get_latest_tei_version(doc_id, variant)
-            next_version = ((latest_version.version or 0) + 1) if latest_version else 1
-
-            logger_inst.info(f"Creating version {next_version} for doc_id={doc_id}, variant={variant}")
-
-        # Get PDF file to inherit collections
-            pdf_file = file_repo.get_pdf_for_document(doc_id)
-            doc_collections = pdf_file.doc_collections if pdf_file else []
-
-        # Validate collection access before creating new version (may assign "_inbox" if empty)
-            doc_collections = _validate_collection_access(user, doc_collections, settings.db_dir, logger_inst)
-
-        # Emit document.save event before saving
-            from ..lib.sse.event_bus import get_event_bus
-            # Build base URL from request
-            base_url = f"{http_request.url.scheme}://{http_request.url.netloc}"
-            # Get PDF stable_id (pdf_file already retrieved above for collections)
-            pdf_stable_id = pdf_file.stable_id if pdf_file else ""
-            await get_event_bus().emit("document.save",
-                file_id=None,  # Will be set after creation
+            result = await create_tei_version(
+                xml_string=xml_string,
                 doc_id=doc_id,
-                pdf_stable_id=pdf_stable_id,
-                xml_content=xml_string,
+                variant=variant,
                 label=label,
                 status=tei_status,
-                collections=doc_collections,
-                is_gold=False,
-                version=next_version,
-                variant=variant,
-                base_url=base_url
-            )
-
-        # Save to storage
-            xml_bytes = xml_string.encode('utf-8')
-            saved_hash, storage_path = file_storage.save_file(xml_bytes, 'tei', increment_ref=False)
-            file_size = len(xml_bytes)
-
-        # Check if this hash already exists (content-addressed storage means same content = same hash)
-            try:
-                existing_hash_file = file_repo.get_file_by_id(saved_hash)
-                if existing_hash_file:
-                    # File with this content already exists - return it instead of creating duplicate
-                    logger_inst.info(f"File with hash {saved_hash[:8]} already exists, returning existing file")
-                    # Acquire lock if we don't have it (using stable_id)
-                    if not acquire_lock(existing_hash_file.stable_id, session_id, settings.db_dir, logger_inst):
-                        raise HTTPException(status_code=423, detail="Failed to acquire lock")
-                    await _emit_document_saved(existing_hash_file.stable_id, doc_id, user)
-                    return SaveFileResponse(status="saved", file_id=existing_hash_file.stable_id)
-            except ValueError:
-                pass  # Hash doesn't exist, continue with creation
-
-        # Create file first to get stable_id, then acquire lock
-            created_file = file_repo.insert_file(FileCreate(
-                id=saved_hash,
-                filename=f"{file_id}.{variant}.v{next_version}.tei.xml" if variant else f"{file_id}.v{next_version}.tei.xml",
-                doc_id=doc_id,
-                file_type='tei',
-                label=label,  # Use extracted edition title
-                status=tei_status,  # Status from last revision
-                last_revision=last_revision,  # Timestamp from last revision
-                variant=variant,
-                version=next_version,
-                is_gold_standard=False,
-                doc_collections=doc_collections,
-                doc_metadata={},
-                file_metadata={},
-                file_size=file_size,
-                created_by=user.get('username'),  # Track file creator for access control
+                last_revision=last_revision,
                 parent_stable_id=source_file.stable_id if source_file and source_file.doc_id == doc_id else None,
                 # A copy keeps the text of its source, so it stays with the source's (archived) PDF
-                pdf_stable_id=source_file.pdf_stable_id if source_file and source_file.doc_id == doc_id else None
-            ))
-
-        # Now acquire lock using stable_id
-            if not acquire_lock(created_file.stable_id, session_id, settings.db_dir, logger_inst):
-                raise HTTPException(status_code=423, detail="Failed to acquire lock")
-
-            # Set default permissions for new file (granular mode only)
-            set_default_permissions_for_new_file(created_file.stable_id, user.get('username'))
-
-            # Notify other sessions about new version
-            broadcast_to_other_sessions(
+                pdf_stable_id=source_file.pdf_stable_id if source_file and source_file.doc_id == doc_id else None,
+                user=user,
+                session_id=session_id,
+                base_url=f"{http_request.url.scheme}://{http_request.url.netloc}",
+                db_dir=settings.db_dir,
+                file_repo=file_repo,
+                file_storage=file_storage,
                 sse_service=sse_service,
                 session_manager=session_manager,
-                current_session_id=session_id,
-                event_type="fileDataChanged",
-                data={
-                    "reason": "file_created",
-                    "stable_id": created_file.stable_id
-                },
-                logger=logger_inst
+                logger_inst=logger_inst,
             )
-
-            await _emit_document_saved(created_file.stable_id, doc_id, user)
-            status = "new"
-            return SaveFileResponse(status=status, file_id=created_file.stable_id)
+            return SaveFileResponse(status="new" if result.created else "saved", file_id=result.file.stable_id)
 
         else:
         # Create new gold standard file
@@ -656,7 +533,7 @@ async def save_file(
                 logger=logger_inst
             )
 
-            await _emit_document_saved(created_file.stable_id, doc_id, user)
+            await emit_document_saved(created_file.stable_id, doc_id, user)
             status = "new_gold"
             return SaveFileResponse(status=status, file_id=created_file.stable_id)
 
