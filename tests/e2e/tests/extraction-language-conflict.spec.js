@@ -10,6 +10,7 @@
 
 /** @import { namedElementsTree } from '../../../app/src/ui.js' */
 
+import { readFileSync } from 'node:fs';
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
@@ -29,8 +30,13 @@ test.describe('Extraction language conflict', () => {
       await route.fulfill({ response, json: { ...json, language_conflict: { declared: 'en', detected: 'de' } } });
     });
 
+    // The uploaded PDF and the extraction result, deleted at the end
+    /** @type {string[]} */
+    const created = [];
+
     try {
-      await navigateAndLogin(page, 'testannotator', 'annotatorpass');
+      // a reviewer, who may delete the extraction result again
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
 
       const fileChooserPromise = page.waitForEvent('filechooser');
       await page.evaluate(() => {
@@ -38,7 +44,12 @@ test.describe('Extraction language conflict', () => {
         const ui = /** @type {any} */(window).ui;
         ui.toolbar.extractionActions.extractNew.click();
       });
-      await (await fileChooserPromise).setFiles(PDF);
+      // The PDF is the same as that of a fixture document that other tests load; a trailing
+      // comment gives it a hash of its own, so that the upload does not change that document
+      const buffer = Buffer.concat([readFileSync(PDF), Buffer.from(`\n% ${Date.now()}\n`)]);
+      await (await fileChooserPromise).setFiles({ name: 'language-conflict.pdf', mimeType: 'application/pdf', buffer });
+      const upload = await waitForTestMessage(consoleLogs, 'PDF_UPLOAD_COMPLETED', 15000);
+      created.push(upload.value.filename);
       await waitForTestMessage(consoleLogs, 'EXTRACTION_OPTIONS_DIALOG_STARTING', 15000);
 
       await page.waitForTimeout(500);
@@ -48,7 +59,8 @@ test.describe('Extraction language conflict', () => {
         ui.extractionOptions.modelIndex.value = 'mock-extractor';
         ui.extractionOptions.submit.click();
       });
-      await waitForTestMessage(consoleLogs, 'EXTRACTION_COMPLETED', 30000);
+      const extraction = await waitForTestMessage(consoleLogs, 'EXTRACTION_COMPLETED', 30000);
+      created.unshift(extraction.value.resultHash);
 
       const confirmDialog = page.locator('sl-dialog[name="dialog"]');
       await expect(confirmDialog).toHaveAttribute('open', '');
@@ -65,8 +77,14 @@ test.describe('Extraction language conflict', () => {
       expect(xml).toMatch(/<langUsage>\s*<language ident="de"\s*\/>/);
     } finally {
       await releaseAllLocks(page);
-      await performLogout(page);
+      // the page reacts to the deletion of its open document with failing requests
       stopErrorMonitoring();
+      if (created.length) {
+        await page.evaluate(async files => {
+          await /** @type {any} */(window).client.apiClient.filesDelete({ files });
+        }, created);
+      }
+      await performLogout(page);
     }
   });
 });
