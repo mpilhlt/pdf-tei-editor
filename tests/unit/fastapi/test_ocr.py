@@ -18,7 +18,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Optional
+from typing import Callable, Optional
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -29,9 +29,10 @@ from pypdf import PdfWriter
 from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
 import pypdfium2 as pdfium
 
-from fastapi_app.lib.models.models_ocr import TextQualityReport
+from fastapi_app.lib.models.models_ocr import OcrJob, TextQualityReport
 from fastapi_app.lib.ocr.base import OcrEngine, OcrOption, OcrOptionValue, OcrResult, OcrWord
 from fastapi_app.lib.ocr.jobs import OcrJobConflict, OcrJobStore
+from fastapi_app.lib.ocr.progress import ProgressTracker, report_progress
 from fastapi_app.lib.utils.file_lock import NonBlockingFileLock
 from fastapi_app.lib.ocr.languages import normalize_ocr_language, to_iso639_3
 from fastapi_app.lib.ocr.layout_check import (
@@ -213,6 +214,8 @@ class FakeEngine(OcrEngine):
         """Words returned by recognize_words(); word recognition is unsupported if None."""
         self.error: Optional[Exception] = None
         """Exception raised by recognize(), if set."""
+        self.during_recognize: Optional[Callable[[], None]] = None
+        """Called inside recognize(), if set."""
 
     def get_options(self) -> dict[str, OcrOption]:
         return {
@@ -242,6 +245,8 @@ class FakeEngine(OcrEngine):
     ) -> Optional[str | OcrResult]:
         self.calls.append((languages, options))
         self.rebuild_flags.append(rebuild)
+        if self.during_recognize is not None:
+            self.during_recognize()
         if self.error is not None:
             raise self.error
         shutil.copy(TEXT_PDF, output_path)
@@ -402,6 +407,22 @@ class TestOcrRouter(unittest.TestCase):
         self.ocr_result({"stable_id": "pdf1", "engine": "fake"})
         self.assertEqual(self.engine.calls[0][0], ["en"])
 
+    def test_progress_is_recorded_while_running(self):
+        seen = []
+
+        def during_recognize() -> None:
+            report_progress("Recognizing text", 1, 4, "page")
+            job_file = next((self.tmp / "jobs").glob("*.json"))
+            seen.append(OcrJob.model_validate_json(job_file.read_text()).progress)
+
+        self.engine.during_recognize = during_recognize
+        job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        self.assertEqual(job["status"], "done")
+        progress = seen[0]
+        self.assertEqual((progress.phase, progress.done, progress.total, progress.unit), ("Recognizing text", 1, 4, "page"))
+        # the finished job has no progress
+        self.assertIsNone(job["progress"])
+
     def test_failed_job_reports_the_error(self):
         self.engine.error = ValueError("The PDF is protected by a password")
         job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
@@ -527,6 +548,27 @@ class TestOcrJobStore(unittest.TestCase):
         events = asyncio.run(scenario())
         # the runs do not overlap
         self.assertEqual([e.split()[0] for e in events], ["start", "end", "start", "end"])
+
+
+class TestProgressTracker(unittest.TestCase):
+    def test_eta_is_extrapolated_per_phase(self):
+        now = [100.0]
+        reports = []
+        tracker = ProgressTracker(reports.append, clock=lambda: now[0])
+        tracker.report("Recognizing text", 0, 10, "page")
+        now[0] = 120.0
+        tracker.report("Recognizing text", 2, 10, "page")
+        # 2 pages in 20 s: 8 pages left take 80 s
+        self.assertEqual(reports[-1].eta_seconds, 80)
+        # a new phase starts its own clock; phases without counts have no estimate
+        tracker.report("Repairing footnote markers")
+        self.assertIsNone(reports[-1].eta_seconds)
+        now[0] = 130.0
+        tracker.report("Optimizing images", 5, 5, "image")
+        self.assertEqual(reports[-1].eta_seconds, 0)
+
+    def test_report_without_reporter_is_ignored(self):
+        report_progress("Recognizing text", 1, 2)
 
 
 class UnavailableEngine(FakeEngine):

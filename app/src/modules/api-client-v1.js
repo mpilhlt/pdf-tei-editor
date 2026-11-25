@@ -485,11 +485,22 @@
  */
 
 /**
+ * Progress of a running OCR job
+ * @typedef {Object} OcrProgress
+ * @property {string} phase - What the engine is doing, e.g. 'Recognizing text'
+ * @property {number|null=} done - Units of the phase done so far, if the phase is counted
+ * @property {number|null=} total - Units of the phase in total, if the phase is counted
+ * @property {string|null=} unit - Unit of `done` and `total`, e.g. 'page'
+ * @property {number|null=} eta_seconds - Estimated seconds until the phase is finished, extrapolated from the units done so far
+ */
+
+/**
  * An OCR run in the background, started by `POST /api/v1/ocr` and polled with `GET /api/v1/ocr/jobs/{job_id}`
  * @typedef {Object} OcrJob
  * @property {string} job_id - Id of the job
  * @property {string} stable_id - stable_id of the PDF
  * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`) or 'failed' (see `error`)
+ * @property {OcrProgress|null=} progress - Progress of the run if the status is 'running' and the engine reports it
  * @property {OcrResponse|null=} result - Result of the run if the status is 'done'
  * @property {string|null=} error - Error message if the status is 'failed'
  * @property {number|null=} error_status - HTTP status code corresponding to the error (4xx: invalid request, 5xx: failure of the engine or the server)

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
@@ -300,9 +301,9 @@ class TestHocr(unittest.TestCase):
         image = Image.new("L", (1000, 1000), 255)
         regions = []
 
-        def recognize(_image: Image.Image, box: tuple[int, int, int, int]) -> list[str]:
-            regions.append(box)
-            return ["312"]
+        def recognize(_image: Image.Image, boxes: Sequence[tuple[int, int, int, int]]) -> list[list[str]]:
+            regions.extend(boxes)
+            return [["312"] for _ in boxes]
 
         analysis = analyze_page(root, image, recognize)
         self.assertEqual(analysis.footnote_starts, [FootnoteStart("312", True)])
@@ -330,9 +331,9 @@ class TestHocr(unittest.TestCase):
         image.paste(0, (125, 20, 295, 60))
         regions = []
 
-        def recognize(_image: Image.Image, box: tuple[int, int, int, int]) -> list[str]:
-            regions.append(box)
-            return ["12"]
+        def recognize(_image: Image.Image, boxes: Sequence[tuple[int, int, int, int]]) -> list[list[str]]:
+            regions.extend(boxes)
+            return [["12"] for _ in boxes]
 
         analysis = analyze_page(root, image, recognize)
         # `Regel"` has a raised marker, the word `'` lies above the baseline; `Wort"` has
