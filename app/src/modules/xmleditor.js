@@ -196,6 +196,14 @@ export class XMLEditor extends EventEmitter {
   #incomingXml = ''
 
   /**
+   * The incoming document as last passed to the merge view (after whitespace normalization, if
+   * enabled). The merge view changes its copy when a single change is rejected, so a difference
+   * tells {@link acceptAllDiffs} that changes were rejected individually.
+   * @type {string}
+   */
+  #mergeViewIncoming = ''
+
+  /**
    * Whether leading/trailing line whitespace and insignificant inter-tag
    * linebreak differences are ignored when computing the merge view diff.
    * @type {boolean}
@@ -904,6 +912,7 @@ export class XMLEditor extends EventEmitter {
       ? normalizeXmlWhitespaceForDiff(this.#incomingXml, this.#original)
       : this.#incomingXml;
 
+    this.#mergeViewIncoming = original;
     this.#mergeViewExt = unifiedMergeView({
       original,
       diffConfig: { scanLimit: 50000, timeout: 20000 }
@@ -998,6 +1007,7 @@ export class XMLEditor extends EventEmitter {
     this.#mergeViewExt = null;
     this.#original = '';
     this.#incomingXml = '';
+    this.#mergeViewIncoming = '';
     this.#mergeViewTitles = null;
 
     // notify listeners
@@ -1027,24 +1037,40 @@ export class XMLEditor extends EventEmitter {
   }
 
   /**
-   * Accept all remaining changes in the document, in one transaction (one undo step). Each chunk
+   * Accept all remaining changes in the document, in one transaction (one undo step).
+   *
+   * If no change was rejected individually, the editor content is replaced by the unmodified
+   * incoming document, including the whitespace differences hidden from the diff when
+   * {@link setIgnoreWhitespaceInDiff} is enabled (otherwise accepting a whitespace-only change
+   * such as pretty-printing would leave the document unchanged). Otherwise, each remaining chunk
    * is replaced as the merge view's own per-chunk accept does it (`rejectChunk()` of
-   * @codemirror/merge, since the incoming document is the merge view's "original").
+   * @codemirror/merge, since the incoming document is the merge view's "original"), so that the
+   * rejected changes are kept.
    */
   acceptAllDiffs() {
     if (!this.isMergeViewActive()) {
       throw new Error("Not in merge view")
     }
     const state = this.#view.state;
-    const result = getChunks(state);
-    if (result && result.chunks.length > 0) {
-      const incoming = getOriginalDoc(state);
-      const changes = result.chunks.map(chunk => {
-        let insert = incoming.sliceString(chunk.fromA, Math.max(chunk.fromA, chunk.toA - 1));
-        if (chunk.fromA != chunk.toA && chunk.toB <= state.doc.length) insert += state.lineBreak;
-        return { from: chunk.fromB, to: Math.min(state.doc.length, chunk.toB), insert };
-      });
-      this.#view.dispatch({ changes, userEvent: "revert" });
+    const incoming = getOriginalDoc(state);
+    if (incoming.toString() === this.#mergeViewIncoming) {
+      const current = state.doc.toString();
+      const target = this.#incomingXml;
+      if (current !== target) {
+        const changes = diff(current, target, { scanLimit: 50000, timeout: 20000 })
+          .map(c => ({ from: c.fromA, to: c.toA, insert: target.slice(c.fromB, c.toB) }));
+        this.#view.dispatch({ changes, userEvent: "revert" });
+      }
+    } else {
+      const result = getChunks(state);
+      if (result && result.chunks.length > 0) {
+        const changes = result.chunks.map(chunk => {
+          let insert = incoming.sliceString(chunk.fromA, Math.max(chunk.fromA, chunk.toA - 1));
+          if (chunk.fromA != chunk.toA && chunk.toB <= state.doc.length) insert += state.lineBreak;
+          return { from: chunk.fromB, to: Math.min(state.doc.length, chunk.toB), insert };
+        });
+        this.#view.dispatch({ changes, userEvent: "revert" });
+      }
     }
     this.hideMergeView()
   }

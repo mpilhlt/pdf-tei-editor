@@ -61,10 +61,16 @@ test.describe('Side-by-side diff window', () => {
       expect(await editors.nth(0).locator('.cm-content').getAttribute('contenteditable')).toBe('false');
       expect(await editors.nth(1).locator('.cm-content').getAttribute('contenteditable')).toBe('false');
 
-      // scrolling renders the lines that come into view
-      await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = el.scrollHeight });
-      await expect(editors.nth(0).locator('.cm-content')).toContainText('</TEI>');
-      await expect(editors.nth(1).locator('.cm-content')).toContainText('</TEI>');
+      // scrolling renders the lines that come into view. Opening the window scrolls it to the
+      // editor's top line once (forced, delayed by up to ~150 ms plus an animation frame), which can
+      // undo a scroll made right after opening, so scroll again until the end of both documents shows.
+      // The window leads, so that scroll events of the editor do not scroll it back.
+      await popup.locator('.sbs-diff').dispatchEvent('pointerdown');
+      await expect(async () => {
+        await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = el.scrollHeight });
+        await expect(editors.nth(0).locator('.cm-content')).toContainText('</TEI>', { timeout: 1000 });
+        await expect(editors.nth(1).locator('.cm-content')).toContainText('</TEI>', { timeout: 1000 });
+      }).toPass({ timeout: 10000 });
       await popup.locator('.sbs-diff').evaluate(el => { el.scrollTop = 0 });
 
       // "Scroll with editor" (checked by default): scrolling the editor scrolls the window to the same

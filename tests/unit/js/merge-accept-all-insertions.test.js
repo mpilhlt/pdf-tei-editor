@@ -81,6 +81,42 @@ describe('accepting all changes of a merge view', () => {
     });
   }
 
+  it('applies whitespace-only changes (e.g. pretty-printing) when whitespace is ignored in the diff', async () => {
+    const compact = '<TEI xmlns="http://www.tei-c.org/ns/1.0"><text><body><div><p>One</p><p>Two</p></div><pb n="2"/><div><p>Three</p></div></body></text></TEI>';
+    const pretty = `<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <div>
+        <p>One</p>
+        <p>Two</p>
+      </div>
+      <pb n="2"/>
+      <div>
+        <p>Three</p>
+      </div>
+    </body>
+  </text>
+</TEI>`;
+    const editor = await editorWith(compact);
+    editor.setIgnoreWhitespaceInDiff(true);
+    await editor.showMergeView(pretty);
+    editor.acceptAllDiffs();
+    assert.strictEqual(editor.getView().state.doc.toString(), pretty);
+  });
+
+  it('keeps individually rejected changes when accepting all', async () => {
+    const editor = await editorWith(DOC);
+    await editor.showMergeView(WITH_PB);
+    const view = editor.getView();
+    // reject the first change (keep the current text): in the unified merge view, this is
+    // acceptChunk(), which copies the current text into the incoming document
+    const { acceptChunk, getChunks } = await import('@codemirror/merge');
+    const first = /** @type {NonNullable<ReturnType<typeof getChunks>>} */ (getChunks(view.state)).chunks[0];
+    acceptChunk(view, first.fromB);
+    editor.acceptAllDiffs();
+    assert.strictEqual(view.state.doc.toString(), WITH_PB.replace('    <pb n="1"/>\n', ''));
+  });
+
   it('applies all changes in one undo step', async () => {
     const editor = await editorWith(DOC);
     await editor.showMergeView(WITH_PB);

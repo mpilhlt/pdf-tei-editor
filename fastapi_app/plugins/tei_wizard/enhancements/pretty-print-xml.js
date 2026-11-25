@@ -10,8 +10,9 @@
  * The `tei.pretty-print.no-indent-inside` config list provides explicit overrides for
  * elements where the heuristic would be wrong (e.g. `bibl`, whose `author`/`title`
  * children are not in the inline list but should still not be indented). The
- * `tei.pretty-print.inline-elements` list names elements that never receive a leading
- * indent text node and are treated as leaf nodes for the block/inline heuristic.
+ * `tei.pretty-print.inline-elements` list names elements that are treated as leaf nodes for the
+ * block/inline heuristic and receive a leading indent text node only where they directly follow a
+ * block element or are the first child of an indented element (e.g. a `<pb/>` between two `<div>`s).
  *
  * Some elements are kept: their content is left exactly as it is, including whitespace-only text
  * nodes, so that the space between two inline elements survives:
@@ -60,8 +61,9 @@ export const description = "Pretty-prints the XML DOM by inserting whitespace te
 const DEFAULT_NO_INDENT_INSIDE = ['bibl', 'p', 'ab'];
 
 /**
- * Elements that are always inline: they are excluded from the block-child heuristic,
- * never receive a leading indent text node, and their own children are not indented.
+ * Elements that are always inline: they are excluded from the block-child heuristic, are placed
+ * on their own line only after a block element (see `startsLine`), and their own children are
+ * not indented.
  * Configurable via `tei.pretty-print.inline-elements`.
  * @type {string[]}
  */
@@ -181,6 +183,22 @@ function isInline(child, rules) {
 }
 
 /**
+ * Returns true if `child` is placed on its own line when its parent is indented: block elements
+ * always are, inline elements (e.g. a `<pb/>` between two `<div>`s) when they directly follow a
+ * block element or are the first child, since whitespace there carries no meaning. An inline
+ * element that follows text or another inline element stays where it is, so that text flow is
+ * preserved.
+ * @param {Node} child
+ * @param {PrettyPrintRules} rules
+ * @returns {boolean}
+ */
+function startsLine(child, rules) {
+  if (!isInline(child, rules)) return true;
+  const previous = child.previousSibling;
+  return previous === null || (previous.nodeType === Node.ELEMENT_NODE && !isInline(previous, rules));
+}
+
+/**
  * Returns true if `node` has at least one element child that is not inline.
  * @param {Node} node
  * @param {PrettyPrintRules} rules
@@ -240,7 +258,7 @@ function addIndentation(node, depth, spacing, doc, rules) {
   for (const child of Array.from(node.childNodes)) {
     if (child.nodeType !== Node.ELEMENT_NODE) continue;
 
-    if (!isInline(child, rules)) {
+    if (startsLine(child, rules)) {
       node.insertBefore(doc.createTextNode(indent + spacing), child);
       lastBlockChild = child;
     }
@@ -268,7 +286,7 @@ function prettyPrintElement(root, xmlDoc, spacing, rules) {
 
   for (const child of rootChildren) {
     if (child.nodeType === Node.ELEMENT_NODE) {
-      if (!isInline(child, rules)) {
+      if (startsLine(child, rules)) {
         root.insertBefore(xmlDoc.createTextNode('\n' + spacing), child);
         lastProcessedRootNode = child;
       }
