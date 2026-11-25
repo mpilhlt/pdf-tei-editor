@@ -20,7 +20,8 @@ from ..lib.models.models_extraction import (
     ListExtractorsResponse,
     ExtractorInfo,
     ExtractRequest,
-    ExtractResponse
+    ExtractResponse,
+    LanguageConflict
 )
 from ..lib.extraction import (
     list_extractors,
@@ -35,7 +36,7 @@ from ..lib.core.dependencies import (
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.hash_utils import get_storage_path
-from ..lib.services.language_detection import add_document_language
+from ..lib.services.language_detection import add_document_language, extract_pdf_text, find_language_conflict
 from ..lib.secrets import MissingSecretError, secret_required_detail
 from ..lib.models import FileCreate, FileUpdate
 
@@ -227,10 +228,17 @@ async def extract_metadata(
                 detail=f"Extraction failed: {str(e)}"
             )
 
-        # Declare the document language in the TEI header, independent of the extractor
+        # Declare the document language in the TEI header, independent of the extractor, and
+        # report a declared language (e.g. from CrossRef) that the text contradicts
+        language_conflict: Optional[LanguageConflict] = None
         try:
             language_pdf_path = pdf_path or _find_pdf_path(repo, storage_root, file_metadata.doc_id)
-            tei_xml = await asyncio.to_thread(add_document_language, tei_xml, language_pdf_path)
+            pdf_text = await asyncio.to_thread(extract_pdf_text, language_pdf_path) if language_pdf_path else None
+            tei_xml = await asyncio.to_thread(add_document_language, tei_xml, pdf_text=pdf_text)
+            conflict = await asyncio.to_thread(find_language_conflict, tei_xml, pdf_text)
+            if conflict:
+                language_conflict = LanguageConflict(declared=conflict[0], detected=conflict[1])
+                logger.info(f"Declared language '{conflict[0]}' of the extraction result contradicts the detected language '{conflict[1]}'")
         except Exception as e:
             logger.warning(f"Could not add document language: {e}")
 
@@ -248,7 +256,8 @@ async def extract_metadata(
             return ExtractResponse(
                 id=file_metadata.doc_id,
                 pdf=result['pdf'],
-                xml=result['xml']
+                xml=result['xml'],
+                language_conflict=language_conflict
             )
         else:
             # For XML-based extraction, save as associated file (reusing source doc_id when available)
@@ -263,7 +272,8 @@ async def extract_metadata(
             return ExtractResponse(
                 id=result.get('pdf') and file_metadata.doc_id or None,
                 pdf=result.get('pdf'),
-                xml=result['xml']
+                xml=result['xml'],
+                language_conflict=language_conflict
             )
 
     except HTTPException:

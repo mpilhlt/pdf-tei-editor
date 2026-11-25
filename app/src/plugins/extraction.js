@@ -8,7 +8,7 @@
  * @import { extractionActionsPart } from '../templates/extraction-buttons.types.js'
  * @import { extractionOptionsPart } from '../templates/extraction-dialog.types.js'
  * @import { OcrRunOptions, OcrSettings } from './ocr.js'
- * @import { OcrEngineInfo, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, TextQualityReport, LanguageConflict } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -22,6 +22,7 @@ import { UserAbortException } from '../modules/utils.js'
 import { getDocumentMetadata } from '../modules/tei-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
+import { languageName } from '../modules/language-chooser.js'
 
 /**
  * Extractor configuration object
@@ -50,6 +51,7 @@ import { notify } from '../modules/sl-utils.js'
  * @typedef {object} ExtractionResult
  * @property {string} xml - Hash or content of the extracted XML
  * @property {string} [pdf] - Hash or path of the source PDF
+ * @property {LanguageConflict|null} [language_conflict] - Set if the declared language contradicts the language of the text
  */
 
 /**
@@ -287,6 +289,9 @@ class ExtractionPlugin extends Plugin {
       } finally {
         ui.spinner.hide()
       }
+      if (result?.language_conflict) {
+        await this.#resolveLanguageConflict(result.language_conflict)
+      }
     } catch (error) {
       console.error(String(error))
       if (error instanceof UserAbortException) {
@@ -294,6 +299,35 @@ class ExtractionPlugin extends Plugin {
       }
       this.getDependency('dialog').error(String(error))
     }
+  }
+
+  /**
+   * Asks the user whether to declare the language detected from the text of the document
+   * instead of the declared one (e.g. from CrossRef), and if so, changes it in the editor and saves.
+   * @param {LanguageConflict} conflict - The declared and the detected language
+   * @returns {Promise<void>}
+   */
+  async #resolveLanguageConflict({ declared, detected }) {
+    const declaredName = languageName(declared)
+    const detectedName = languageName(detected)
+    const accepted = await this.getDependency('dialog').confirm(
+      `The bibliographic metadata declare the language of this document as ${declaredName}, but its text reads as ${detectedName}. Declare ${detectedName} as the language of the document?`,
+      'Document language'
+    )
+    testLog('LANGUAGE_CONFLICT_RESOLVED', { declared, detected, accepted })
+    if (!accepted) return
+    const xmlTree = this.#xmlEditor.getXmlTree()
+    const language = xmlTree && Array.from(xmlTree.getElementsByTagName('langUsage'))
+      .flatMap(langUsage => Array.from(langUsage.getElementsByTagName('language')))[0]
+    if (!language) {
+      this.getDependency('logger').warn('The document has no langUsage/language element to change')
+      return
+    }
+    language.setAttribute('ident', detected)
+    await this.#xmlEditor.updateEditorFromNode(language)
+    await this.#xmlEditor.saveIfDirty()
+    testLog('DOCUMENT_LANGUAGE_CHANGED', { language: detected })
+    notify(`The language of the document was changed to ${detectedName}.`, 'success', 'check-circle')
   }
 
   /**
