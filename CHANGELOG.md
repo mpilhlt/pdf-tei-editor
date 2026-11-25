@@ -2,6 +2,24 @@
 
 Maintained automatically by [semantic-release](https://github.com/semantic-release/semantic-release) from Conventional Commit messages. Releases up to and including **v0.57.2** are listed only on the [GitHub Releases page](https://github.com/mpilhlt/pdf-tei-editor/releases).
 
+# [0.91.0](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.90.1...v0.91.0) (2026-11-25)
+
+### Bug Fixes
+
+* **deploy:** raise nginx client_max_body_size to 200M ([4d51132](https://github.com/mpilhlt/pdf-tei-editor/commit/4d51132727503c1a714af92df25a5d67becf9fe5))
+* **file-selection:** keep the current collection when opening a document in several collections ([db65bed](https://github.com/mpilhlt/pdf-tei-editor/commit/db65bed94987403888758b391e538f55cd70cdc4)), closes [#152](https://github.com/mpilhlt/pdf-tei-editor/issues/152)
+* **pdfviewer:** remove highlight when "Sync with editor" is turned off ([9d277fa](https://github.com/mpilhlt/pdf-tei-editor/commit/9d277fa7328974a971c36d9a94d92d18f24a5282)), closes [#903](https://github.com/mpilhlt/pdf-tei-editor/issues/903)
+
+### Features
+
+* **extraction:** ask before declaring a registry language the text contradicts ([77f6b4c](https://github.com/mpilhlt/pdf-tei-editor/commit/77f6b4cc8d29b88453ca52bdf4ce8f8ef645a2e7))
+* **extraction:** check that the extractor is ready before text recognition ([6245856](https://github.com/mpilhlt/pdf-tei-editor/commit/6245856a4db6a33c1bbbe2dadd18f5c934c6c3e8))
+* **extraction:** show OCR options placeholder until the engines are loaded ([7590059](https://github.com/mpilhlt/pdf-tei-editor/commit/75900594dea6bb5a605bc8c9c2da18a2fee06c50))
+* **ocr:** repair misrecognized superscript footnote markers ([dc41b60](https://github.com/mpilhlt/pdf-tei-editor/commit/dc41b603dcda606714dc01b846a27c159993cadd)), closes [#904](https://github.com/mpilhlt/pdf-tei-editor/issues/904)
+* **ocr:** repair superscript footnote markers without parenthesis ([2b86b6f](https://github.com/mpilhlt/pdf-tei-editor/commit/2b86b6ff1ffcfe272cfefb1a2531e87b0f8c8069)), closes [#904](https://github.com/mpilhlt/pdf-tei-editor/issues/904)
+* **ocr:** report OCR progress, speed up marker repair, move run details to own log ([afeca49](https://github.com/mpilhlt/pdf-tei-editor/commit/afeca49b6bf4f49b0e4b0f4e770775d90c39a53d)), closes [#904](https://github.com/mpilhlt/pdf-tei-editor/issues/904)
+* **ocr:** report progress while repairing footnote numbers ([6858cae](https://github.com/mpilhlt/pdf-tei-editor/commit/6858caefaa17297f329a8b9f9a823c7e0d113a9a))
+
 ## [0.90.1](https://github.com/mpilhlt/pdf-tei-editor/compare/v0.90.0...v0.90.1) (2026-11-22)
 
 
