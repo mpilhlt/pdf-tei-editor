@@ -158,9 +158,17 @@ def make_footnote_markers_plain(target: Path) -> None:
     pdf.output(str(target))
 
 
+def make_ocr_text_layer(target: Path) -> None:
+    """Write footnote-markers.pdf with a Tesseract text layer from OCRmyPDF (hocr-free `pdf` output)."""
+    import ocrmypdf
+
+    ocrmypdf.ocr(HERE / "footnote-markers.pdf", target, language="deu", force_ocr=True, output_type="pdf", progress_bar=False)
+
+
 if __name__ == "__main__":
     make_broken_tounicode(HERE / "broken-tounicode.pdf")
     make_misplaced_text(HERE / "misplaced-text.pdf")
     make_footnote_markers(HERE / "footnote-markers.pdf")
     make_footnote_markers_plain(HERE / "footnote-markers-plain.pdf")
+    make_ocr_text_layer(HERE / "ocr-text-layer.pdf")
     print("Fixtures written to", HERE)
