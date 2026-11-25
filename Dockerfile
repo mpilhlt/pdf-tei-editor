@@ -1,15 +1,15 @@
 # Production-optimized multi-stage Dockerfile
 #
 # Version configuration (can be overridden with --build-arg)
-# Example: podman build --build-arg PYTHON_VERSION=3.12 --build-arg NODE_VERSION=22.15.0 .
+# Example: podman build --build-arg PYTHON_VERSION=3.12 --build-arg NODE_VERSION=26 .
 ARG PYTHON_VERSION=3.13
-ARG NODE_VERSION=24.21.0
+ARG NODE_VERSION=26
 
 # Stage 1: Base system with essential tools
 FROM python:${PYTHON_VERSION}-slim AS base
 
 # Re-declare ARG variables for this stage
-ARG NODE_VERSION=24.21.0
+ARG NODE_VERSION=26
 # Tesseract language models for text recognition (OCRmyPDF plugin), as Debian package suffixes
 # (tesseract-ocr-<lang>). Example: --build-arg TESSERACT_LANGS="eng deu fra"
 ARG TESSERACT_LANGS="eng deu fra ita spa por nld lat grc ell rus pol ces"
