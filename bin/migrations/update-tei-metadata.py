@@ -132,6 +132,9 @@ async def run_update(dry_run: bool = False, limit: int = None, force: bool = Fal
     print(f"  TEI files updated: {stats['updated']}")
     print(f"  PDFs skipped: {stats['skipped']}")
     print(f"  Errors: {stats['errors']}")
+    print(f"  Registry language not declared, since the text contradicts it: {len(stats['language_kept'])}")
+    for kept in stats['language_kept']:
+        print(f"    {kept['stable_id']}: registry '{kept['registry']}', text '{kept['detected']}'")
 
 
 def main():
