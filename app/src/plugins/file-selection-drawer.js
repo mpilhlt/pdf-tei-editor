@@ -443,6 +443,8 @@ class FileSelectionDrawerPlugin extends Plugin {
       return (aLabel < bLabel) ? -1 : (aLabel > bLabel) ? 1 : 0;
     });
 
+    // "__unfiled" is a pseudo-group for documents without a collection
+    const itemCollection = collectionName === "__unfiled" ? "" : collectionName;
     for (const file of files) {
       let artifactsToShow = file.artifacts || [];
       if (state.variant === "none") {
@@ -459,7 +461,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       pdfItem.className = 'pdf-item';
       pdfItem.dataset.type = file.source?.file_type === 'pdf' ? 'pdf' : 'xml-only';
       pdfItem.dataset.hash = file.source?.id || '';
-      pdfItem.dataset.collection = file.collections[0];
+      pdfItem.dataset.collection = itemCollection;
       const displayLabel = file.source?.label || file.doc_metadata?.title || file.doc_id;
       const icon = file.source?.file_type === 'pdf' ? 'file-pdf' : 'file-earmark-code';
       const pdfId = file.source?.id || '';
@@ -493,7 +495,7 @@ class FileSelectionDrawerPlugin extends Plugin {
           goldItem.dataset.type = 'gold';
           goldItem.dataset.hash = gold.id;
           goldItem.dataset.pdfHash = file.source?.id || '';
-          goldItem.dataset.collection = file.collections[0];
+          goldItem.dataset.collection = itemCollection;
           goldItem.innerHTML = createDocumentLabel(gold.label, gold.is_locked, variantSuffix);
           goldSection.appendChild(goldItem);
         });
@@ -513,7 +515,7 @@ class FileSelectionDrawerPlugin extends Plugin {
           versionItem.dataset.type = 'version';
           versionItem.dataset.hash = version.id;
           versionItem.dataset.pdfHash = file.source?.id || '';
-          versionItem.dataset.collection = file.collections[0];
+          versionItem.dataset.collection = itemCollection;
           versionItem.innerHTML = createDocumentLabel(version.label, version.is_locked, variantSuffix);
           versionsSection.appendChild(versionItem);
         });
@@ -706,7 +708,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     const type = selectedItem.dataset.type;
     const hash = selectedItem.dataset.hash;
     const pdfHash = selectedItem.dataset.pdfHash;
-    const collection = selectedItem.dataset.collection;
+    const collection = selectedItem.dataset.collection || null;
 
     if (type === 'section') return;
 

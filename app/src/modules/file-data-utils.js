@@ -291,6 +291,20 @@ export function findMatchingGold(file, variant) {
 }
 
 /**
+ * Chooses the collection a document should be opened in. A document can belong to several
+ * collections; the first of the `preferred` collections that contains the document wins (e.g. the
+ * current collection, then the collection filter), so that opening it keeps the user's context.
+ * Falls back to the document's first collection.
+ * @param {string[]} docCollections - The collections of the document
+ * @param {...(string|null|undefined)} preferred - Candidate collections, in order of preference
+ * @returns {string|null} The collection id, or null if the document has no collection
+ */
+export function pickDocumentCollection(docCollections, ...preferred) {
+  if (!docCollections || docCollections.length === 0) return null;
+  return preferred.find(c => c && docCollections.includes(c)) || docCollections[0];
+}
+
+/**
  * Finds the collection for a given file ID by searching through file data
  * @param {DocumentItem[]} fileData - The file data array
  * @param {string} id - Stable ID of the file to find
