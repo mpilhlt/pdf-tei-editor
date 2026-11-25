@@ -51,10 +51,25 @@ class OcrPlugin extends Plugin {
   /** @type {Promise<OcrEngineInfo[]>|null} */
   #enginesPromise = null
 
+  /** @type {OcrEngineInfo[]|null} The engine list once it is loaded */
+  #engines = null
+
   async install(_state) {
     await super.install(_state)
     const dialog = createSingleFromTemplate('ocr-dialog', document.body)
     this.#dialogUi = this.createUi(dialog)
+  }
+
+  /**
+   * Load the engine list in the background when a user logs in, so that the extraction dialog
+   * can offer text recognition at once.
+   * @param {any} newUser
+   */
+  async onUserChange(newUser) {
+    if (!newUser) return
+    this.getEngines().catch(error => {
+      this.getDependency('logger').warn('Could not load OCR engines: ' + String(error))
+    })
   }
 
   /**
@@ -64,12 +79,26 @@ class OcrPlugin extends Plugin {
    */
   async getEngines(refresh = false) {
     if (refresh || !this.#enginesPromise) {
-      this.#enginesPromise = this.#client.apiClient.ocrEngines().catch(error => {
-        this.#enginesPromise = null
-        throw error
-      })
+      if (refresh) this.#engines = null
+      this.#enginesPromise = this.#client.apiClient.ocrEngines()
+        .then(engines => {
+          this.#engines = engines
+          return engines
+        })
+        .catch(error => {
+          this.#enginesPromise = null
+          throw error
+        })
     }
     return await this.#enginesPromise
+  }
+
+  /**
+   * Return the engine list if it has been loaded, without waiting for it.
+   * @returns {OcrEngineInfo[]|null} The engines, or null while the list is not loaded
+   */
+  getLoadedEngines() {
+    return this.#engines
   }
 
   /**

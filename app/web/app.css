@@ -320,6 +320,14 @@ status-bar {
   font-weight: var(--sl-font-weight-normal);
 }
 
+.dialog-checkbox-section.ocr-loading {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sl-spacing-x-small);
+  font-size: var(--sl-font-size-small);
+  color: var(--sl-color-neutral-600);
+}
+
 .dialog-checkbox-section .help-text {
   margin-top: 4px;
   margin-bottom: 0;

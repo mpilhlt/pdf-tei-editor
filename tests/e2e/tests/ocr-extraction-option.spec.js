@@ -1,6 +1,6 @@
 /**
- * Text recognition (OCR) option of the extraction dialog: a scanned PDF without text layer
- * forces the option, the OCR options dialog offers the engine's languages, and OCR gives
+ * Text recognition (OCR) option of the extraction dialog: a placeholder is shown until the
+ * engines are loaded, a scanned PDF without text layer forces the option, the OCR options dialog offers the engine's languages, and OCR gives
  * the PDF a text layer.
  *
  * Requires an available OCR engine (Tesseract installed); skipped otherwise.
@@ -123,6 +123,66 @@ test.describe('OCR extraction option', () => {
       expect(result.quality.status).toBe('good');
       expect(result.quality.ocr_applied.languages).toEqual(['en']);
     } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
+  test('shows a placeholder until the OCR engines are loaded', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, [
+      'Failed to load resource.*401.*UNAUTHORIZED',
+      'User cancelled the dialog'
+    ]);
+    // Hold the engine list back, which the OCR plugin requests after login
+    /** @type {() => void} */
+    let releaseEngines = () => {};
+    const enginesReleased = new Promise(resolve => { releaseEngines = () => resolve(undefined); });
+    await page.route('**/api/v1/ocr/engines', async route => {
+      await enginesReleased;
+      await route.continue();
+    });
+
+    /** @returns {Promise<{loading: boolean, section: boolean}>} */
+    const visibility = () => page.evaluate(() => {
+      /** @type {namedElementsTree} */
+      const ui = /** @type {any} */(window).ui;
+      return {
+        loading: ui.extractionOptions.ocrLoading.style.display !== 'none',
+        section: ui.extractionOptions.ocrSection.style.display !== 'none'
+      };
+    });
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const fileChooserPromise = page.waitForEvent('filechooser');
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.extractionActions.extractNew.click();
+      });
+      await (await fileChooserPromise).setFiles(SCANNED_PDF);
+      await waitForTestMessage(consoleLogs, 'EXTRACTION_OPTIONS_DIALOG_STARTING', 15000);
+
+      await expect.poll(visibility).toEqual({ loading: true, section: false });
+      if (process.env.E2E_SCREENSHOT_DIR) {
+        await page.screenshot({ path: `${process.env.E2E_SCREENSHOT_DIR}/ocr-options-loading.png` });
+      }
+
+      releaseEngines();
+      const engines = await page.evaluate(() => /** @type {any} */(window).client.apiClient.ocrEngines());
+      // The placeholder is replaced by the options, or removed if no engine is available
+      await expect.poll(visibility).toEqual({ loading: false, section: engines.length > 0 });
+
+      await page.waitForTimeout(500);
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.extractionOptions.cancel.click();
+      });
+    } finally {
+      releaseEngines();
       await releaseAllLocks(page);
       await performLogout(page);
       stopErrorMonitoring();
