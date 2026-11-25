@@ -24,6 +24,11 @@ REASON_NOT_ADDRESSABLE = "text layer not addressable"
 REASON_ODD_STRING = "text string with an odd number of bytes"
 
 TEXT_OPERATORS = ("Tj", "TJ", "'", '"')
+DEFAULT_SCALE = 100  # horizontal scaling (Tz) at the start of a page
+INVISIBLE = 3  # text rendering mode of the OCR text layer
+
+Operand = pikepdf.Object | int | Decimal
+Location = tuple[int, int]  # (object number of the content stream, operator index)
 
 
 @dataclass(frozen=True)
@@ -112,7 +117,97 @@ def _load_font(font: pikepdf.Dictionary) -> _Font:
     return _Font(parse_to_unicode(font["/ToUnicode"]), None)  # type: ignore[arg-type]  # checked above
 
 
-class _Reader:
+def _number(value: pikepdf.Object) -> float | None:
+    """Return a numeric operand as float, or None if it is not a number."""
+    return float(value) if isinstance(value, (int, float, Decimal)) else None
+
+
+@dataclass(frozen=True)
+class _TextState:
+    """The parts of the graphics state that matter for text: font, size, Tz, Tc and Tr."""
+
+    font: pikepdf.Dictionary | None = None
+    size: float = 0.0
+    scale: Operand = DEFAULT_SCALE  # the Tz operand in effect
+    char_spacing: float = 0.0
+    render_mode: int = 0
+
+    def key(self) -> tuple[tuple[int, int] | None, float, float, float, int]:
+        """Return a comparable identity of the state."""
+        font = self.font.objgen if self.font is not None else None
+        return (font, self.size, float(self.scale), self.char_spacing, self.render_mode)
+
+
+class _ContentWalker:
+    """
+    Walks the content streams of pages with the text-related graphics state: the content streams of a page
+    share their state and `q`/`Q` stack, a Form XObject starts in the state of its `Do` and leaves it unchanged.
+    Subclasses handle the text operators.
+    """
+
+    def walk_page(self, page: pikepdf.Page) -> None:
+        """Walk the content streams of a page."""
+        state = _TextState()
+        stack: list[_TextState] = []
+        for stream in _page_streams(page):
+            state = self.walk(stream, _page_resources(page), state, stack, ())
+
+    def walk(
+        self,
+        stream: pikepdf.Object,
+        resources: pikepdf.Dictionary | None,
+        state: _TextState,
+        stack: list[_TextState],
+        path: tuple[tuple[int, int], ...],
+    ) -> _TextState:
+        """Walk one content stream starting in `state` and return the state at its end."""
+        if not isinstance(stream, pikepdf.Stream) or stream.objgen == (0, 0):
+            self.on_unaddressable()
+            return state
+        if stream.objgen in path:
+            return state
+        for op_index, instruction in enumerate(pikepdf.parse_content_stream(stream)):
+            operands, name = list(instruction.operands), str(instruction.operator)
+            if name == "q":
+                stack.append(state)
+            elif name == "Q":
+                state = stack.pop() if stack else state
+            elif name == "Tf" and len(operands) == 2 and (size := _number(operands[1])) is not None:
+                font = _resource(resources, "/Font", str(operands[0]))
+                state = replace(state, font=font if isinstance(font, pikepdf.Dictionary) else None, size=size)
+            elif name == "Tz" and operands and _number(operands[0]) is not None:
+                state = replace(state, scale=operands[0])
+            elif name == "Tc" and operands and (spacing := _number(operands[0])) is not None:
+                state = replace(state, char_spacing=spacing)
+            elif name == "Tr" and operands and (mode := _number(operands[0])) is not None:
+                state = replace(state, render_mode=int(mode))
+            elif name == "Do" and operands:
+                form = _form(resources, str(operands[0]))
+                if form is not None:
+                    self.walk(form, _form_resources(form, resources), state, [], (*path, stream.objgen))
+            elif name in TEXT_OPERATORS:
+                if name == '"' and len(operands) == 3 and (spacing := _number(operands[1])) is not None:
+                    state = replace(state, char_spacing=spacing)
+                self.on_text((stream.objgen[0], op_index), name, operands, state)
+        return state
+
+    def on_text(self, location: Location, name: str, operands: list[pikepdf.Object], state: _TextState) -> None:
+        """Handle a text operator."""
+
+    def on_unaddressable(self) -> None:
+        """Handle a content stream that cannot be addressed by object number."""
+
+
+def _strings(name: str, operands: list[pikepdf.Object]) -> list[bytes] | None:
+    """Return the strings a text operator shows, or None if its operands are malformed."""
+    if name == "TJ" and operands and isinstance(operands[0], pikepdf.Array):
+        return [bytes(item) for item in operands[0] if isinstance(item, pikepdf.String)]
+    if name != "TJ" and operands and isinstance(operands[-1], pikepdf.String):
+        return [bytes(operands[-1])]
+    return None
+
+
+class _Reader(_ContentWalker):
     """Walks the content streams of one page and collects words."""
 
     def __init__(self, page_index: int):
@@ -121,13 +216,12 @@ class _Reader:
         self.font_reason: str | None = None
         self.not_addressable = False
         self.odd_string = False
-        self.seen: set[tuple[int, int]] = set()
         self.fonts: dict[tuple[int, int], _Font] = {}
+        self.known_words: set[LayerWord] = set()
 
-    def font_for(self, resources: pikepdf.Dictionary | None, name: str) -> _Font:
-        """Return the parsed font resource `name`, cached per (indirect) font object."""
-        font = _resource(resources, "/Font", name)
-        if not isinstance(font, pikepdf.Dictionary):
+    def font_info(self, font: pikepdf.Dictionary | None) -> _Font:
+        """Return the parsed font, cached per (indirect) font object."""
+        if font is None:
             return _Font(None, REASON_NOT_IDENTITY)
         if not font.is_indirect:
             return _load_font(font)
@@ -135,41 +229,23 @@ class _Reader:
             self.fonts[font.objgen] = _load_font(font)
         return self.fonts[font.objgen]
 
-    def read_stream(self, stream: pikepdf.Object, resources: pikepdf.Dictionary | None) -> None:
-        """Read one content stream and the Form XObjects it draws."""
-        if not isinstance(stream, pikepdf.Stream) or stream.objgen == (0, 0):
-            self.not_addressable = True
-            return
-        if stream.objgen in self.seen:
-            return
-        self.seen.add(stream.objgen)
-        font = _Font(None, REASON_NOT_IDENTITY)
-        render_mode = 0
-        for op_index, instruction in enumerate(pikepdf.parse_content_stream(stream)):
-            operands, name = instruction.operands, str(instruction.operator)
-            if name == "Tr" and operands:
-                render_mode = int(operands[0])
-            elif name == "Tf" and operands:
-                font = self.font_for(resources, str(operands[0]))
-            elif name == "Do" and operands:
-                form = _form(resources, str(operands[0]))
-                if form is not None:
-                    self.read_stream(form, _form_resources(form, resources))
-            elif name in TEXT_OPERATORS:
-                if render_mode != 3:
-                    self.visible = True
-                elif font.reason is not None:
-                    self.font_reason = self.font_reason or font.reason
-                else:
-                    self.add_words(stream.objgen[0], op_index, name, list(operands), font.cmap or {})
+    def on_unaddressable(self) -> None:
+        self.not_addressable = True
 
-    def add_words(self, stream: int, op_index: int, name: str, operands: Sequence[pikepdf.Object], cmap: dict[int, str]) -> None:
-        """Split the string of a text operator into words at whitespace."""
-        if name == "TJ" and operands and isinstance(operands[0], pikepdf.Array):
-            strings = [bytes(item) for item in operands[0] if isinstance(item, pikepdf.String)]
-        elif name != "TJ" and operands and isinstance(operands[-1], pikepdf.String):
-            strings = [bytes(operands[-1])]
+    def on_text(self, location: Location, name: str, operands: list[pikepdf.Object], state: _TextState) -> None:
+        if state.render_mode != INVISIBLE:
+            self.visible = True
+            return
+        font = self.font_info(state.font)
+        if font.reason is not None:
+            self.font_reason = self.font_reason or font.reason
         else:
+            self.add_words(location, name, operands, font.cmap or {})
+
+    def add_words(self, location: Location, name: str, operands: list[pikepdf.Object], cmap: dict[int, str]) -> None:
+        """Split the string of a text operator into words at whitespace."""
+        strings = _strings(name, operands)
+        if strings is None:
             self.not_addressable = True
             return
         if any(len(string) % 2 for string in strings):
@@ -187,7 +263,10 @@ class _Reader:
                     start = position
                 text += char
             elif start is not None:
-                self.result.words.append(LayerWord(self.result.index, stream, op_index, start, position, text))
+                word = LayerWord(self.result.index, location[0], location[1], start, position, text)
+                if word not in self.known_words:  # a Form XObject can be drawn more than once
+                    self.known_words.add(word)
+                    self.result.words.append(word)
                 start, text = None, ""
 
 
@@ -196,8 +275,7 @@ def read_text_layer(pdf: pikepdf.Pdf) -> list[LayerPage]:
     pages: list[LayerPage] = []
     for index, page in enumerate(pdf.pages):
         reader = _Reader(index)
-        for stream in _page_streams(page):
-            reader.read_stream(stream, _page_resources(page))
+        reader.walk_page(page)
         if reader.visible:
             reader.result.unpatchable = REASON_VISIBLE
         elif reader.not_addressable:
@@ -216,9 +294,6 @@ def read_text_layer(pdf: pikepdf.Pdf) -> list[LayerPage]:
 
 MAX_CODE = 0xFFFF
 BFCHAR_LIMIT = 100  # entries per beginbfchar section allowed by the CMap specification
-DEFAULT_SCALE = 100  # horizontal scaling (Tz) at the start of a page
-
-Operand = pikepdf.Object | int | Decimal
 
 
 @dataclass(frozen=True)
@@ -267,7 +342,8 @@ def _parse_widths(cid_font: pikepdf.Dictionary) -> dict[int, float]:
 class _FontPatch:
     """The code map and widths of one Type0 font, and the characters that patches add to it."""
 
-    def __init__(self, font: pikepdf.Dictionary):
+    def __init__(self, font: pikepdf.Dictionary, used_codes: set[int]):
+        self.font = font
         to_unicode, descendants = font.get("/ToUnicode"), font.get("/DescendantFonts")
         if not isinstance(to_unicode, pikepdf.Stream) or not isinstance(descendants, pikepdf.Array):
             raise ValueError("font is not a Type0 font with ToUnicode")
@@ -283,7 +359,8 @@ class _FontPatch:
                 self.codes.setdefault(text, code)
         self.widths = _parse_widths(self.cid_font)
         self.default_width = float(self.cid_font.get("/DW", 1000))
-        self.next_code = max([*cmap, *self.widths, 0]) + 1
+        # a new code must not be shown anywhere with this font yet, or those places would decode as the new character
+        self.next_code = max([*cmap, *self.widths, *used_codes, 0]) + 1
         self.added: list[tuple[int, str, float]] = []
 
     def width(self, code: int) -> float:
@@ -343,71 +420,61 @@ class _FontPatch:
             widths.append(pikepdf.Array([int(width) if width.is_integer() else Decimal(str(width))]))
 
 
-@dataclass(frozen=True)
-class _TextState:
-    """The parts of the text state that determine the width of shown text."""
+class _StateRecorder(_ContentWalker):
+    """Records the text state at the operators to patch and the codes shown with each font."""
 
-    font: pikepdf.Dictionary | None = None
-    size: float = 0.0
-    scale: Operand = DEFAULT_SCALE  # the Tz operand in effect
-    char_spacing: float = 0.0
-
-    def key(self) -> tuple[tuple[int, int] | None, float, float, float]:
-        """Return a comparable identity of the state."""
-        return (self.font.objgen if self.font is not None else None, self.size, float(self.scale), self.char_spacing)
-
-
-class _StateWalker:
-    """Walks all pages and records the text state in effect at the operators to patch."""
-
-    def __init__(self, targets: set[tuple[int, int]]):
+    def __init__(self, targets: set[Location]):
         self.targets = targets
-        self.states: dict[tuple[int, int], _TextState] = {}
+        self.states: dict[Location, _TextState] = {}
+        self.used_codes: dict[tuple[int, int], set[int]] = {}
+        self.malformed_fonts: set[tuple[int, int]] = set()
+        self.direct_fonts: list[pikepdf.Dictionary] = []
 
-    def walk_page(self, page: pikepdf.Page) -> None:
-        """Walk the content streams of a page, which share their state."""
-        state = _TextState()
-        stack: list[_TextState] = []
-        for stream in _page_streams(page):
-            if isinstance(stream, pikepdf.Stream):
-                state = self.walk(stream, _page_resources(page), state, stack, ())
+    def on_text(self, location: Location, name: str, operands: list[pikepdf.Object], state: _TextState) -> None:
+        if state.font is not None:
+            if not state.font.is_indirect:
+                self.direct_fonts.append(state.font)
+            else:
+                strings = _strings(name, operands)
+                if strings is None or any(len(string) % 2 for string in strings):
+                    self.malformed_fonts.add(state.font.objgen)
+                else:
+                    self.used_codes.setdefault(state.font.objgen, set()).update(_codes(b"".join(strings)))
+        if location in self.targets:
+            known = self.states.setdefault(location, state)
+            if known.key() != state.key():
+                raise ValueError(f"text operator {location[1]} of object {location[0]} is drawn with different text states")
 
-    def walk(
-        self,
-        stream: pikepdf.Stream,
-        resources: pikepdf.Dictionary | None,
-        state: _TextState,
-        stack: list[_TextState],
-        path: tuple[tuple[int, int], ...],
-    ) -> _TextState:
-        """Walk one content stream starting in `state` and return the state at its end."""
-        if stream.objgen in path:
-            return state
-        for op_index, instruction in enumerate(pikepdf.parse_content_stream(stream)):
-            operands, name = instruction.operands, str(instruction.operator)
-            if name == "q":
-                stack.append(state)
-            elif name == "Q":
-                state = stack.pop() if stack else state
-            elif name == "Tf" and len(operands) == 2:
-                font = _resource(resources, "/Font", str(operands[0]))
-                state = replace(state, font=font if isinstance(font, pikepdf.Dictionary) else None, size=float(operands[1]))
-            elif name == "Tz" and operands:
-                state = replace(state, scale=operands[0])
-            elif name == "Tc" and operands:
-                state = replace(state, char_spacing=float(operands[0]))
-            elif name == '"' and len(operands) == 3:
-                state = replace(state, char_spacing=float(operands[1]))
-            elif name == "Do" and operands:
-                form = _form(resources, str(operands[0]))
-                if form is not None:
-                    self.walk(form, _form_resources(form, resources), state, [], (*path, stream.objgen))
-            location = (stream.objgen[0], op_index)
-            if name in TEXT_OPERATORS and location in self.targets:
-                known = self.states.setdefault(location, state)
-                if known.key() != state.key():
-                    raise ValueError(f"text operator {op_index} of object {stream.objgen[0]} is drawn with different text states")
-        return state
+
+def _references(owner: pikepdf.Dictionary) -> list[tuple[int, int]]:
+    """Return the indirect objects a font or CIDFont dictionary uses for its code map and widths."""
+    values = [owner.get(key) for key in ("/ToUnicode", "/W", "/CIDToGIDMap")]
+    descendants = owner.get("/DescendantFonts")
+    if isinstance(descendants, pikepdf.Array):
+        values.extend(descendants)
+    return [value.objgen for value in values if isinstance(value, pikepdf.Object) and value.is_indirect]
+
+
+def _check_not_shared(pdf: pikepdf.Pdf, fonts: list["_FontPatch"], direct_fonts: list[pikepdf.Dictionary]) -> None:
+    """Refuse to extend a font whose ToUnicode, CIDFont, /W or CIDToGIDMap another font uses too."""
+    owned: dict[tuple[int, int], set[tuple[int, int] | None]] = {}  # object -> the font and CIDFont that may use it
+    for font in fonts:
+        allowed: set[tuple[int, int] | None] = {font.font.objgen, font.cid_font.objgen}
+        for objgen in (font.to_unicode.objgen, font.cid_font.objgen, *_references(font.cid_font)):
+            owned[objgen] = allowed
+    if not owned:
+        return
+    owners: list[pikepdf.Dictionary] = [obj for obj in pdf.objects if isinstance(obj, pikepdf.Dictionary)]
+    for font_dict in direct_fonts:
+        owners.append(font_dict)
+        descendants = font_dict.get("/DescendantFonts")
+        if isinstance(descendants, pikepdf.Array):
+            owners.extend(item for item in descendants if isinstance(item, pikepdf.Dictionary) and not item.is_indirect)
+    for owner in owners:
+        identity = owner.objgen if owner.is_indirect else None
+        for objgen in _references(owner):
+            if objgen in owned and identity not in owned[objgen]:
+                raise ValueError(f"font object {objgen[0]} is shared with another font")
 
 
 @dataclass(frozen=True)
@@ -521,7 +588,7 @@ def _patch_operator(
     return scale, name, _operands(name, operands, prefix + rest)
 
 
-def _validate(pdf: pikepdf.Pdf,patches: Sequence[WordPatch]) -> dict[tuple[int, int], list[WordPatch]]:
+def _validate(pdf: pikepdf.Pdf, patches: Sequence[WordPatch]) -> dict[tuple[int, int], list[WordPatch]]:
     """Check the patches against the current text layer and group them by operator, ordered right to left."""
     pages = read_text_layer(pdf)
     by_location: dict[tuple[int, int, int, int], WordPatch] = {}
@@ -552,7 +619,7 @@ def _validate(pdf: pikepdf.Pdf,patches: Sequence[WordPatch]) -> dict[tuple[int, 
 def _plan(pdf: pikepdf.Pdf, patches: Sequence[WordPatch]) -> tuple[list[tuple[pikepdf.Stream, bytes]], list[_FontPatch]]:
     """Compute the new data of every stream to change, and the fonts to extend, without changing `pdf`."""
     by_operator = _validate(pdf, patches)
-    walker = _StateWalker(set(by_operator))
+    walker = _StateRecorder(set(by_operator))
     for page in pdf.pages:
         walker.walk_page(page)
     by_stream: dict[int, list[tuple[int, list[WordPatch]]]] = {}
@@ -570,8 +637,10 @@ def _plan(pdf: pikepdf.Pdf, patches: Sequence[WordPatch]) -> tuple[list[tuple[pi
             state = walker.states.get((stream_number, op_index))
             if state is None or state.font is None or not state.font.is_indirect:
                 raise ValueError(f"text operator {op_index} of object {stream_number} not reached")
+            if state.render_mode != INVISIBLE:
+                raise ValueError(f"text operator {op_index} of object {stream_number} shows visible text")
             if state.font.objgen not in fonts:
-                fonts[state.font.objgen] = _FontPatch(state.font)
+                fonts[state.font.objgen] = _FontPatch(state.font, walker.used_codes.get(state.font.objgen, set()))
             font = fonts[state.font.objgen]
             instruction = instructions[op_index]
             try:
@@ -584,8 +653,13 @@ def _plan(pdf: pikepdf.Pdf, patches: Sequence[WordPatch]) -> tuple[list[tuple[pi
                 pikepdf.ContentStreamInstruction([state.scale], pikepdf.Operator("Tz")),
             ]
         stream_writes.append((stream, pikepdf.unparse_content_stream(instructions)))
-    font_writes = [write for font in fonts.values() for write in font.prepare()]
-    return [*stream_writes, *font_writes], list(fonts.values())
+    extended = [font for font in fonts.values() if font.added]
+    for font in extended:
+        if font.font.objgen in walker.malformed_fonts:
+            raise ValueError(f"font object {font.font.objgen[0]} is shown with malformed strings, its used codes are unknown")
+    _check_not_shared(pdf, extended, walker.direct_fonts)
+    font_writes = [write for font in extended for write in font.prepare()]
+    return [*stream_writes, *font_writes], extended
 
 
 def patch_text_layer(pdf: pikepdf.Pdf, patches: Sequence[WordPatch]) -> None:

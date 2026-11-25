@@ -4,16 +4,18 @@ Unit tests for reading the OCR text layer of a PDF as words.
 @testCovers fastapi_app/lib/ocr/text_layer.py
 """
 
+import shutil
 import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from typing import Literal
 
 import pdfminer.high_level
 import pikepdf
 import pymupdf
 
-from fastapi_app.lib.ocr.text_layer import LayerWord, WordPatch, parse_to_unicode, patch_text_layer, read_text_layer
+from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord, WordPatch, parse_to_unicode, patch_text_layer, read_text_layer
 from tests.unit.fastapi.test_ocr import make_image_only_pdf
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -30,7 +32,10 @@ def make_digital_pdf(path: Path) -> None:
     pdf.save(path)
 
 
-SYNTHETIC_TO_UNICODE = b"""/CIDInit /ProcSet findresource begin
+def to_unicode_cmap(mapping: dict[int, str]) -> bytes:
+    """Return a ToUnicode CMap with one bfchar entry per code."""
+    entries = "".join(f"<{code:04X}> <{ord(char):04X}>\n" for code, char in mapping.items())
+    return f"""/CIDInit /ProcSet findresource begin
 12 dict begin
 begincmap
 /CMapName /Adobe-Identity-UCS def
@@ -38,23 +43,22 @@ begincmap
 1 begincodespacerange
 <0000> <FFFF>
 endcodespacerange
-4 beginbfchar
-<0020> <0020>
-<0044> <0044>
-<0045> <0045>
-<0046> <0046>
-endbfchar
+{len(mapping)} beginbfchar
+{entries}endbfchar
 endcmap
 CMapName currentdict /CMap defineresource pop
 end
 end
-"""
+""".encode("ascii")
 
 
-def make_layer_pdf(path: Path, content: bytes, subtype: str = "/Type0", indirect: bool = True) -> None:
-    """Write a one-page PDF whose content is drawn with an invisible Identity-H font mapping D, E, F and space."""
-    pdf = pikepdf.new()
-    descendant = pikepdf.Dictionary(
+SYNTHETIC_TO_UNICODE = to_unicode_cmap({0x20: " ", 0x44: "D", 0x45: "E", 0x46: "F"})
+SecondFont = Literal["own", "shared-tounicode", "shared-descendant"]
+
+
+def make_descendant() -> pikepdf.Dictionary:
+    """Return a CIDFontType2 with widths for space (260) and D, E, F (600)."""
+    return pikepdf.Dictionary(
         Type=pikepdf.Name.Font,
         Subtype=pikepdf.Name.CIDFontType2,
         BaseFont=pikepdf.Name("/Test"),
@@ -63,18 +67,52 @@ def make_layer_pdf(path: Path, content: bytes, subtype: str = "/Type0", indirect
         DW=1000,
         W=pikepdf.Array([0x20, pikepdf.Array([260]), 0x44, 0x46, 600]),
     )
-    font = pikepdf.Dictionary(
+
+
+def make_type0(subtype: str, descendant: pikepdf.Object, to_unicode: pikepdf.Stream) -> pikepdf.Dictionary:
+    """Return an Identity-H font dictionary."""
+    return pikepdf.Dictionary(
         Type=pikepdf.Name.Font,
         Subtype=pikepdf.Name(subtype),
         BaseFont=pikepdf.Name("/Test"),
         Encoding=pikepdf.Name("/Identity-H"),
-        DescendantFonts=pikepdf.Array([pdf.make_indirect(descendant) if indirect else descendant]),
-        ToUnicode=pdf.make_stream(SYNTHETIC_TO_UNICODE),
+        DescendantFonts=pikepdf.Array([descendant]),
+        ToUnicode=to_unicode,
     )
+
+
+def make_layer_pdf(
+    path: Path, content: bytes, subtype: str = "/Type0", indirect: bool = True, second_font: SecondFont | None = None
+) -> None:
+    """
+    Write a one-page PDF whose content is drawn with an Identity-H font /F1 mapping D, E, F and space.
+    `second_font` adds a font /F2 that maps <0044> to X, or that shares the ToUnicode or descendant font of /F1.
+    """
+    pdf = pikepdf.new()
+    descendant = make_descendant()
+    to_unicode = pdf.make_stream(SYNTHETIC_TO_UNICODE)
+    font = make_type0(subtype, pdf.make_indirect(descendant) if indirect else descendant, to_unicode)
+    fonts = pikepdf.Dictionary(F1=pdf.make_indirect(font) if indirect else font)
+    if second_font is not None:
+        other_descendant = fonts.F1.DescendantFonts[0] if second_font == "shared-descendant" else pdf.make_indirect(make_descendant())
+        other_to_unicode = to_unicode if second_font == "shared-tounicode" else pdf.make_stream(to_unicode_cmap({0x44: "X"}))
+        fonts.F2 = pdf.make_indirect(make_type0(subtype, other_descendant, other_to_unicode))
     page = pdf.add_blank_page(page_size=(200, 200))
-    page.Resources = pikepdf.Dictionary(Font=pikepdf.Dictionary(F1=pdf.make_indirect(font) if indirect else font))
+    page.Resources = pikepdf.Dictionary(Font=fonts)
     page.Contents = pdf.make_stream(content)
     pdf.save(path)
+
+
+def add_form(pdf: pikepdf.Pdf, content: bytes) -> pikepdf.Stream:
+    """Add the Form XObject /Fm with `content` and the fonts of the first page to the first page."""
+    page = pdf.pages[0]
+    form = pdf.make_stream(content)
+    form.Type = pikepdf.Name.XObject
+    form.Subtype = pikepdf.Name.Form
+    form.BBox = pikepdf.Array([0, 0, 200, 200])
+    form.Resources = pikepdf.Dictionary(Font=page.Resources.Font)
+    page.Resources.XObject = pikepdf.Dictionary(Fm=form)
+    return form
 
 
 def ocr_font(pdf: pikepdf.Pdf) -> pikepdf.Dictionary:
@@ -124,8 +162,7 @@ class TestTextLayer(unittest.TestCase):
             make_digital_pdf(path)
             self.assertEqual(read_text_layer(pikepdf.open(path))[0].unpatchable, "visible text")
 
-
-    def layer(self, content: bytes, **kwargs: str | bool) -> list:
+    def layer(self, content: bytes, **kwargs: str | bool) -> list[LayerPage]:
         """Read the text layer of a synthetic one-page PDF with `content`."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "layer.pdf"
@@ -145,6 +182,25 @@ class TestTextLayer(unittest.TestCase):
     def test_font_must_be_type0(self):
         page = self.layer(b"BT 3 Tr /F1 10 Tf <0044> Tj ET", subtype="/TrueType")[0]
         self.assertEqual(page.unpatchable, "font is not Identity-H")
+
+    def test_tr_is_restored_by_q(self):
+        page = self.layer(b"q BT 3 Tr /F1 10 Tf <0044> Tj ET Q BT /F1 10 Tf <0045> Tj ET")[0]
+        self.assertEqual(page.unpatchable, "visible text")
+
+    def test_font_is_restored_by_q(self):
+        content = b"BT /F1 10 Tf ET q BT /F2 10 Tf ET Q BT 3 Tr <0044> Tj ET"
+        page = self.layer(content, second_font="own")[0]
+        self.assertEqual([w.text for w in page.words], ["D"])
+
+    def test_form_inherits_the_state_of_its_caller(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "form.pdf"
+            make_layer_pdf(path, b"BT 3 Tr /F1 10 Tf ET /Fm Do")
+            pdf = pikepdf.open(path)
+            add_form(pdf, b"BT <0044> Tj ET")
+            page = read_text_layer(pdf)[0]
+        self.assertIsNone(page.unpatchable)
+        self.assertEqual([w.text for w in page.words], ["D"])
 
     def test_direct_font_is_unpatchable(self):
         page = self.layer(b"BT 3 Tr /F1 10 Tf <0044> Tj ET", indirect=False)[0]
@@ -195,7 +251,7 @@ def char_end(path: Path, text: str) -> float:
 class TestPatchTextLayer(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, ignore_errors=True))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def patched(self, source: Path, replacements: dict[str, str]) -> Path:
         """Patch the words with the given texts and save the result."""
@@ -353,13 +409,7 @@ class TestPatchTextLayer(unittest.TestCase):
         path = self.tmp / "form.pdf"
         make_layer_pdf(path, page_content)
         pdf = pikepdf.open(path)
-        page = pdf.pages[0]
-        form = pdf.make_stream(b"BT 3 Tr /F1 10 Tf <0044> Tj ET")
-        form.Type = pikepdf.Name.XObject
-        form.Subtype = pikepdf.Name.Form
-        form.BBox = pikepdf.Array([0, 0, 200, 200])
-        form.Resources = pikepdf.Dictionary(Font=page.Resources.Font)
-        page.Resources.XObject = pikepdf.Dictionary(Fm=form)
+        add_form(pdf, b"BT 3 Tr /F1 10 Tf <0044> Tj ET")
         return pdf
 
     def test_form_drawn_twice_with_the_same_state(self):
@@ -373,6 +423,55 @@ class TestPatchTextLayer(unittest.TestCase):
         with self.assertRaises(ValueError):
             patch_text_layer(pdf, [WordPatch(read_text_layer(pdf)[0].words[0], "E")])
         self.assertEqual(streams(pdf), before)
+
+    def synthetic(self, content: bytes, second_font: SecondFont | None = None) -> pikepdf.Pdf:
+        """Open a synthetic one-page PDF with `content`."""
+        path = self.tmp / f"synthetic-{len(list(self.tmp.iterdir()))}.pdf"
+        make_layer_pdf(path, content, second_font=second_font)
+        return pikepdf.open(path)
+
+    def test_visible_text_after_q_is_not_patched(self):
+        pdf = self.synthetic(b"q BT 3 Tr /F1 10 Tf <0044> Tj ET Q BT /F1 10 Tf <0045> Tj ET")
+        word = LayerWord(0, pdf.pages[0].Contents.objgen[0], 9, 0, 1, "E")  # the second Tj
+        before = streams(pdf)
+        with self.assertRaises(ValueError):
+            patch_text_layer(pdf, [WordPatch(word, "DD")])
+        self.assertEqual(streams(pdf), before)
+
+    def test_patch_uses_the_font_restored_by_q(self):
+        pdf = self.synthetic(b"BT /F1 10 Tf ET q BT /F2 10 Tf ET Q BT 3 Tr <0044> Tj ET", second_font="own")
+        patch_text_layer(pdf, [WordPatch(read_text_layer(pdf)[0].words[0], "DΩ")])
+        f1, f2 = pdf.pages[0].Resources.Font.F1, pdf.pages[0].Resources.Font.F2
+        self.assertIn("Ω", parse_to_unicode(f1.ToUnicode).values())
+        self.assertNotIn("Ω", parse_to_unicode(f2.ToUnicode).values())
+        self.assertEqual([w.text for w in read_text_layer(pdf)[0].words], ["DΩ"])
+
+    def test_shared_tounicode_is_not_extended(self):
+        pdf = self.synthetic(b"BT 3 Tr /F1 10 Tf <0044> Tj ET", second_font="shared-tounicode")
+        before = streams(pdf)
+        with self.assertRaises(ValueError):
+            patch_text_layer(pdf, [WordPatch(read_text_layer(pdf)[0].words[0], "Ω")])
+        self.assertEqual(streams(pdf), before)
+
+    def test_shared_descendant_font_is_not_extended(self):
+        pdf = self.synthetic(b"BT 3 Tr /F1 10 Tf <0044> Tj ET", second_font="shared-descendant")
+        with self.assertRaises(ValueError):
+            patch_text_layer(pdf, [WordPatch(read_text_layer(pdf)[0].words[0], "Ω")])
+
+    def test_shared_font_is_fine_without_new_characters(self):
+        pdf = self.synthetic(b"BT 3 Tr /F1 10 Tf <0044> Tj ET", second_font="shared-tounicode")
+        patch_text_layer(pdf, [WordPatch(read_text_layer(pdf)[0].words[0], "EF")])
+        self.assertEqual([w.text for w in read_text_layer(pdf)[0].words], ["EF"])
+
+    def test_new_code_is_not_used_in_the_content_yet(self):
+        # <0047> is in neither ToUnicode nor /W, but shown with /F1: it must not become the code of the new character
+        pdf = self.synthetic(b"BT 3 Tr /F1 10 Tf <0044 0020 0047> Tj ET")
+        patch_text_layer(pdf, [WordPatch(read_text_layer(pdf)[0].words[0], "Ω")])
+        cmap = parse_to_unicode(pdf.pages[0].Resources.Font.F1.ToUnicode)
+        self.assertNotIn(0x47, cmap)
+        self.assertEqual(cmap[0x48], "Ω")
+        self.assertEqual([w.text for w in read_text_layer(pdf)[0].words], ["Ω"])
+
 
 if __name__ == "__main__":
     unittest.main()
