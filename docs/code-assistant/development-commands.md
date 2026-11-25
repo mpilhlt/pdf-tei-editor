@@ -27,6 +27,8 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 
 **Note**: The `--restart` flag works for both `npm run start:dev` and `npm run start:prod`.
 
+**Logs**: `npm run start:dev` (with or without `--restart`) shortens `log/app.log` to its last 1000 lines and empties `log/server.log` (or the files in `LOG_DIR`). Reloads after file changes keep appending to them.
+
 ## Build System
 
 ```bash

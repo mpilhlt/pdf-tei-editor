@@ -82,8 +82,10 @@ _DASHES = "-‐‑–—"
 Box = tuple[int, int, int, int]
 """Pixel bounding box: left, top, right, bottom."""
 
-DigitRecognizer = Callable[[Image.Image, Box], list[str]]
-"""Recognizes the digits in a region of a page image, possibly in several readings."""
+DigitRecognizer = Callable[[Image.Image, Sequence[Box]], list[list[str]]]
+"""Recognizes the digits in regions of a page image: returns the readings of every region (one
+per model). All regions of a page are passed at once, so that a recognizer can process them in
+one batch."""
 
 
 @dataclass
@@ -399,38 +401,83 @@ def raised_region(image: Image.Image, word_box: Box, region: Box) -> Box | None:
     return (left + max(0, group_start - padding), top + max(0, group_top - padding), left + min(width, group_end + 1 + padding), top + min(height, int(limit) + padding))
 
 
-def make_tesseract_digit_recognizer(languages: Sequence[str] = ("eng",), timeout: float = 10.0) -> DigitRecognizer:
+def make_tesseract_digit_recognizer(languages: Sequence[str] = ("eng",), timeout: float = 10.0, timeout_per_region: float = 1.0) -> DigitRecognizer:
     """
-    Return a recognizer that runs Tesseract on the upscaled region with a digits-only whitelist.
+    Return a recognizer that runs Tesseract on the upscaled regions with a digits-only whitelist.
+
+    The regions are saved as images and passed to Tesseract as a list file, so that each model
+    is loaded once per page instead of once per region; starting Tesseract takes far longer
+    than recognizing a region. Tesseract recognizes every image of the list separately (with
+    `--psm 7`, as a single line) and separates their texts with form feeds.
 
     Args:
-        languages: Installed Tesseract models, each recognizes the region once. Despite the
+        languages: Installed Tesseract models, each recognizes every region once. Despite the
             whitelist, the models read the same digits differently (on the example of #904,
             `deu` read `1` where `eng` read `167`), so using several increases the hits.
-        timeout: Seconds per region and model
+        timeout: Base timeout in seconds per model
+        timeout_per_region: Seconds added to the timeout per region
 
     Returns:
-        A recognizer that returns the digits read by each model
+        A recognizer that returns the digits read by each model for every region
     """
 
-    def recognize(image: Image.Image, box: Box) -> list[str]:
-        crop = image.crop(box)
-        crop = crop.resize((crop.width * 3, crop.height * 3), Image.Resampling.LANCZOS)
-        readings = []
+    def recognize(image: Image.Image, boxes: Sequence[Box]) -> list[list[str]]:
+        readings: list[list[str]] = [[] for _ in boxes]
+        if not boxes:
+            return readings
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "marker.png"
-            crop.save(path)
+            paths = []
+            for index, box in enumerate(boxes):
+                crop = image.crop(box)
+                crop = crop.resize((max(1, crop.width * 3), max(1, crop.height * 3)), Image.Resampling.LANCZOS)
+                path = Path(tmp) / f"region-{index:05d}.png"
+                crop.save(path)
+                paths.append(str(path))
+            list_file = Path(tmp) / "regions.txt"
+            list_file.write_text("\n".join(paths) + "\n", encoding="utf-8")
             for language in languages:
-                command = ["tesseract", str(path), "stdout", "-l", language, "--psm", "7", "-c", "tessedit_char_whitelist=0123456789)"]
+                command = ["tesseract", str(list_file), "stdout", "-l", language, "--psm", "7", "-c", "tessedit_char_whitelist=0123456789)"]
                 try:
-                    result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=True)
+                    result = subprocess.run(command, capture_output=True, text=True, timeout=timeout + timeout_per_region * len(boxes), check=True)
                 except (subprocess.SubprocessError, OSError) as e:
                     logger.warning(f"Footnote marker recognition failed: {e}")
                     continue
-                readings.append("".join(char for char in result.stdout if char.isdigit()))
+                texts = result.stdout.split("\f")
+                if len(texts) < len(boxes):
+                    logger.warning(f"Footnote marker recognition returned {len(texts)} texts for {len(boxes)} regions")
+                    continue
+                for region_readings, text in zip(readings, texts):
+                    region_readings.append("".join(char for char in text if char.isdigit()))
         return readings
 
     return recognize
+
+
+class _RecognitionQueue:
+    """
+    Collects the regions to recognize on a page, so that they are recognized in one batch.
+
+    `request()` returns an empty list that `run()` fills with the readings of the regions.
+    """
+
+    def __init__(self) -> None:
+        self._boxes: list[Box] = []
+        self._targets: list[list[str]] = []
+
+    def request(self, *boxes: Box) -> list[str]:
+        """Queue regions; their readings are added to the returned list in this order."""
+        readings: list[str] = []
+        for box in boxes:
+            self._boxes.append(box)
+            self._targets.append(readings)
+        return readings
+
+    def run(self, image: Image.Image, recognize: DigitRecognizer) -> None:
+        """Recognize all queued regions and fill in their readings."""
+        if not self._boxes:
+            return
+        for target, readings in zip(self._targets, recognize(image, self._boxes)):
+            target.extend(readings)
 
 
 def _classes(element: etree._Element) -> set[str]:
@@ -459,7 +506,7 @@ def _padded(image: Image.Image, box: Box) -> Box:
     return max(0, left - padding), max(0, top - padding), min(image.width, right + padding), min(image.height, bottom + padding)
 
 
-def _recovered_start(words: Sequence[etree._Element], geometry: LineGeometry | None, image: Image.Image, recognize: DigitRecognizer) -> FootnoteStart | None:
+def _recovered_start(words: Sequence[etree._Element], geometry: LineGeometry | None, image: Image.Image, queue: _RecognitionQueue) -> FootnoteStart | None:
     """
     Recognize a superscript footnote number at the start of a line again.
 
@@ -487,11 +534,11 @@ def _recovered_start(words: Sequence[etree._Element], geometry: LineGeometry | N
         region = raised_region(image, box, estimate)
     if region is None:
         return None
-    return FootnoteStart("", parenthesized, recognize(image, region), word_id, text, marker)
+    return FootnoteStart("", parenthesized, queue.request(region), word_id, text, marker)
 
 
-def _candidate(word: etree._Element, position: int, geometry: LineGeometry | None, image: Image.Image, recognize: DigitRecognizer) -> MarkerCandidate | None:
-    """Return the word as a marker candidate, with its second-pass readings, or None."""
+def _candidate(word: etree._Element, position: int, geometry: LineGeometry | None, image: Image.Image, queue: _RecognitionQueue) -> MarkerCandidate | None:
+    """Return the word as a marker candidate, with its second-pass regions queued, or None."""
     text = _word_text(word)
     box = parse_bbox(word.get("title") or "")
     word_id = word.get("id")
@@ -503,14 +550,14 @@ def _candidate(word: etree._Element, position: int, geometry: LineGeometry | Non
         if not candidate.is_number:
             region = marker_box(box, text, candidate.prefix)
             raised = raised_region(image, box, region)
-            candidate.readings = (recognize(image, raised) if raised else []) + recognize(image, region)
+            candidate.readings = queue.request(raised, region) if raised else queue.request(region)
         return candidate
     if position > 0 and (standalone := split_standalone_marker(text)):
         if geometry is None or not geometry.is_raised(box):
             return None
         candidate = MarkerCandidate(word_id, text, "", *standalone, strict=True)
         if not candidate.is_number:
-            candidate.readings = recognize(image, _padded(image, box))
+            candidate.readings = queue.request(_padded(image, box))
         return candidate
     if parts := split_trailing_marker(text):
         region = marker_box(box, text, parts[0])
@@ -520,7 +567,7 @@ def _candidate(word: etree._Element, position: int, geometry: LineGeometry | Non
             return None
         candidate = MarkerCandidate(word_id, text, *parts, strict=True)
         if not candidate.is_number:
-            candidate.readings = recognize(image, raised) + recognize(image, region)
+            candidate.readings = queue.request(raised, region)
         return candidate
     return None
 
@@ -530,25 +577,27 @@ def analyze_page(root: etree._Element, image: Image.Image, recognize: DigitRecog
     Collect the footnote starts and marker candidates of an hOCR page.
 
     Misrecognized markers and footnote numbers are recognized again here, since this is the
-    step that has the page image.
+    step that has the page image. The regions of the whole page are recognized in one batch.
 
     Args:
         root: The root of the hOCR document
         image: The page image the hOCR was recognized from
-        recognize: Recognizes the digits in a region of the image
+        recognize: Recognizes the digits in regions of the image
     """
     analysis = PageAnalysis()
+    queue = _RecognitionQueue()
     for geometry, words in _page_lines(root):
         first = 0
         if match := _FOOTNOTE_START_RE.match(_word_text(words[0])):
             analysis.footnote_starts.append(FootnoteStart(match.group(1), bool(match.group(2))))
             first = 1
-        elif start := _recovered_start(words, geometry, image, recognize):
+        elif start := _recovered_start(words, geometry, image, queue):
             analysis.footnote_starts.append(start)
             first = 1
         for position, word in enumerate(words[first:], start=first):
-            if candidate := _candidate(word, position, geometry, image, recognize):
+            if candidate := _candidate(word, position, geometry, image, queue):
                 analysis.candidates.append(candidate)
+    queue.run(image, recognize)
     return analysis
 
 

@@ -7,16 +7,22 @@ example document of the issue (`13) 14) 15) 116) 17) 18)` for 113-118, `3) 4)` f
 @testCovers fastapi_app/plugins/ocrmypdf/footnote_markers.py
 """
 
+import asyncio
 import shutil
 import subprocess
 import tempfile
 import unittest
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 from lxml import etree
 from PIL import Image
 
+from fastapi_app.lib.models.models_ocr import OcrProgress
+from fastapi_app.lib.ocr.progress import progress_reporter
+from fastapi_app.plugins.ocrmypdf import ocrmypdf_plugin
 from fastapi_app.plugins.ocrmypdf.engine import OcrmypdfEngine
 from fastapi_app.plugins.ocrmypdf.footnote_markers import (
     FootnoteStart,
@@ -300,9 +306,9 @@ class TestHocr(unittest.TestCase):
         image = Image.new("L", (1000, 1000), 255)
         regions = []
 
-        def recognize(_image: Image.Image, box: tuple[int, int, int, int]) -> list[str]:
-            regions.append(box)
-            return ["312"]
+        def recognize(_image: Image.Image, boxes: Sequence[tuple[int, int, int, int]]) -> list[list[str]]:
+            regions.extend(boxes)
+            return [["312"] for _ in boxes]
 
         analysis = analyze_page(root, image, recognize)
         self.assertEqual(analysis.footnote_starts, [FootnoteStart("312", True)])
@@ -330,9 +336,9 @@ class TestHocr(unittest.TestCase):
         image.paste(0, (125, 20, 295, 60))
         regions = []
 
-        def recognize(_image: Image.Image, box: tuple[int, int, int, int]) -> list[str]:
-            regions.append(box)
-            return ["12"]
+        def recognize(_image: Image.Image, boxes: Sequence[tuple[int, int, int, int]]) -> list[list[str]]:
+            regions.extend(boxes)
+            return [["12"] for _ in boxes]
 
         analysis = analyze_page(root, image, recognize)
         # `Regel"` has a raised marker, the word `'` lies above the baseline; `Wort"` has
@@ -344,18 +350,56 @@ class TestHocr(unittest.TestCase):
         self.assertTrue(70 <= left <= 80 and 95 <= right <= 100, regions[0])
 
 
+class TestRepairDocument(unittest.TestCase):
+    def test_progress_is_reported_per_repaired_page(self):
+        repair = MarkerRepair("word_1_2", "tut?!?)", "tut312)")
+        reports: list[OcrProgress] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            hocr_files = {page: Path(tmp) / f"{page:06d}.hocr" for page in range(3)}
+            for path in hocr_files.values():
+                path.write_text(HOCR, encoding="utf-8")
+            # Pages 0 and 2 have markers to repair, page 1 has none
+            with patch.object(ocrmypdf_plugin, "plan_repairs", return_value=[[repair], [], [repair]]), progress_reporter(reports.append):
+                count = ocrmypdf_plugin.repair_document(hocr_files)
+            self.assertIn("tut312)", hocr_files[2].read_text(encoding="utf-8"))
+        self.assertEqual(count, 2)
+        self.assertEqual([(r.phase, r.done, r.total, r.unit) for r in reports], [
+            (ocrmypdf_plugin.REPAIR_PHASE, None, None, None),
+            (ocrmypdf_plugin.REPAIR_PHASE, 0, 2, "page"),
+            (ocrmypdf_plugin.REPAIR_PHASE, 1, 2, "page"),
+            (ocrmypdf_plugin.REPAIR_PHASE, 2, 2, "page"),
+        ])
+
+    def test_no_counts_without_pages_to_repair(self):
+        reports: list[OcrProgress] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "000000.hocr"
+            path.write_text(HOCR, encoding="utf-8")
+            with patch.object(ocrmypdf_plugin, "plan_repairs", return_value=[[]]), progress_reporter(reports.append):
+                self.assertEqual(ocrmypdf_plugin.repair_document({0: path}), 0)
+        self.assertEqual([(r.phase, r.total) for r in reports], [(ocrmypdf_plugin.REPAIR_PHASE, None)])
+
+
 @unittest.skipUnless(shutil.which("tesseract") and shutil.which("pdftotext"), "Tesseract or pdftotext is not installed")
 class TestRepairIntegration(unittest.TestCase):
     """The repair inside OCRmyPDF with the real tools (takes about 10 seconds)."""
 
     def test_markers_are_repaired_in_the_text_layer(self):
+        reports: list[OcrProgress] = []
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "out.pdf"
-            result = OcrmypdfEngine().recognize(FIXTURES / "footnote-markers.pdf", output, ["de"], {"mode": "force"})
+            # Run as the OCR router does: in a worker thread that inherits the progress reporter
+            with progress_reporter(reports.append):
+                result = asyncio.run(asyncio.to_thread(OcrmypdfEngine().recognize, FIXTURES / "footnote-markers.pdf", output, ["de"], {"mode": "force"}))
             text = subprocess.run(["pdftotext", str(output), "-"], capture_output=True, text=True, check=True).stdout
         for word in ("Regel12)", "persönlich13)", "vorsieht14)"):
             self.assertIn(word, text)
         self.assertIn("3 misrecognized footnote markers were corrected", result.message or "")
+        # The repair reports its progress per page, after the recognition
+        repair = [(r.done, r.total, r.unit) for r in reports if r.phase == ocrmypdf_plugin.REPAIR_PHASE]
+        self.assertEqual(repair, [(None, None, None), (0, 1, "page"), (1, 1, "page")])
+        phases = [r.phase for r in reports]
+        self.assertLess(phases.index("Recognizing text"), phases.index(ocrmypdf_plugin.REPAIR_PHASE))
 
     def test_plain_markers_are_repaired_in_the_text_layer(self):
         with tempfile.TemporaryDirectory() as tmp:

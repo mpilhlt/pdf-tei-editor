@@ -8,7 +8,7 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlSelect, SlInput, SlCheckbox } from '../ui.js'
  * @import { ocrOptionsDialogPart } from '../templates/ocr-dialog.types.js'
- * @import { OcrEngineInfo, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, OcrJob, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -51,10 +51,25 @@ class OcrPlugin extends Plugin {
   /** @type {Promise<OcrEngineInfo[]>|null} */
   #enginesPromise = null
 
+  /** @type {OcrEngineInfo[]|null} The engine list once it is loaded */
+  #engines = null
+
   async install(_state) {
     await super.install(_state)
     const dialog = createSingleFromTemplate('ocr-dialog', document.body)
     this.#dialogUi = this.createUi(dialog)
+  }
+
+  /**
+   * Load the engine list in the background when a user logs in, so that the extraction dialog
+   * can offer text recognition at once.
+   * @param {any} newUser
+   */
+  async onUserChange(newUser) {
+    if (!newUser) return
+    this.getEngines().catch(error => {
+      this.getDependency('logger').warn('Could not load OCR engines: ' + String(error))
+    })
   }
 
   /**
@@ -64,12 +79,26 @@ class OcrPlugin extends Plugin {
    */
   async getEngines(refresh = false) {
     if (refresh || !this.#enginesPromise) {
-      this.#enginesPromise = this.#client.apiClient.ocrEngines().catch(error => {
-        this.#enginesPromise = null
-        throw error
-      })
+      if (refresh) this.#engines = null
+      this.#enginesPromise = this.#client.apiClient.ocrEngines()
+        .then(engines => {
+          this.#engines = engines
+          return engines
+        })
+        .catch(error => {
+          this.#enginesPromise = null
+          throw error
+        })
     }
     return await this.#enginesPromise
+  }
+
+  /**
+   * Return the engine list if it has been loaded, without waiting for it.
+   * @returns {OcrEngineInfo[]|null} The engines, or null while the list is not loaded
+   */
+  getLoadedEngines() {
+    return this.#engines
   }
 
   /**
@@ -216,8 +245,9 @@ class OcrPlugin extends Plugin {
    * Only one OCR run happens at a time on the server, so the job may first wait in the queue.
    * @param {string} stableId - stable_id of the PDF
    * @param {OcrRunOptions} run - Engine and parameters
-   * @param {(status: OcrJobStatus) => void} [onStatus] - Called with the initial status of the job
-   *   ('queued' or 'running') and whenever it changes while it is not finished
+   * @param {(status: OcrJobStatus, message: string) => void} [onStatus] - Called with the initial status of
+   *   the job ('queued' or 'running') and whenever the status or the progress changes while it is not
+   *   finished, with a description for the user (see {@link describeOcrJob})
    * @returns {Promise<OcrResponse>}
    * @throws {Error} An ApiError (invalid request, or 409 if OCR is already running for this PDF) or
    *   ServerError (failure of the engine or the server) if the run fails
@@ -235,11 +265,16 @@ class OcrPlugin extends Plugin {
     })
     /** @type {OcrJobStatus|null} */
     let reported = null
+    let described = ''
     while (job.status === 'queued' || job.status === 'running') {
       if (job.status !== reported) {
         reported = job.status
         testLog('OCR_JOB_STATUS', { stableId, status: job.status })
-        onStatus?.(job.status)
+      }
+      const message = describeOcrJob(job)
+      if (message !== described) {
+        described = message
+        onStatus?.(job.status, message)
       }
       await new Promise(resolve => setTimeout(resolve, OCR_POLL_INTERVAL_MS))
       job = await client.apiClient.ocrJob(job.job_id)
@@ -254,6 +289,36 @@ class OcrPlugin extends Plugin {
     testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
     return result
   }
+}
+
+/**
+ * Describe the state of an unfinished OCR job for the user, with the progress and the estimated
+ * remaining time of the current phase if the server reports them.
+ * @param {OcrJob} job
+ * @returns {string} E.g. "Applying text recognition: Recognizing text, page 12 of 71, about 2 minutes left"
+ */
+export function describeOcrJob(job) {
+  if (job.status === 'queued') {
+    return 'Waiting for another text recognition to finish'
+  }
+  const progress = job.progress
+  if (!progress) {
+    return 'Applying text recognition, this may take a while'
+  }
+  let message = `Applying text recognition: ${progress.phase}`
+  if (progress.total) {
+    message += progress.unit ? `, ${progress.unit} ${progress.done ?? 0} of ${progress.total}` : ` (${progress.done ?? 0} of ${progress.total})`
+  }
+  const eta = progress.eta_seconds
+  if (typeof eta === 'number' && eta > 0) {
+    if (eta < 60) {
+      message += ', less than a minute left'
+    } else {
+      const minutes = Math.round(eta / 60)
+      message += `, about ${minutes} minute${minutes === 1 ? '' : 's'} left`
+    }
+  }
+  return message
 }
 
 /**

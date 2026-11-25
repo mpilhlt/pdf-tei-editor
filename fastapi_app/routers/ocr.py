@@ -10,6 +10,7 @@ Endpoints:
 
 import asyncio
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,11 +21,12 @@ from pypdf.errors import PdfReadError
 from ..config import get_settings
 from ..lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
 from ..lib.models import FileMetadata, FileUpdate
-from ..lib.models.models_ocr import OcrEngineInfo, OcrJob, OcrOptionInfo, OcrRequest, OcrResponse, TextQualityReport
+from ..lib.models.models_ocr import OcrEngineInfo, OcrJob, OcrOptionInfo, OcrProgress, OcrRequest, OcrResponse, TextQualityReport
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
 from ..lib.ocr.jobs import OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
+from ..lib.ocr.progress import ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_quality import analyze_text_layer
 from ..lib.permissions.access_control import check_file_access
@@ -37,6 +39,9 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
 
 OCR_METADATA_KEY = "ocr"
 """Key in the PDF's file_metadata under which the last OCR run is recorded."""
+
+PROGRESS_WRITE_INTERVAL_SECONDS = 1.0
+"""Least time between two progress updates of a job within the same phase."""
 
 _running_jobs: set["asyncio.Task[None]"] = set()
 """References to the running job tasks, which asyncio would otherwise garbage-collect."""
@@ -275,7 +280,7 @@ async def _run_job(
     """Wait until no other OCR run happens on the server, run OCR and record the outcome in the job."""
     try:
         async with jobs.run_slot(job) as job:
-            result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user)
+            result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user, _progress_writer(jobs, job))
     except HTTPException as e:
         jobs.fail(job, str(e.detail), e.status_code)
     except asyncio.CancelledError:
@@ -288,6 +293,28 @@ async def _run_job(
         jobs.finish(job, result)
 
 
+def _progress_writer(jobs: OcrJobStore, job: OcrJob) -> ProgressCallback:
+    """
+    Return a callback that records the progress of a job, at most once per
+    PROGRESS_WRITE_INTERVAL_SECONDS unless the phase changes.
+    """
+    last_phase: str | None = None
+    last_time = 0.0
+
+    def write(progress: OcrProgress) -> None:
+        nonlocal last_phase, last_time
+        now = time.monotonic()
+        if progress.phase == last_phase and now - last_time < PROGRESS_WRITE_INTERVAL_SECONDS:
+            return
+        last_phase, last_time = progress.phase, now
+        try:
+            jobs.update_progress(job, progress)
+        except OSError as e:
+            logger.warning(f"Could not record the progress of OCR job {job.job_id}: {e}")
+
+    return write
+
+
 async def _recognize(
     stable_id: str,
     engine: OcrEngine,
@@ -297,9 +324,12 @@ async def _recognize(
     repo: FileRepository,
     storage: FileStorage,
     user: dict[str, Any],
+    on_progress: ProgressCallback | None = None,
 ) -> OcrResponse:
     """
     Apply OCR to a PDF and replace the stored PDF with the result. The caller holds the run slot.
+
+    Progress reported by the engine (see `fastapi_app.lib.ocr.progress`) is passed to on_progress.
 
     Raises:
         HTTPException: if the PDF is gone, the options are invalid or the engine fails
@@ -307,9 +337,10 @@ async def _recognize(
     # look the PDF up again, since it may have changed while the job was queued
     file = _get_pdf(repo, stable_id, user, "edit")
     input_path = _pdf_path(storage, file)
-    with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp, progress_reporter(on_progress or (lambda _progress: None)) as progress:
         output_path = Path(tmp) / "output.pdf"
         try:
+            # to_thread passes the progress reporter on to the worker thread
             outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, rebuild)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -319,6 +350,7 @@ async def _recognize(
         if not output_path.exists():
             raise HTTPException(status_code=500, detail="Text recognition produced no output")
         content = output_path.read_bytes()
+        progress.report("Checking the new text layer")
         quality = await asyncio.to_thread(analyze_text_layer, output_path)
 
     result = outcome if isinstance(outcome, OcrResult) else OcrResult(message=outcome)

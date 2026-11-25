@@ -16,6 +16,9 @@
  *   node scripts/dev/ui-screenshot.js --click 'sl-button[name="toolsBtn"]' \
  *     --mock '**\/api/v1/llm/providers={"json":[{"id":"mock","label":"Mock","models":[{"id":"m1","label":"Model 1","free":true,"status":null}]}]}'
  *
+ *   # Capture a loading state: hold a response back for 60 seconds
+ *   node scripts/dev/ui-screenshot.js --mock '**\/api/v1/ocr/engines={"delay":60000,"json":[]}'
+ *
  *   # Reuse an already running instance instead of building a container
  *   node scripts/dev/ui-screenshot.js --base-url http://localhost:8000 --out /tmp/app.png
  */
@@ -64,15 +67,19 @@ function container(args, ignoreErrors = false) {
 /**
  * Register a mocked response for API requests.
  * @param {import('playwright').Page} page
- * @param {string} spec - `<url glob>=<JSON route.fulfill options or path to a JSON file>`
+ * @param {string} spec - `<url glob>=<JSON route.fulfill options or path to a JSON file>`. An
+ *   additional `delay` property (milliseconds) holds the response back, e.g. to capture a loading state.
  */
 async function addMock(page, spec) {
   const idx = spec.indexOf('=');
   if (idx < 1) throw new Error(`Invalid --mock "${spec}", expected <url glob>=<json>`);
   const pattern = spec.slice(0, idx);
   const value = spec.slice(idx + 1);
-  const fulfill = JSON.parse(fs.existsSync(value) ? fs.readFileSync(value, 'utf8') : value);
-  await page.route(pattern, route => route.fulfill(fulfill));
+  const { delay = 0, ...fulfill } = JSON.parse(fs.existsSync(value) ? fs.readFileSync(value, 'utf8') : value);
+  await page.route(pattern, async route => {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    await route.fulfill(fulfill).catch(() => {});
+  });
 }
 
 /**
@@ -116,7 +123,7 @@ const program = new Command()
   .option('--user <name>', 'login user', 'admin')
   .option('--password <password>', 'login password', 'admin')
   .option('--click <selector>', 'CSS selector to click before the screenshot (repeatable, in order)', (v, prev) => [...prev, v], /** @type {string[]} */ ([]))
-  .option('--mock <spec>', 'mock an API response: <url glob>=<JSON route.fulfill options or file> (repeatable)', (v, prev) => [...prev, v], /** @type {string[]} */ ([]))
+  .option('--mock <spec>', 'mock an API response: <url glob>=<JSON route.fulfill options or file>; a "delay" property (ms) holds it back (repeatable)', (v, prev) => [...prev, v], /** @type {string[]} */ ([]))
   .option('--width <px>', 'viewport width', '1400')
   .option('--height <px>', 'viewport height', '900')
   .option('--wait <ms>', 'delay after login and after each click', '1000')

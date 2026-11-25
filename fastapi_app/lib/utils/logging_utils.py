@@ -157,7 +157,9 @@ def setup_logging(log_level: str = "INFO", log_categories: Optional[list[str]] =
 
     # Suppress routine HTTP request logs from httpx/httpcore — these flood the
     # log during WebDAV lock polling and other high-frequency network operations.
-    for noisy_logger in ['httpx', 'httpcore']:
+    # pdfminer (used by OCRmyPDF) and PIL log every parsed PDF token and PNG chunk
+    # at DEBUG level, over a million lines per OCR run.
+    for noisy_logger in ['httpx', 'httpcore', 'pdfminer', 'PIL']:
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 

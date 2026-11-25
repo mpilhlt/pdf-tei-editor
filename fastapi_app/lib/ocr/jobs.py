@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
-from fastapi_app.lib.models.models_ocr import OcrJob, OcrJobStatus, OcrResponse
+from fastapi_app.lib.models.models_ocr import OcrJob, OcrJobStatus, OcrProgress, OcrResponse
 from fastapi_app.lib.utils.file_lock import NonBlockingFileLock, exclusive_file_lock
 
 JOB_MAX_AGE_SECONDS = 24 * 3600
@@ -98,6 +98,7 @@ class OcrJobStore:
                 job_id=secrets.token_urlsafe(12),
                 stable_id=stable_id,
                 status="queued",
+                progress=None,
                 result=None,
                 error=None,
                 error_status=None,
@@ -135,6 +136,12 @@ class OcrJobStore:
         finally:
             lock.release()
 
+    def update_progress(self, job: OcrJob, progress: OcrProgress) -> OcrJob:
+        """Record the progress of a running job."""
+        updated = job.model_copy(update={"progress": progress})
+        self._write(updated)
+        return updated
+
     def finish(self, job: OcrJob, result: OcrResponse) -> OcrJob:
         """Record the result of a job."""
         return self._set_status(job, "done", result=result)
@@ -144,7 +151,7 @@ class OcrJobStore:
         return self._set_status(job, "failed", error=error, error_status=error_status)
 
     def _set_status(self, job: OcrJob, status: OcrJobStatus, result: Optional[OcrResponse] = None, error: Optional[str] = None, error_status: Optional[int] = None) -> OcrJob:
-        updated = job.model_copy(update={"status": status, "result": result, "error": error, "error_status": error_status, "updated_at": _now()})
+        updated = job.model_copy(update={"status": status, "progress": None, "result": result, "error": error, "error_status": error_status, "updated_at": _now()})
         self._write(updated)
         return updated
 

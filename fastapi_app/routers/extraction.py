@@ -3,6 +3,7 @@ Metadata extraction router for FastAPI.
 
 Provides endpoints for:
 - Listing available extractors
+- Checking whether an extractor can run now
 - Performing PDF/XML metadata extraction
 
 For FastAPI migration - Phase 5.
@@ -21,6 +22,8 @@ from ..lib.models.models_extraction import (
     ExtractorInfo,
     ExtractRequest,
     ExtractResponse,
+    ExtractorCheckRequest,
+    ExtractorCheckResponse,
     LanguageConflict
 )
 from ..lib.extraction import (
@@ -74,6 +77,37 @@ def list_available_extractors(
             status_code=500,
             detail=f"Failed to list extractors: {str(e)}"
         )
+
+
+@router.post("/check", response_model=ExtractorCheckResponse)
+async def check_extractor(
+    request: ExtractorCheckRequest,
+    current_user: dict = Depends(require_authenticated_user),
+) -> ExtractorCheckResponse:
+    """
+    Check whether an extractor can run now, e.g. whether the service it uses is reachable.
+
+    Clients call this before steps that take long, such as text recognition of the PDF, so that
+    an extraction that would fail is not prepared in vain. Extractors without a check (see
+    `BaseExtractor.check_ready()`) are reported as ready, as are extractors that the
+    extraction would replace with the mock extractor.
+    """
+    try:
+        extractor = create_extractor(request.extractor)
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Unknown extractor: {request.extractor}")
+    except RuntimeError as e:
+        if should_use_mock_extractor(e):
+            return ExtractorCheckResponse(ready=True, message=None)
+        return ExtractorCheckResponse(ready=False, message=str(e))
+    try:
+        message = await extractor.check_ready(request.options)
+    except Exception as e:
+        logger.warning(f"Readiness check of extractor {request.extractor} failed: {e}")
+        message = f"The readiness check failed: {e}"
+    if message:
+        logger.info(f"Extractor {request.extractor} is not ready: {message}")
+    return ExtractorCheckResponse(ready=not message, message=message or None)
 
 
 @router.post("", response_model=ExtractResponse)
