@@ -200,6 +200,18 @@ class ExtractRequest(BaseModel):
     })
 
 
+class ExtractorCheckRequest(BaseModel):
+    """Request to check whether an extractor can run now."""
+    extractor: str = Field(..., description="ID of the extractor", min_length=1)
+    options: Dict[str, Any] = Field(default_factory=dict, description="The extraction options that will be used")
+
+
+class ExtractorCheckResponse(BaseModel):
+    """Whether an extractor can run now."""
+    ready: bool = Field(..., description="Whether the extractor can run now")
+    message: Optional[str] = Field(None, description="Why the extractor cannot run, if it is not ready")
+
+
 class ExtractResponse(BaseModel):
     """Response from extraction endpoint."""
     id: Optional[str] = Field(

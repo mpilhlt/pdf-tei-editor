@@ -253,6 +253,15 @@ class ExtractionPlugin extends Plugin {
         }
 
         if (ocr && !extractsFromXml) {
+          // Text recognition can take minutes, so first make sure that the extractor can run
+          // (e.g. that the service it uses is reachable)
+          const extractorName = selectedExtractor?.name ?? options.extractor
+          ui.spinner.show(`Checking that ${extractorName} is ready`)
+          const check = await this.#client.apiClient.extractCheck({ extractor: options.extractor, options })
+          testLog('EXTRACTOR_CHECKED', { extractor: options.extractor, ready: check.ready, message: check.message ?? null })
+          if (!check.ready) {
+            throw new Error(`${extractorName} cannot be used at the moment, so text recognition was not started: ${check.message}`)
+          }
           const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr, (_status, message) => {
             ui.spinner.show(message)
           })

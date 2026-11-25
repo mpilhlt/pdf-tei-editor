@@ -129,6 +129,63 @@ test.describe('OCR extraction option', () => {
     }
   });
 
+  test('does not start text recognition if the extractor is not ready', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, [
+      'Failed to load resource.*401.*UNAUTHORIZED',
+      'cannot be used at the moment' // logged by ExtractionPlugin with the error
+    ]);
+    // The extractor's service is down
+    await page.route('**/api/v1/extract/check', route => route.fulfill({
+      json: { ready: false, message: 'The extraction service is not reachable' }
+    }));
+    let ocrStarted = false;
+    await page.route('**/api/v1/ocr', route => {
+      ocrStarted = true;
+      return route.continue();
+    });
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const engines = await page.evaluate(() => /** @type {any} */(window).client.apiClient.ocrEngines());
+      test.skip(engines.length === 0, 'No OCR engine available (Tesseract not installed)');
+
+      const fileChooserPromise = page.waitForEvent('filechooser');
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.toolbar.extractionActions.extractNew.click();
+      });
+      await (await fileChooserPromise).setFiles(SCANNED_PDF);
+      await waitForTestMessage(consoleLogs, 'EXTRACTION_OPTIONS_DIALOG_STARTING', 15000);
+      // Without a text layer, text recognition is forced
+      await expect.poll(() => page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        return ui.extractionOptions.ocrSection.applyOcr.checked;
+      })).toBe(true);
+
+      await page.waitForTimeout(500);
+      await page.evaluate(() => {
+        /** @type {namedElementsTree} */
+        const ui = /** @type {any} */(window).ui;
+        ui.extractionOptions.submit.click();
+      });
+      const checked = await waitForTestMessage(consoleLogs, 'EXTRACTOR_CHECKED', 10000);
+      expect(checked.value.ready).toBe(false);
+      const errorDialog = page.locator('sl-dialog[name="dialog"]');
+      await expect(errorDialog).toContainText('The extraction service is not reachable');
+      expect(ocrStarted).toBe(false);
+
+      await page.waitForTimeout(500);
+      await page.keyboard.press('Escape');
+    } finally {
+      await releaseAllLocks(page);
+      await performLogout(page);
+      stopErrorMonitoring();
+    }
+  });
+
   test('shows a placeholder until the OCR engines are loaded', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, [
