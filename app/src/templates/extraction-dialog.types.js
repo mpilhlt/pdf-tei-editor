@@ -7,6 +7,7 @@
  * @property {import('../ui.js').SlSelect} collectionName
  * @property {import('../ui.js').SlSelect} modelIndex
  * @property {HTMLDivElement} dynamicOptions
+ * @property {HTMLDivElement} ocrLoading
  * @property {HTMLDivElement & ocrSectionPart} ocrSection
  * @property {import('../ui.js').SlButton} cancel
  * @property {import('../ui.js').SlButton} submit

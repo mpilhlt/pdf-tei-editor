@@ -9,6 +9,12 @@ Run from the project root (requires Ghostscript):
   characters, so the page looks fine but the extracted text is garbled
 - misplaced-text.pdf: the page shows the text as vector outlines, and a text
   layer with the same words is drawn in white, shifted down by two lines
+- footnote-markers.pdf: German text with superscript footnote markers in the
+  style `Regel¹²)` and the footnotes `12) ...` below (#904)
+- footnote-markers-plain.pdf: German text with superscript footnote markers without
+  parenthesis (`Regel¹²`, `vor.¹⁴`, `„Doppelverpflichtung“¹⁶`), sentences with quotation
+  marks and apostrophes but no markers, and footnotes that start with superscript numbers
+  as well (`¹² Vgl. ...`) (#904); requires Liberation Serif
 """
 
 import subprocess
@@ -80,7 +86,81 @@ def make_misplaced_text(target: Path) -> None:
             pdf.save(target)
 
 
+FOOTNOTE_SENTENCES = [
+    ("Die Gesellschaft haftet nach der neuen Regel", "12"),
+    ("und die Gesellschafter haften daneben persönlich", "13"),
+    ("wie es das Gesetz jetzt ausdrücklich vorsieht", "14"),
+]
+
+
+def make_footnote_markers(target: Path) -> None:
+    """Write a PDF with superscript footnote markers like `Regel¹²)`, which Tesseract reads as punctuation, and the footnotes."""
+    pdf = FPDF(format="A5")
+    pdf.set_margins(15, 20)
+    pdf.add_page()
+    for text, marker in FOOTNOTE_SENTENCES:
+        pdf.set_font("Times", size=11)
+        pdf.write(6, text)
+        pdf.set_font("Times", size=7)
+        pdf.char_vpos = "SUP"
+        pdf.write(6, marker)
+        pdf.char_vpos = "LINE"
+        pdf.set_font("Times", size=11)
+        pdf.write(6, "). Weitere Ausführungen folgen im nächsten Abschnitt der Darstellung.\n")
+    pdf.ln(10)
+    pdf.set_font("Times", size=9)
+    for _, marker in FOOTNOTE_SENTENCES:
+        pdf.write(5, f"{marker}) Vgl. die Begründung des Entwurfs, S. {marker}0.\n")
+    pdf.output(str(target))
+
+
+PLAIN_SENTENCES = [
+    ("Die Gesellschaft haftet nach der neuen Regel", "12", " und weiter."),
+    ("Der Begriff „Haftung“ ist weit, und Müller's Ansicht dazu ist bekannt.", "", ""),
+    ("Die Gesellschafter haften daneben persönlich", "13", ". Weitere Sätze."),
+    ("Das sieht das Gesetz jetzt ausdrücklich vor.", "14", " Der nächste Satz."),
+    ("So der Bundesgerichtshof,", "15", " anders die Literatur."),
+    ("Er schrieb: \"So nicht\", und das gilt bis heute 'unverändert'.", "", ""),
+    ("Es geht um die „Doppelverpflichtung“", "16", " der Organe."),
+    ("Siehe dazu den Kommentar", "17", " mit weiteren Nachweisen."),
+    ("Die Haftung ist streng", "18", "; sie gilt stets."),
+    ("Dies betrifft auch die Verwaltung", "19", ", nicht nur die Leitung."),
+]
+SERIF_FONT = Path("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf")
+
+
+def make_footnote_markers_plain(target: Path) -> None:
+    """Write a PDF with superscript footnote markers without parenthesis and footnotes that start with superscript numbers."""
+    pdf = FPDF(format="A5")
+    pdf.set_margins(15, 20)
+    pdf.add_page()
+    pdf.add_font("Serif", fname=str(SERIF_FONT))
+    for text, marker, rest in PLAIN_SENTENCES:
+        pdf.set_font("Serif", size=11)
+        pdf.write(6, text)
+        if marker:
+            pdf.set_font("Serif", size=7)
+            pdf.char_vpos = "SUP"
+            pdf.write(6, marker)
+            pdf.char_vpos = "LINE"
+            pdf.set_font("Serif", size=11)
+        pdf.write(6, rest + " Weitere Ausführungen folgen im nächsten Abschnitt.\n")
+    pdf.ln(10)
+    for _, marker, _ in PLAIN_SENTENCES:
+        if not marker:
+            continue
+        pdf.set_font("Serif", size=6)
+        pdf.char_vpos = "SUP"
+        pdf.write(5, marker)
+        pdf.char_vpos = "LINE"
+        pdf.set_font("Serif", size=9)
+        pdf.write(5, f" Vgl. die Begründung des Entwurfs, S. {marker}0.\n")
+    pdf.output(str(target))
+
+
 if __name__ == "__main__":
     make_broken_tounicode(HERE / "broken-tounicode.pdf")
     make_misplaced_text(HERE / "misplaced-text.pdf")
+    make_footnote_markers(HERE / "footnote-markers.pdf")
+    make_footnote_markers_plain(HERE / "footnote-markers-plain.pdf")
     print("Fixtures written to", HERE)

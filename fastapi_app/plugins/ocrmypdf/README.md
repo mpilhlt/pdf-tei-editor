@@ -48,6 +48,30 @@ If Ghostscript is missing, fails or times out, the PDF is encrypted, or the veri
 
 The output is a regular PDF (not PDF/A).
 
+## Footnote marker repair
+
+Tesseract reads small superscript footnote markers as punctuation or quotation marks (`tut³¹²⁾` → `tut?!?)`, `Regel¹²` → `Regel"`, `vor.¹⁴` → `vor.'*`, #904). Higher resolutions (300 to 800 dpi) and the `tessdata_best` models do not help: on the example document of the issue, none of the markers was read correctly in any combination. The engine therefore repairs the markers in Tesseract's hOCR output before OCRmyPDF builds the text layer from it (`footnote_markers.py`, `ocrmypdf_plugin.py`):
+
+1. **Per page** (in OCRmyPDF's worker processes, `FootnoteMarkerEngine.generate_hocr()`): words ending in a run of non-letters are marker candidates. For each, the columns whose ink lies well above the baseline of the word (the superscript) are cropped, upscaled and recognized with a digits-only whitelist, with the `eng` model and the document languages (the models read digits differently). All regions of a page are passed to Tesseract in one call per model, as a list of images (`make_tesseract_digit_recognizer()`): starting Tesseract and loading a model takes far longer than recognizing a region, and one call per region made the run take about 60% longer on ten cores. Candidates come in three kinds:
+   - followed by `)` (`tut?!?)`): a candidate even if no raised glyphs are found;
+   - without `)` (`Regel"`, `vor.'*`, `streng’;`): only if raised glyphs are found. Punctuation directly after the letters (`.,;:)`) and a closing quotation mark of a word with an opening one stay part of the text; hyphens and dashes are no markers;
+   - words of their own without letters (`Regel "`) whose box lies at least 0.3 x-heights above the baseline of the hOCR line.
+
+   The numbers at the start of lines (`312) Anders …`) are collected as footnote starts. A line that starts with raised non-letters (`» Vgl.`, `“Vgl.`, from a superscript footnote number) is read again in the same way and collected as a recovered footnote start. The result is written next to the hOCR file (`<hocr>.markers.json`).
+2. **For the document** (in the main process, `FootnoteMarkerExecutor`, after all pages are recognized and before `OcrGrafter.finalize()` parses the hOCR files): the footnote starts are fitted to an increasing sequence over the whole document (`fit_footnote_numbers()`). The footnote numbers themselves are often misread too (`13)` for 113, `1835)` for 183), so each may be taken as read, with one digit wrong, missing or extra, or left out (recovered starts count a third); skipped numbers cost a penalty, and the sequence may restart near 1 (a new article). This yields the range of footnote numbers on every page. The candidates of a page get numbers from that range in reading order, from the readings that end with them (`plan_repairs()`). Candidates without `)` have less evidence: they get a number only if it is at most three ahead of the previous marker and not below the first footnote number of the page. Recovered footnote starts that the fit took are repaired if one of their readings contains the fitted number (`» Vgl.` → `12 Vgl.`). Then the hOCR files are rewritten.
+
+A marker is only changed if a reading fits the numbering, and markers read correctly by Tesseract advance it. On the 71-page example document, 286 of 313 markers were repaired, all in ascending order. The repair needs the default PDF renderer (fpdf2), which builds the text layer from the hOCR files; with the `sandwich` renderer nothing is repaired. A failure of the repair is logged and does not fail the recognition. The number of repaired markers is reported in the result message.
+
+The document step relies on two details of OCRmyPDF 17 that are not part of its plugin API: the page results passed to the executor's `task_finished` callback carry the hOCR file in `ocr`, and the hOCR files are parsed only in `OcrGrafter.finalize()`. If a later version changes this, the repair does nothing; `TestRepairIntegration` in `tests/test_footnote_markers.py` detects it.
+
+The plugin is passed to every OCRmyPDF run: OCRmyPDF serializes runs with different plugin sets, so making it optional would block concurrent jobs. Markers that Tesseract drops (`„Wort“¹²` read as `„Wort“`) or reads as letters are not detected.
+
+## Logging and progress
+
+The details of a run (OCRmyPDF's steps and subprocesses, the repaired markers of every page) are written to `ocr-last-run.log` in the log directory, which the next run overwrites (`run_log.py`). Only warnings and errors of these loggers, and a summary line at the start and the end of the run, reach `app.log`.
+
+The engine reports the progress of the run with `fastapi_app.lib.ocr.progress.report_progress()`: its own steps (text layer analysis, conversion to outlines) and every step of OCRmyPDF that runs on its executor, with the pages done (`FootnoteMarkerExecutor`), and the footnote marker repair ("Repairing footnote numbers") after every repaired page, counting the pages with markers to repair (`repair_document()`). Reports only reach the router from the thread that called `ocrmypdf.ocr()`, which inherits the reporter from `asyncio.to_thread()`; the executor's `task_finished` callbacks and the repair run there, OCRmyPDF's worker processes do not report. The router records the reports in the OCR job, and the extraction dialog shows them with the estimated remaining time.
+
 ## Word recognition
 
 The engine implements `recognize_words()` (Tesseract TSV output), which the text layer check uses to compare the text layer with the words recognized on sample pages (`fastapi_app/lib/ocr/layout_check.py`).

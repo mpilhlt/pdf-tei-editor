@@ -10,6 +10,10 @@
     <div name="dynamicOptions" class="dialog-column">
       <!-- Dynamic extractor-specific options will be inserted here -->
     </div>
+    <div name="ocrLoading" class="dialog-checkbox-section ocr-loading" style="display: none">
+      <sl-spinner></sl-spinner>
+      <span>Loading OCR options…</span>
+    </div>
     <div name="ocrSection" class="dialog-checkbox-section">
       <sl-checkbox name="applyOcr" size="small">Apply text recognition before extraction</sl-checkbox>
       <div name="textQuality" class="help-text text-quality"></div>

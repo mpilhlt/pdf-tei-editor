@@ -37,6 +37,24 @@ class BaseExtractor(ABC):
         """
         pass
 
+    async def check_ready(self, options: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        """
+        Check whether an extraction can run now, e.g. whether a remote service is reachable.
+
+        `is_available()` only tells whether the extractor is configured. This check is called
+        through `POST /api/v1/extract/check` before steps that take long and must not be
+        wasted, such as text recognition of the PDF, so that an extraction that would fail is
+        not prepared in vain. Extractors that depend on a service should override it with a
+        quick request; the default reports the extractor as ready.
+
+        Args:
+            options: The extraction options, as they will be passed to `extract()`
+
+        Returns:
+            None if the extractor is ready, otherwise a message for the user explaining why not
+        """
+        return None
+
     @abstractmethod
     async def extract(self, pdf_path: Optional[str] = None, xml_content: Optional[str] = None,
                       options: Dict[str, Any] = None) -> str:

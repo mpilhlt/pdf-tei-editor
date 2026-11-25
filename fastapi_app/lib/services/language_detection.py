@@ -33,6 +33,10 @@ MAX_TEXT_LENGTH = 20000
 MIN_CONFIDENCE = 0.5
 """Minimum normalized probability for a detection to be accepted."""
 
+CONTRADICTING_CONFIDENCE = 0.9
+"""Minimum normalized probability for a detection to contradict a declared language, e.g. the
+language from CrossRef, which sometimes declares "en" for documents in other languages."""
+
 _identifier: Optional[LanguageIdentifier] = None
 _identifier_lock = threading.Lock()
 
@@ -46,12 +50,13 @@ def _get_identifier() -> LanguageIdentifier:
         return _identifier
 
 
-def detect_language(text: str) -> Optional[str]:
+def detect_language(text: str, min_confidence: float = MIN_CONFIDENCE) -> Optional[str]:
     """
     Detect the language of a text sample.
 
     Args:
         text: Text to classify
+        min_confidence: Minimum normalized probability for the detection to be accepted
 
     Returns:
         ISO 639-1 language code (valid BCP 47 tag), or None if the text is too short or
@@ -67,7 +72,7 @@ def detect_language(text: str) -> Optional[str]:
     except Exception as e:
         logger.warning(f"Language detection failed: {e}")
         return None
-    if confidence < MIN_CONFIDENCE:
+    if confidence < min_confidence:
         logger.debug(f"Language detection not confident enough: {lang} ({confidence:.2f})")
         return None
     return str(lang)
@@ -138,6 +143,83 @@ LANGUAGE_FROM_XML_LANG = "xml-lang"
 """Sources of a predicted language, see `predict_document_language_with_source()`."""
 
 
+def detect_text_language(
+    tei_root: etree._Element,  # type: ignore[name-defined]
+    pdf_text: Optional[str] = None,
+    min_confidence: float = MIN_CONFIDENCE,
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Detect the language of a document from its text: the PDF text layer, then the TEI text content.
+
+    Args:
+        tei_root: TEI root element
+        pdf_text: Optional text layer of the source PDF, see `extract_pdf_text()`
+        min_confidence: Minimum normalized probability for the detection to be accepted
+
+    Returns:
+        Tuple of (language code, LANGUAGE_FROM_PDF_TEXT or LANGUAGE_FROM_TEI_TEXT), or (None, None)
+    """
+    language = detect_language(pdf_text, min_confidence) if pdf_text else None
+    if language:
+        return language, LANGUAGE_FROM_PDF_TEXT
+    language = detect_language(get_tei_text_content(tei_root), min_confidence)
+    if language:
+        return language, LANGUAGE_FROM_TEI_TEXT
+    return None, None
+
+
+def contradicting_language(
+    tei_root: etree._Element,  # type: ignore[name-defined]
+    declared: Optional[str],
+    pdf_text: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Return the language detected from the document's text if it contradicts a declared language.
+
+    Only a detection with at least CONTRADICTING_CONFIDENCE counts. Languages are compared by their
+    primary subtag, so that "en-US" does not contradict "en".
+
+    Args:
+        tei_root: TEI root element
+        declared: Declared language, e.g. from CrossRef; None or "und" is never contradicted
+        pdf_text: Optional text layer of the source PDF, see `extract_pdf_text()`
+
+    Returns:
+        The detected language code, or None if it agrees with the declared language or the
+        detection is not confident enough
+    """
+    if not declared or declared == UNDETERMINED_LANGUAGE:
+        return None
+    detected, _ = detect_text_language(tei_root, pdf_text, CONTRADICTING_CONFIDENCE)
+    if detected and detected.split("-")[0].lower() != declared.split("-")[0].lower():
+        return detected
+    return None
+
+
+def find_language_conflict(tei_xml: str, pdf_text: Optional[str] = None) -> Optional[tuple[str, str]]:
+    """
+    Check whether the language declared in a TEI document contradicts the language of its text.
+
+    Args:
+        tei_xml: TEI document as string
+        pdf_text: Optional text layer of the source PDF, see `extract_pdf_text()`
+
+    Returns:
+        Tuple of (declared language, detected language), or None if there is no conflict
+    """
+    try:
+        root = etree.fromstring(tei_xml.encode("utf-8"))
+    except etree.XMLSyntaxError:
+        return None
+    declared = root.xpath(
+        "string(tei:teiHeader/tei:profileDesc/tei:langUsage/tei:language/@ident)",
+        namespaces={"tei": "http://www.tei-c.org/ns/1.0"},
+    )
+    declared = str(declared) if declared else None
+    detected = contradicting_language(root, declared, pdf_text)
+    return (declared, detected) if declared and detected else None
+
+
 def predict_document_language_with_source(
     tei_root: etree._Element,  # type: ignore[name-defined]
     pdf_path: Optional[str] = None,
@@ -176,12 +258,9 @@ def predict_document_language_with_source(
         return str(ident), LANGUAGE_FROM_DECLARATION
     if pdf_text is None and pdf_path:
         pdf_text = extract_pdf_text(pdf_path)
-    language = detect_language(pdf_text) if pdf_text else None
+    language, source = detect_text_language(tei_root, pdf_text)
     if language:
-        return language, LANGUAGE_FROM_PDF_TEXT
-    language = detect_language(get_tei_text_content(tei_root))
-    if language:
-        return language, LANGUAGE_FROM_TEI_TEXT
+        return language, source
     if registry_language:
         return registry_language, LANGUAGE_FROM_REGISTRY
     language = get_document_language(tei_root)
@@ -204,7 +283,7 @@ def predict_document_language(
     return predict_document_language_with_source(tei_root, pdf_path, pdf_text)[0]
 
 
-def add_document_language(tei_xml: str, pdf_path: Optional[str] = None) -> str:
+def add_document_language(tei_xml: str, pdf_path: Optional[str] = None, pdf_text: Optional[str] = None) -> str:
     """
     Make sure a TEI document declares its language in teiHeader/profileDesc/langUsage.
 
@@ -219,6 +298,7 @@ def add_document_language(tei_xml: str, pdf_path: Optional[str] = None) -> str:
     Args:
         tei_xml: TEI document as string
         pdf_path: Optional path to the source PDF, used as primary text source for detection
+        pdf_text: Optional pre-extracted PDF text; takes precedence over `pdf_path`
 
     Returns:
         The TEI document with the language declaration
@@ -232,7 +312,7 @@ def add_document_language(tei_xml: str, pdf_path: Optional[str] = None) -> str:
     if root.find("tei:teiHeader/tei:profileDesc/tei:langUsage/tei:language", namespaces=ns) is not None:
         return tei_xml
 
-    language = predict_document_language(root, pdf_path) or UNDETERMINED_LANGUAGE
+    language = predict_document_language(root, pdf_path, pdf_text) or UNDETERMINED_LANGUAGE
 
     if not set_document_language(root, language):
         return tei_xml

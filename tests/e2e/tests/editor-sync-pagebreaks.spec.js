@@ -13,6 +13,7 @@
  *
  * @testCovers app/src/plugins/editor-sync.js
  * @testCovers app/src/plugins/pdfviewer.js
+ * @testCovers app/src/modules/pdfviewer.js
  * @testCovers app/src/modules/tei-utils.js
  */
 
@@ -159,6 +160,15 @@ test.describe('Sync with editor in documents with page breaks', () => {
         // The search scrolled the PDF: that must not scroll the editor
         await page.waitForTimeout(1000);
         expect(await editorScrolls(page)).toEqual([c.nextPagePb]);
+
+        // Turning the switch off removes the highlight (#903)
+        await expect.poll(() => page.locator('#pdf-viewer .cluster-highlight, #pdf-viewer .span-highlight').count())
+          .toBeGreaterThan(0);
+        await page.locator('#pdf-viewer [name="syncSwitch"] sl-switch').click();
+        await expect.poll(() => page.locator('#pdf-viewer .cluster-highlight, #pdf-viewer .span-highlight').count())
+          .toBe(0);
+        expect(await page.evaluate(() =>
+          /** @type {any} */ (window).app.getDependency('pdfviewer')._highlightMatch)).toBeNull();
       } finally {
         stopErrorMonitoring();
         await releaseAllLocks(page);

@@ -200,6 +200,24 @@ class ExtractRequest(BaseModel):
     })
 
 
+class ExtractorCheckRequest(BaseModel):
+    """Request to check whether an extractor can run now."""
+    extractor: str = Field(..., description="ID of the extractor", min_length=1)
+    options: Dict[str, Any] = Field(default_factory=dict, description="The extraction options that will be used")
+
+
+class ExtractorCheckResponse(BaseModel):
+    """Whether an extractor can run now."""
+    ready: bool = Field(..., description="Whether the extractor can run now")
+    message: Optional[str] = Field(None, description="Why the extractor cannot run, if it is not ready")
+
+
+class LanguageConflict(BaseModel):
+    """The language declared in an extraction result contradicts the language of the document's text."""
+    declared: str = Field(..., description="Language declared in teiHeader/profileDesc/langUsage, e.g. taken from CrossRef")
+    detected: str = Field(..., description="Language detected with high confidence from the text of the document")
+
+
 class ExtractResponse(BaseModel):
     """Response from extraction endpoint."""
     id: Optional[str] = Field(
@@ -213,6 +231,10 @@ class ExtractResponse(BaseModel):
     xml: str = Field(
         ...,
         description="Extracted/generated XML file hash"
+    )
+    language_conflict: Optional[LanguageConflict] = Field(
+        None,
+        description="Set if the declared language contradicts the detected one; the client asks the user whether to declare the detected language"
     )
 
     model_config = ConfigDict(json_schema_extra={

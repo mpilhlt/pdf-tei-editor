@@ -146,6 +146,40 @@ def setup_log_directory(project_root: Path) -> Path:
     return log_dir / "server.log"
 
 
+def trim_log_file(path: Path, keep_lines: int = 1000, chunk_size: int = 64 * 1024) -> None:
+    """
+    Shorten a log file to its last lines.
+
+    The file is read backwards in chunks, so large files are not loaded into memory.
+
+    Args:
+        path: The log file; nothing happens if it does not exist
+        keep_lines: Number of lines to keep from the end of the file
+        chunk_size: Bytes read per step
+    """
+    if not path.exists():
+        return
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        size = position = f.tell()
+        tail = b""
+        # One newline more than lines to keep, since the last line usually ends with one
+        while position > 0 and tail.count(b"\n") <= keep_lines:
+            step = min(chunk_size, position)
+            position -= step
+            f.seek(position)
+            tail = f.read(step) + tail
+    if position == 0 and tail.count(b"\n") <= keep_lines:
+        return
+    lines = tail.splitlines(keepends=True)[-keep_lines:] if keep_lines > 0 else []
+    kept = b"".join(lines)
+    if len(kept) == size:
+        return
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(kept)
+    os.replace(tmp, path)
+
+
 def print_server_running_message(host: str, port: int, pid: Optional[int] = None) -> None:
     """
     Print message when server is already running.

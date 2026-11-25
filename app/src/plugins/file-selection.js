@@ -13,7 +13,7 @@ import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
-import { groupFilesByCollection, getCollectionName } from '../modules/file-data-utils.js'
+import { groupFilesByCollection, getCollectionName, pickDocumentCollection } from '../modules/file-data-utils.js'
 import { getActiveProjects, getArchivedCollectionIds, compareCollectionNames } from '../modules/collection-utils.js'
 import { filterFileData, getFileIdentifier, getSelectedFileVersions, appendVersionOptions } from '../modules/version-options.js'
 
@@ -477,7 +477,7 @@ class FileSelectionPlugin extends Plugin {
 
     if (!selectedFile) return;
 
-    const collection = selectedFile.collections[0];
+    const collection = pickDocumentCollection(selectedFile.collections, state.collection, state.collectionFilter);
     let pdf = null, xml = null;
 
     if (selectedFile.source && selectedFile.source.id === selectedIdentifier) {
@@ -510,7 +510,8 @@ class FileSelectionPlugin extends Plugin {
     if (Object.keys(filesToLoad).length > 0) {
       try {
         await this.#hideMergeView();
-        const stateUpdate = { collection };
+        const owningProject = (state.projects || []).find(p => p.collections && p.collections.includes(collection));
+        const stateUpdate = { collection, project: owningProject ? owningProject.id : null };
         if (pdf) {
           stateUpdate.pdf = pdf;
         } else {
@@ -536,7 +537,7 @@ class FileSelectionPlugin extends Plugin {
     try {
       for (const file of state.fileData) {
         if (file.artifacts && file.artifacts.some(a => a.id === xml)) {
-          const _selCollection = file.collections[0];
+          const _selCollection = pickDocumentCollection(file.collections, state.collection, state.collectionFilter);
           const _selProject = (state.projects || []).find(
             p => p.collections && p.collections.includes(_selCollection)
           );

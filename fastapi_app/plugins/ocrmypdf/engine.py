@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -31,9 +32,11 @@ import pikepdf
 from fastapi_app.lib.models.models_ocr import TextQualityReport
 from fastapi_app.lib.ocr.base import OcrEngine, OcrMethod, OcrOption, OcrOptionValue, OcrResult, OcrWord
 from fastapi_app.lib.ocr.languages import ISO639_1_TO_3, normalize_ocr_language
+from fastapi_app.lib.ocr.progress import report_progress
 from fastapi_app.lib.ocr.text_quality import analyze_text_layer
 
 from . import vectorize
+from .run_log import ocr_run_log, run_log_path
 
 logger = logging.getLogger(__name__)
 
@@ -233,9 +236,36 @@ class OcrmypdfEngine(OcrEngine):
         options: dict[str, OcrOptionValue],
         rebuild: bool = False,
     ) -> OcrResult:
+        """
+        Apply OCR (see OcrEngine.recognize()).
+
+        The details of the run are written to the run log (see run_log.py), the application
+        log only gets a summary.
+        """
+        started = time.monotonic()
+        with ocr_run_log(_run_log_file()) as log_file:
+            details = f"; details in {log_file}" if log_file else ""
+            logger.info(f"Text recognition of {input_path.name} started (languages: {', '.join(languages)}, options: {options}){details}")
+            try:
+                result = self._recognize(input_path, output_path, languages, options, rebuild)
+            except Exception as e:
+                logger.info(f"Text recognition of {input_path.name} failed after {time.monotonic() - started:.0f} s: {e}{details}")
+                raise
+            logger.info(f"Text recognition of {input_path.name} finished in {time.monotonic() - started:.0f} s: {result.message}")
+            return result
+
+    def _recognize(
+        self,
+        input_path: Path,
+        output_path: Path,
+        languages: list[str],
+        options: dict[str, OcrOptionValue],
+        rebuild: bool,
+    ) -> OcrResult:
         tesseract_languages = self._tesseract_languages(languages)
         mode = str(options.get("mode") or MODE_AUTO)
         if mode == MODE_AUTO:
+            report_progress("Analyzing the text layer")
             try:
                 report: Optional[TextQualityReport] = analyze_text_layer(input_path)
             except Exception as e:
@@ -250,13 +280,13 @@ class OcrmypdfEngine(OcrEngine):
             tmp_dir = Path(tmp)
             source = self._decrypt(input_path, tmp_dir)
             if mode != MODE_VECTORIZE:
-                self._run_ocrmypdf(source, output_path, tesseract_languages, mode, deskew, options)
-                return OcrResult(message=self._message(mode, tesseract_languages), method=METHODS[mode])
+                repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, mode, deskew, options)
+                return OcrResult(message=self._message(mode, tesseract_languages, repaired), method=METHODS[mode])
 
             reason = self._vectorize(input_path, source, tmp_dir)
             if reason is None:
-                self._run_ocrmypdf(tmp_dir / "outlined.pdf", output_path, tesseract_languages, MODE_SKIP, False, options)
-                message = self._message(MODE_VECTORIZE, tesseract_languages)
+                repaired = self._run_ocrmypdf(tmp_dir / "outlined.pdf", output_path, tesseract_languages, MODE_SKIP, False, options)
+                message = self._message(MODE_VECTORIZE, tesseract_languages, repaired)
                 if deskew:
                     message += " Skewed pages were not straightened, since the pages were kept as vector graphics."
                 return OcrResult(message=message, method="vectorize")
@@ -264,12 +294,12 @@ class OcrmypdfEngine(OcrEngine):
             if not options.get("rasterize_fallback", True):
                 raise ValueError(f"The text layer could not be replaced without rasterizing the pages: {reason}.")
             logger.info(f"Rasterizing {input_path.name} instead of converting the text to outlines: {reason}")
-            self._run_ocrmypdf(source, output_path, tesseract_languages, MODE_FORCE, deskew, options)
-            message = self._message(MODE_FORCE, tesseract_languages) + f" The pages were converted to images, since {reason}."
+            repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, MODE_FORCE, deskew, options)
+            message = self._message(MODE_FORCE, tesseract_languages, repaired) + f" The pages were converted to images, since {reason}."
             return OcrResult(message=message, method="force", fallback_reason=reason)
 
     @staticmethod
-    def _message(mode: str, tesseract_languages: list[str]) -> str:
+    def _message(mode: str, tesseract_languages: list[str], repaired_markers: int = 0) -> str:
         """Return the message reporting a finished run."""
         descriptions: dict[str, str] = {
             MODE_SKIP: "pages without text were recognized",
@@ -277,7 +307,10 @@ class OcrmypdfEngine(OcrEngine):
             MODE_FORCE: "all pages were rasterized and recognized",
             MODE_VECTORIZE: "the text layer was replaced, the pages were kept as vector graphics",
         }
-        return f"Text recognition finished: {descriptions.get(mode, mode)} (languages: {', '.join(tesseract_languages)})."
+        message = f"Text recognition finished: {descriptions.get(mode, mode)} (languages: {', '.join(tesseract_languages)})."
+        if repaired_markers:
+            message += f" {repaired_markers} misrecognized footnote markers were corrected."
+        return message
 
     @staticmethod
     def _decrypt(input_path: Path, tmp_dir: Path) -> Path:
@@ -316,12 +349,14 @@ class OcrmypdfEngine(OcrEngine):
             return "Ghostscript is not installed"
         if source != input_path:
             return "the PDF is encrypted"
+        report_progress("Converting the text to outlines")
         try:
             with pikepdf.open(source) as pdf:
                 page_count = len(pdf.pages)
             vectorize.outline_text(source, tmp_dir / "gs.pdf", page_count)
             shapes = vectorize.compact_glyph_paths(tmp_dir / "gs.pdf", tmp_dir / "outlined.pdf")
             logger.debug(f"Converted the text of {input_path.name} to outlines ({shapes} distinct shapes)")
+            report_progress("Checking the converted pages")
             return vectorize.verify_outlined(source, tmp_dir / "outlined.pdf")
         except Exception as e:
             logger.warning(f"Could not convert the text of {input_path.name} to outlines: {e}")
@@ -335,9 +370,15 @@ class OcrmypdfEngine(OcrEngine):
         mode: str,
         deskew: bool,
         options: dict[str, OcrOptionValue],
-    ) -> None:
+    ) -> int:
         """
-        Run OCRmyPDF.
+        Run OCRmyPDF, with the plugin that repairs misrecognized footnote markers (#904).
+
+        The plugin is always loaded: OCRmyPDF serializes jobs with different plugin sets,
+        and it changes a marker only where the footnote numbering confirms the number.
+
+        Returns:
+            The number of repaired footnote markers
 
         Raises:
             RuntimeError: If OCRmyPDF fails
@@ -345,7 +386,10 @@ class OcrmypdfEngine(OcrEngine):
         import ocrmypdf
         from ocrmypdf.exceptions import ExitCodeException
 
-        logger.info(f"Running OCRmyPDF on {input_path.name} (mode={mode}, languages={tesseract_languages})")
+        from . import ocrmypdf_plugin
+
+        logger.debug(f"Running OCRmyPDF on {input_path.name} (mode={mode}, languages={tesseract_languages})")
+        ocrmypdf_plugin.reset_repair_count()
         try:
             ocrmypdf.ocr(
                 input_path,
@@ -358,9 +402,22 @@ class OcrmypdfEngine(OcrEngine):
                 tagged_pdf_mode="ignore",
                 invalidate_digital_signatures=True,
                 progress_bar=False,
+                plugins=[ocrmypdf_plugin.__name__],
             )
         except ExitCodeException as e:
             raise RuntimeError(f"OCRmyPDF failed: {type(e).__name__}: {e}") from e
+        return ocrmypdf_plugin.repair_count()
+
+
+def _run_log_file() -> Optional[Path]:
+    """Return the path of the run log in the application's log directory, None if unknown."""
+    try:
+        from fastapi_app.config import get_settings
+
+        return run_log_path(get_settings().log_dir)
+    except Exception as e:
+        logger.debug(f"No log directory for the OCR run log: {e}")
+        return None
 
 
 def parse_tesseract_tsv(tsv: str) -> list[OcrWord]:

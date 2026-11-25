@@ -8,7 +8,7 @@
  * @import { extractionActionsPart } from '../templates/extraction-buttons.types.js'
  * @import { extractionOptionsPart } from '../templates/extraction-dialog.types.js'
  * @import { OcrRunOptions, OcrSettings } from './ocr.js'
- * @import { OcrEngineInfo, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, TextQualityReport, LanguageConflict } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -22,6 +22,7 @@ import { UserAbortException } from '../modules/utils.js'
 import { getDocumentMetadata } from '../modules/tei-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
+import { languageName } from '../modules/language-chooser.js'
 
 /**
  * Extractor configuration object
@@ -50,6 +51,7 @@ import { notify } from '../modules/sl-utils.js'
  * @typedef {object} ExtractionResult
  * @property {string} xml - Hash or content of the extracted XML
  * @property {string} [pdf] - Hash or path of the source PDF
+ * @property {LanguageConflict|null} [language_conflict] - Set if the declared language contradicts the language of the text
  */
 
 /**
@@ -253,10 +255,17 @@ class ExtractionPlugin extends Plugin {
         }
 
         if (ocr && !extractsFromXml) {
-          const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr, status => {
-            ui.spinner.show(status === 'queued'
-              ? 'Waiting for another text recognition to finish'
-              : 'Applying text recognition, this may take a while')
+          // Text recognition can take minutes, so first make sure that the extractor can run
+          // (e.g. that the service it uses is reachable)
+          const extractorName = selectedExtractor?.name ?? options.extractor
+          ui.spinner.show(`Checking that ${extractorName} is ready`)
+          const check = await this.#client.apiClient.extractCheck({ extractor: options.extractor, options })
+          testLog('EXTRACTOR_CHECKED', { extractor: options.extractor, ready: check.ready, message: check.message ?? null })
+          if (!check.ready) {
+            throw new Error(`${extractorName} cannot be used at the moment, so text recognition was not started: ${check.message}`)
+          }
+          const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr, (_status, message) => {
+            ui.spinner.show(message)
           })
           if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
             notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
@@ -287,6 +296,9 @@ class ExtractionPlugin extends Plugin {
       } finally {
         ui.spinner.hide()
       }
+      if (result?.language_conflict) {
+        await this.#resolveLanguageConflict(result.language_conflict)
+      }
     } catch (error) {
       console.error(String(error))
       if (error instanceof UserAbortException) {
@@ -294,6 +306,35 @@ class ExtractionPlugin extends Plugin {
       }
       this.getDependency('dialog').error(String(error))
     }
+  }
+
+  /**
+   * Asks the user whether to declare the language detected from the text of the document
+   * instead of the declared one (e.g. from CrossRef), and if so, changes it in the editor and saves.
+   * @param {LanguageConflict} conflict - The declared and the detected language
+   * @returns {Promise<void>}
+   */
+  async #resolveLanguageConflict({ declared, detected }) {
+    const declaredName = languageName(declared)
+    const detectedName = languageName(detected)
+    const accepted = await this.getDependency('dialog').confirm(
+      `The bibliographic metadata declare the language of this document as ${declaredName}, but its text reads as ${detectedName}. Declare ${detectedName} as the language of the document?`,
+      'Document language'
+    )
+    testLog('LANGUAGE_CONFLICT_RESOLVED', { declared, detected, accepted })
+    if (!accepted) return
+    const xmlTree = this.#xmlEditor.getXmlTree()
+    const language = xmlTree && Array.from(xmlTree.getElementsByTagName('langUsage'))
+      .flatMap(langUsage => Array.from(langUsage.getElementsByTagName('language')))[0]
+    if (!language) {
+      this.getDependency('logger').warn('The document has no langUsage/language element to change')
+      return
+    }
+    language.setAttribute('ident', detected)
+    await this.#xmlEditor.updateEditorFromNode(language)
+    await this.#xmlEditor.saveIfDirty()
+    testLog('DOCUMENT_LANGUAGE_CHANGED', { language: detected })
+    notify(`The language of the document was changed to ${detectedName}.`, 'success', 'check-circle')
   }
 
   /**
@@ -669,6 +710,7 @@ class ExtractionPlugin extends Plugin {
    */
   #setupOcrSection(pdfStableId, languageHints) {
     const section = this.#dialogUi.ocrSection
+    const loading = this.#dialogUi.ocrLoading
     const ocrPlugin = this.getDependency('ocr')
     const logger = this.getDependency('logger')
     const controller = new AbortController()
@@ -676,6 +718,7 @@ class ExtractionPlugin extends Plugin {
 
     /** @type {OcrEngineInfo[]} */
     let engines = []
+    let enginesLoaded = false
     /** @type {TextQualityReport|null} */
     let quality = null
     let userToggled = false
@@ -684,6 +727,7 @@ class ExtractionPlugin extends Plugin {
     let chosen = null
 
     section.style.display = 'none'
+    loading.style.display = 'none'
     section.applyOcr.checked = false
     section.applyOcr.disabled = true
     section.ocrEngine.innerHTML = ''
@@ -695,6 +739,8 @@ class ExtractionPlugin extends Plugin {
     const settingsFor = engine => chosen?.engine === engine.id ? chosen.settings : ocrPlugin.getSettings(engine, hints())
 
     const render = () => {
+      // Until the engine list is known, a placeholder shows that text recognition will be offered
+      loading.style.display = wanted && !enginesLoaded ? '' : 'none'
       section.style.display = wanted && engines.length ? '' : 'none'
       const missing = quality?.status === 'missing'
       section.applyOcr.disabled = missing
@@ -705,19 +751,35 @@ class ExtractionPlugin extends Plugin {
       }
     }
 
+    /** @param {OcrEngineInfo[]} list */
+    const showEngines = list => {
+      engines = list
+      enginesLoaded = true
+      for (const engine of engines) {
+        section.ocrEngine.append(Object.assign(new SlOption(), { value: engine.id, textContent: engine.name }))
+      }
+      const preferred = ocrPlugin.getPreferredEngine(engines)
+      requestAnimationFrame(() => { section.ocrEngine.value = preferred ?? '' })
+      render()
+    }
+
     if (pdfStableId) {
-      ocrPlugin.getEngines()
-        .then(list => {
-          if (signal.aborted) return
-          engines = list
-          for (const engine of engines) {
-            section.ocrEngine.append(Object.assign(new SlOption(), { value: engine.id, textContent: engine.name }))
-          }
-          const preferred = ocrPlugin.getPreferredEngine(engines)
-          requestAnimationFrame(() => { section.ocrEngine.value = preferred ?? '' })
-          render()
-        })
-        .catch(error => logger.warn('Could not load OCR engines: ' + String(error)))
+      // The OCR plugin loads the engine list after login, so it is usually known already
+      const loaded = ocrPlugin.getLoadedEngines()
+      if (loaded) {
+        showEngines(loaded)
+      } else {
+        ocrPlugin.getEngines()
+          .then(list => {
+            if (!signal.aborted) showEngines(list)
+          })
+          .catch(error => {
+            logger.warn('Could not load OCR engines: ' + String(error))
+            if (signal.aborted) return
+            enginesLoaded = true
+            render()
+          })
+      }
     }
 
     /** @param {unknown} error */
