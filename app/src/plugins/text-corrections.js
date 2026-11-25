@@ -159,7 +159,7 @@ class TextCorrectionsPlugin extends Plugin {
       testLog('TEXT_CORRECTIONS_APPLIED', { newFileId, corrections: result.corrections })
     } catch (error) {
       const reason = /** @type {Error} */ (error)?.message ?? String(error)
-      notify(`The corrections were already written to the PDF and the corrected document is in the editor, but it could not be saved or loaded as a new version (${reason}). Save it as a new version with the "Save revision" button, checking "Save to a new copy".`, 'danger', 'exclamation-octagon', 15000)
+      notify(`The corrections were already written to the PDF and the corrected document is in the editor, but it could not be saved or loaded as a new version (${reason}). Save it as a new version with the "Save revision" button, checking "Save to a new personal version".`, 'danger', 'exclamation-octagon', 15000)
       testLog('TEXT_CORRECTIONS_FAILED', { message: reason, afterApply: true })
     }
   }

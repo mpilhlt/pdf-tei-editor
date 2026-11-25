@@ -9,6 +9,7 @@
  * @testCovers fastapi_app/routers/ocr.py
  */
 
+import fs from 'fs';
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
 import { navigateAndLogin, releaseAllLocks } from './helpers/login-helper.js';
@@ -17,20 +18,37 @@ const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*401.*UNAUTHORIZED'
 ];
 
+const SCANNED_PDF = 'tests/e2e/fixtures/pdf/scanned-document.pdf';
+
 const MARKER = '<!-- TEXT_CORRECTIONS_MARKER -->';
 
 /**
- * Load the fixture document into the editor.
+ * Create a document of its own (a PDF with unique content and a TEI version), so that the test does
+ * not depend on, or change, fixtures that other specs use, and load it into the editor.
  * @param {import('@playwright/test').Page} page
- * @returns {Promise<string>} its stable_id
+ * @returns {Promise<{stableId: string, pdfId: string}>} stable_id of the TEI version and of the PDF
  */
-async function loadFixtureDocument(page) {
-  const stableId = await page.evaluate(async () => {
-    const result = await /** @type {any} */ (window).client.apiClient.filesList();
-    const group = result.files.find((/** @type {any} */ f) => f.doc_id === 'document-rules-fixture');
-    return group ? group.source.id : null;
-  });
+async function createOwnDocument(page) {
+  const unique = `text-corrections-${Date.now()}`;
+  const buffer = Buffer.concat([fs.readFileSync(SCANNED_PDF), Buffer.from(`\n%${unique}\n`)]);
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  const uploadPromise = page.evaluate(() => /** @type {any} */ (window).client.uploadFile());
+  await (await fileChooserPromise).setFiles({ name: `${unique}.pdf`, mimeType: 'application/pdf', buffer });
+  const upload = await uploadPromise;
+  const pdfId = upload.filename;
+  expect(pdfId).toBeTruthy();
+
+  const xml = `<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc><titleStmt><title>${unique}</title></titleStmt><publicationStmt><p/></publicationStmt><sourceDesc><p/></sourceDesc></fileDesc></teiHeader><text><body><p>teh text</p></body></text></TEI>`;
+  const stableId = await page.evaluate(async ({ pdfId, xml }) => {
+    const client = /** @type {any} */ (window).client;
+    const list = await client.apiClient.filesList();
+    const group = list.files.find((/** @type {any} */ f) => f.source?.id === pdfId);
+    const saved = await client.apiClient.filesSave({ xml_string: xml, file_id: group.doc_id, new_version: true });
+    await client.apiClient.filesReleaseLock({ file_id: saved.file_id });
+    return saved.file_id;
+  }, { pdfId, xml });
   expect(stableId).toBeTruthy();
+
   await page.evaluate(
     (id) => /** @type {any} */ (window).app.getDependency('services').load({ xml: id }),
     stableId
@@ -40,7 +58,20 @@ async function loadFixtureDocument(page) {
     return view && view.state.doc.length > 0;
   }, { timeout: 15000 });
   await page.waitForTimeout(500);
-  return stableId;
+  return { stableId, pdfId };
+}
+
+/**
+ * Delete the files a test created.
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} ids
+ */
+async function cleanUp(page, ids) {
+  await releaseAllLocks(page);
+  await page.evaluate(async (ids) => {
+    const api = /** @type {any} */ (window).client.apiClient;
+    for (const id of ids) await api.filesDelete({ files: [id] }).catch(() => {});
+  }, ids).catch(() => {});
 }
 
 /**
@@ -61,9 +92,12 @@ test.describe('Text corrections', () => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
+    /** @type {string[]} */
+    const created = [];
     try {
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
-      await loadFixtureDocument(page);
+      const own = await createOwnDocument(page);
+      created.push(own.stableId, own.pdfId);
       await clickMenuItem(page);
 
       const opened = await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_DIALOG_OPENED', 20000);
@@ -79,7 +113,7 @@ test.describe('Text corrections', () => {
       await expect(dialog).not.toHaveAttribute('open', '');
     } finally {
       stopErrorMonitoring();
-      await releaseAllLocks(page);
+      await cleanUp(page, created);
     }
   });
 
@@ -89,10 +123,13 @@ test.describe('Text corrections', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
     /** @type {string|null} */
     let newFileId = null;
+    /** @type {string[]} */
+    const created = [];
 
     try {
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
-      const stableId = await loadFixtureDocument(page);
+      const { stableId, pdfId } = await createOwnDocument(page);
+      created.push(stableId, pdfId);
 
       const originalXml = await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').getXML());
       const correctedXml = originalXml.replace(/(<\/[^>]+>)\s*$/, `${MARKER}$1`);
@@ -121,6 +158,7 @@ test.describe('Text corrections', () => {
 
       const applied = await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_APPLIED', 30000);
       newFileId = applied.value.newFileId;
+      created.push(newFileId);
       expect(newFileId).toBeTruthy();
       expect(newFileId).not.toBe(stableId);
       expect(applied.value.corrections).toBe(1);
@@ -141,14 +179,8 @@ test.describe('Text corrections', () => {
       expect(state.xml).toBe(newFileId);
       expect(state.content).toContain('TEXT_CORRECTIONS_MARKER');
     } finally {
-      if (newFileId) {
-        await releaseAllLocks(page);
-        await page.evaluate(async (id) => {
-          await /** @type {any} */ (window).client.apiClient.filesDelete({ files: [id] });
-        }, newFileId).catch(() => {});
-      }
       stopErrorMonitoring();
-      await releaseAllLocks(page);
+      await cleanUp(page, created);
     }
   });
 });
