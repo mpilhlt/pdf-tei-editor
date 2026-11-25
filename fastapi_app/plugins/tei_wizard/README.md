@@ -157,7 +157,7 @@ Three lists are configurable in `config.json`:
 | Config key | Default | Purpose |
 | --- | --- | --- |
 | `tei.pretty-print.no-indent-inside` | `["bibl", "p", "ab"]` | Explicit override: children of these elements are never indented even though the dynamic check would indent them (e.g. `bibl` contains `author`/`title` which are not inline but should not be indented). |
-| `tei.pretty-print.inline-elements` | `["lb", "pb", "hi", "ref", ...]` | Elements treated as always-inline: no leading indent is inserted before them, and their own children are not indented. |
+| `tei.pretty-print.inline-elements` | `["lb", "pb", "hi", "ref", ...]` | Elements treated as always-inline: they get their own line only where they directly follow a block element or are the first child of an indented element (e.g. a `<pb/>` between two `<div>`s), and their own children are not indented. |
 | `tei.pretty-print.header-keep` | `["desc"]` | Elements of the `teiHeader` whose content is never reformatted. |
 
 ### Convert XML comments (`convert-xml-comments.js`)
