@@ -72,6 +72,8 @@ class PdfViewerPlugin extends Plugin {
   #statusMessageWidget = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   #statusMessageTimer = null;
+  /** @type {StatusText|null} Shown while the viewer shows an archived original PDF */
+  #archivedPdfWidget = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   #pageChangedTimer = null;
 
@@ -84,7 +86,7 @@ class PdfViewerPlugin extends Plugin {
   getApi() {
     const plugin = this;
     const inner = this.#pdfViewer;
-    const pluginMethods = new Set(['showStatusMessage', 'clearStatusMessage']);
+    const pluginMethods = new Set(['showStatusMessage', 'clearStatusMessage', 'setArchivedPdfIndicator']);
     return /** @type {PDFJSViewer} */ (new Proxy(inner, {
       get(_target, prop) {
         if (pluginMethods.has(String(prop))) {
@@ -128,6 +130,28 @@ class PdfViewerPlugin extends Plugin {
     if (this.#statusMessageWidget) {
       ui.pdfViewer.statusbar.removeById(this.#statusMessageWidget.id);
       this.#statusMessageWidget = null;
+    }
+  }
+
+  /**
+   * Shows or hides the statusbar notice that the viewer shows the original PDF of the document,
+   * as it was before text recognition replaced it: the loaded version was made from it (#924).
+   * @param {boolean} shown
+   */
+  setArchivedPdfIndicator(shown) {
+    const statusBar = ui.pdfViewer.statusbar;
+    if (shown && !this.#archivedPdfWidget) {
+      this.#archivedPdfWidget = PanelUtils.createText({
+        name: 'archivedPdfIndicator',
+        text: 'Original PDF (before text recognition)',
+        icon: 'clock-history',
+        variant: 'warning'
+      });
+      this.#archivedPdfWidget.title = 'This version was made from the PDF as it was before text recognition. Newer versions use the current PDF.';
+      statusBar.add(this.#archivedPdfWidget, 'left', 8);
+    } else if (!shown && this.#archivedPdfWidget) {
+      statusBar.removeById(this.#archivedPdfWidget.id);
+      this.#archivedPdfWidget = null;
     }
   }
 

@@ -44,7 +44,8 @@
  *   metadata?: { access_control: AccessControl | null },
  *   created_by: string|null,
  *   parent_id?: string|null,
- *   is_frozen?: boolean
+ *   is_frozen?: boolean,
+ *   pdf_id?: string|null
  * }} Artifact
  */
 

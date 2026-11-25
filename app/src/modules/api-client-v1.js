@@ -84,6 +84,7 @@
  * @property {Object<string, any>=} access_control
  * @property {string=} parent_id - Stable ID of the version this file was copied from
  * @property {boolean=} is_frozen - True if a version was copied from this file (read-only history)
+ * @property {string|null=} pdf_id - Stable ID of the archived original PDF the version was made from, before text recognition replaced it (null: the document's current PDF)
  */
 
 /**
@@ -474,6 +475,7 @@
  * @typedef {Object} OcrResponse
  * @property {string} stable_id - stable_id of the PDF (unchanged)
  * @property {boolean} changed - Whether the PDF content changed
+ * @property {string|null=} archived_stable_id - stable_id of the archived original PDF, if versions were made from it (they stay linked to it)
  * @property {string|null=} message - Message of the engine, if any
  * @property {OcrMethod|null=} method - How the text layer was created, if the engine reports it
  * @property {string|null=} fallback_reason - Why the engine fell back from the preferred method
