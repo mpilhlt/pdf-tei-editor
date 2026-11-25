@@ -14,6 +14,7 @@ REASON_VISIBLE = "visible text"
 REASON_NO_TOUNICODE = "font without ToUnicode"
 REASON_NOT_IDENTITY = "font is not Identity-H"
 REASON_NOT_ADDRESSABLE = "text layer not addressable"
+REASON_ODD_STRING = "text string with an odd number of bytes"
 
 TEXT_OPERATORS = ("Tj", "TJ", "'", '"')
 
@@ -54,12 +55,21 @@ class _Font:
     reason: str | None  # why text in this font cannot be patched
 
 
-def _load_font(font: pikepdf.Dictionary | None) -> _Font:
-    """Check that a font is Identity-H with a ToUnicode map and parse the map."""
-    if font is None or str(font.get("/Encoding", "")) != "/Identity-H":
+def _load_font(font: pikepdf.Dictionary) -> _Font:
+    """Check that a font is an indirect Type0 Identity-H font with a ToUnicode map and parse the map."""
+    if font.get("/Subtype") != "/Type0" or font.get("/Encoding") != "/Identity-H":
         return _Font(None, REASON_NOT_IDENTITY)
-    if "/ToUnicode" not in font:
+    if not isinstance(font.get("/ToUnicode"), pikepdf.Stream):
         return _Font(None, REASON_NO_TOUNICODE)
+    descendants = font.get("/DescendantFonts")
+    if (
+        not font.is_indirect
+        or not isinstance(descendants, pikepdf.Array)
+        or len(descendants) != 1
+        or not isinstance(descendants[0], pikepdf.Dictionary)
+        or not descendants[0].is_indirect
+    ):
+        return _Font(None, REASON_NOT_ADDRESSABLE)
     return _Font(parse_to_unicode(font.ToUnicode), None)
 
 
@@ -71,19 +81,21 @@ class _Reader:
         self.visible = False
         self.font_reason: str | None = None
         self.not_addressable = False
+        self.odd_string = False
         self.seen: set[tuple[int, int]] = set()
         self.fonts: dict[tuple[int, int], _Font] = {}
 
     def font_for(self, resources: pikepdf.Dictionary | None, name: str) -> _Font:
-        """Return the parsed font resource `name`, cached per font object."""
+        """Return the parsed font resource `name`, cached per (indirect) font object."""
         fonts = resources.get("/Font") if resources is not None else None
         font = fonts.get(name) if fonts is not None else None
-        if font is None:
+        if not isinstance(font, pikepdf.Dictionary):
             return _Font(None, REASON_NOT_IDENTITY)
-        key = font.objgen if font.is_indirect else (id(font), -1)
-        if key not in self.fonts:
-            self.fonts[key] = _load_font(font)
-        return self.fonts[key]
+        if not font.is_indirect:
+            return _load_font(font)
+        if font.objgen not in self.fonts:
+            self.fonts[font.objgen] = _load_font(font)
+        return self.fonts[font.objgen]
 
     def read_stream(self, stream: pikepdf.Stream, resources: pikepdf.Dictionary | None) -> None:
         """Read one content stream and the Form XObjects it draws."""
@@ -116,12 +128,18 @@ class _Reader:
 
     def add_words(self, stream: int, op_index: int, name: str, operands: pikepdf.Array, cmap: dict[int, str]) -> None:
         """Split the string of a text operator into words at whitespace."""
-        if name == "TJ":
+        if name == "TJ" and operands and isinstance(operands[0], pikepdf.Array):
             strings = [bytes(item) for item in operands[0] if isinstance(item, pikepdf.String)]
-        else:
+        elif name != "TJ" and operands and isinstance(operands[-1], pikepdf.String):
             strings = [bytes(operands[-1])]
+        else:
+            self.not_addressable = True
+            return
+        if any(len(string) % 2 for string in strings):
+            self.odd_string = True
+            return
         data = b"".join(strings)
-        codes: list[int | None] = [(data[i] << 8) | data[i + 1] for i in range(0, len(data) - 1, 2)]
+        codes: list[int | None] = [(data[i] << 8) | data[i + 1] for i in range(0, len(data), 2)]
         codes.append(None)
         start: int | None = None
         text = ""
@@ -150,6 +168,8 @@ def read_text_layer(pdf: pikepdf.Pdf) -> list[LayerPage]:
             reader.result.unpatchable = REASON_VISIBLE
         elif reader.not_addressable:
             reader.result.unpatchable = REASON_NOT_ADDRESSABLE
+        elif reader.odd_string:
+            reader.result.unpatchable = REASON_ODD_STRING
         elif reader.font_reason:
             reader.result.unpatchable = reader.font_reason
         elif not reader.result.words:
