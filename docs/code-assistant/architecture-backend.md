@@ -53,7 +53,7 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 
 | File | Purpose |
 |------|---------|
-| `file_repository.py` | File metadata repository |
+| `file_repository.py` | File metadata repository. Document-level queries hide archived PDFs (originals replaced by OCR, `superseded_by` set) unless `include_superseded=True`; `get_pdf_for_file()` returns the PDF a version was made from (see [Backend Plugins - OCR Engines](backend-plugins.md#ocr-engines)) |
 | `permissions_db.py` | Permissions database |
 
 ### `services/` — Business Logic
