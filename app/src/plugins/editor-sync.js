@@ -11,7 +11,8 @@
  *   Nodes without text, and nodes whose text is not found, are passed to the
  *   `pdfSearch.fallback` handlers. In documents with page breaks (`<pb/>`), the text is first
  *   looked up only on the PDF page that the nearest preceding `<pb/>` points to, and in the
- *   whole PDF only if it is not found there.
+ *   whole PDF only if it is not found there. This finds short or repeated text such as running
+ *   heads, footers and page numbers (`<note place="headnote">`, `<page>`) on the right page.
  * - PDF -> XML: when the user pages through the PDF (`pdfViewer.pageChanged`), the XML editor
  *   is scrolled to the `<pb/>` of that page, without changing the selection.
  *
