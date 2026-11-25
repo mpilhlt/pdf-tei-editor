@@ -22,6 +22,11 @@ from fastapi_app.lib.utils.tei_utils import (
     extract_processing_instructions
 )
 from fastapi_app.lib.services.metadata_extraction import get_metadata_for_document
+from fastapi_app.lib.services.language_detection import (
+    UNDETERMINED_LANGUAGE,
+    contradicting_language,
+    extract_pdf_text,
+)
 from fastapi_app.lib.models.models import FileUpdate
 from fastapi_app.lib.utils.doi_utils import decode_filename, validate_doi
 
@@ -296,8 +301,13 @@ async def update_tei_metadata(
         progress_callback: Optional callback(current, total, label) for progress updates
         cancellation_check: Optional callback() -> bool to check if operation should be cancelled
 
+    The registry language (e.g. from CrossRef) is not declared if a confident detection from the
+    text of the document contradicts it. The document then keeps its language, or gets the
+    detected one if it declares none; these documents are listed under `language_kept`.
+
     Returns:
-        Statistics dict with keys: processed, updated, skipped, errors
+        Statistics dict with keys: processed, updated, skipped, errors, and language_kept (list of
+        dicts with stable_id, registry and detected language of the TEI files whose language was kept)
 
     Raises:
         Exception: If operation is cancelled via cancellation_check
@@ -319,6 +329,7 @@ async def update_tei_metadata(
     tei_files_updated = 0
     pdfs_skipped = 0
     errors = 0
+    language_kept: list[dict[str, str]] = []
 
     for pdf_obj in all_pdfs:
         # Check for cancellation
@@ -437,6 +448,10 @@ async def update_tei_metadata(
                 pdfs_skipped += 1
                 continue
 
+            # Text of the PDF, to check the registry language against; extracted on first use
+            registry_language = normalize_language_code(metadata.get('language'))
+            pdf_text: Optional[str] = None
+
             # Update all linked TEI files
             tei_updated_count = 0
             for tei_obj in linked_tei_files:
@@ -462,11 +477,31 @@ async def update_tei_metadata(
                     # Extract processing instructions
                     processing_instructions = extract_processing_instructions(tei_content.decode('utf-8'))
 
+                    # Do not declare a registry language that the text of the document contradicts
+                    detected_language = None
+                    if registry_language:
+                        if pdf_text is None:
+                            pdf_path = file_storage.get_file_path(pdf_obj.id, "pdf")
+                            pdf_text = await asyncio.to_thread(extract_pdf_text, str(pdf_path)) if pdf_path else ""
+                        detected_language = contradicting_language(tei_root, registry_language, pdf_text)
+                    tei_metadata = dict(metadata)
+                    if detected_language:
+                        tei_metadata['language'] = None
+
                     # Update biblStruct
-                    updated, reason = update_biblstruct_in_tei(tei_root, metadata)
+                    updated, reason = update_biblstruct_in_tei(tei_root, tei_metadata)
                     if not updated:
                         logger.debug(f"    Skipped TEI {tei_stable_id} - {reason}")
                         continue
+
+                    if registry_language and detected_language:
+                        declared = tei_root.xpath(
+                            "string(tei:teiHeader/tei:profileDesc/tei:langUsage/tei:language/@ident)",
+                            namespaces={"tei": "http://www.tei-c.org/ns/1.0"},
+                        )
+                        if not declared or declared == UNDETERMINED_LANGUAGE:
+                            set_document_language(tei_root, detected_language)
+                        logger.info(f"    TEI {tei_stable_id}: registry language '{registry_language}' not declared, the text reads as '{detected_language}'")
 
                     # Serialize updated TEI
                     updated_xml = serialize_tei_with_formatted_header(tei_root, processing_instructions)
@@ -479,6 +514,8 @@ async def update_tei_metadata(
 
                     logger.info(f"    Updated TEI {tei_stable_id}: {tei_file_id[:8]}... → {new_tei_file_id[:8]}...")
                     tei_updated_count += 1
+                    if registry_language and detected_language:
+                        language_kept.append({'stable_id': tei_stable_id, 'registry': registry_language, 'detected': detected_language})
 
                 except Exception as e:
                     logger.error(f"    Error updating TEI {tei_stable_id}: {e}", exc_info=True)
@@ -517,5 +554,6 @@ async def update_tei_metadata(
         'processed': pdfs_processed,
         'updated': tei_files_updated,
         'skipped': pdfs_skipped,
-        'errors': errors
+        'errors': errors,
+        'language_kept': language_kept
     }

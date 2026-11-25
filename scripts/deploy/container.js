@@ -1173,8 +1173,8 @@ server {
         proxy_redirect off;
     }
 
-    # Allow uploads up to 100MB (adjust as needed)
-    client_max_body_size 100M;
+    # Allow uploads up to 200MB (adjust as needed)
+    client_max_body_size 200M;
 
     # Increase timeouts for large uploads and long operations such as LLM extraction.
     # OCR runs as a background job and does not depend on these timeouts.

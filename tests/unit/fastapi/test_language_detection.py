@@ -19,7 +19,9 @@ from lxml import etree
 
 from fastapi_app.lib.services.language_detection import (
     add_document_language,
+    contradicting_language,
     detect_language,
+    find_language_conflict,
     predict_document_language,
     predict_document_language_with_source,
 )
@@ -273,6 +275,42 @@ class TestPredictDocumentLanguage(unittest.TestCase):
         self.assertEqual(predict_document_language_with_source(self._root(_tei(GERMAN))), ("de", "tei-text"))
 
 
+DECLARED_EN = """
+    <profileDesc>
+      <langUsage><language ident="en"/></langUsage>
+    </profileDesc>"""
+
+
+class TestLanguageConflict(unittest.TestCase):
+    """A declared language (e.g. from CrossRef) that a confident detection contradicts."""
+
+    def _root(self, source: str):
+        return etree.fromstring(source.encode("utf-8"))
+
+    def test_detection_contradicts_declared_language(self):
+        self.assertEqual(contradicting_language(self._root(_tei(GERMAN)), "en"), "de")
+
+    def test_pdf_text_is_used_first(self):
+        self.assertEqual(contradicting_language(self._root(_tei(ENGLISH)), "en", pdf_text=GERMAN), "de")
+
+    def test_matching_language_is_no_contradiction(self):
+        self.assertIsNone(contradicting_language(self._root(_tei(GERMAN)), "de"))
+        self.assertIsNone(contradicting_language(self._root(_tei(GERMAN)), "de-AT"))
+
+    def test_undeclared_language_is_not_contradicted(self):
+        self.assertIsNone(contradicting_language(self._root(_tei(GERMAN)), None))
+        self.assertIsNone(contradicting_language(self._root(_tei(GERMAN)), "und"))
+
+    def test_short_text_does_not_contradict(self):
+        self.assertIsNone(contradicting_language(self._root(_tei("Rechtsprechung")), "en"))
+
+    def test_find_language_conflict(self):
+        self.assertEqual(find_language_conflict(_tei(GERMAN, header_extra=DECLARED_EN)), ("en", "de"))
+        self.assertIsNone(find_language_conflict(_tei(ENGLISH, header_extra=DECLARED_EN)))
+        self.assertIsNone(find_language_conflict(_tei(GERMAN)))
+        self.assertIsNone(find_language_conflict("<TEI"))
+
+
 class TestExtractionRouteSetsLanguage(unittest.TestCase):
     """The extraction route declares the language regardless of the extractor."""
 
@@ -283,6 +321,18 @@ class TestExtractionRouteSetsLanguage(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_extraction_result_declares_language(self):
+        response, tei_xml = self._extract(_tei(GERMAN))
+        self.assertEqual(_language_idents(tei_xml), ["de"])
+        self.assertIsNone(response["language_conflict"])
+
+    def test_extraction_reports_contradicted_language(self):
+        response, tei_xml = self._extract(_tei(GERMAN, header_extra=DECLARED_EN))
+        # the declared language is kept, the client asks the user
+        self.assertEqual(_language_idents(tei_xml), ["en"])
+        self.assertEqual(response["language_conflict"], {"declared": "en", "detected": "de"})
+
+    def _extract(self, extraction_result: str) -> tuple[dict, str]:
+        """Run the extraction route with an extractor returning the given TEI; return the response and the saved TEI."""
         from fastapi.testclient import TestClient
 
         from fastapi_app.config import Settings, get_settings
@@ -320,7 +370,7 @@ class TestExtractionRouteSetsLanguage(unittest.TestCase):
                 return {"input": ["pdf"], "output": ["tei-document"]}
 
             async def extract(self, pdf_path=None, xml_content=None, options=None):
-                return _tei(GERMAN)
+                return extraction_result
 
         app.dependency_overrides[get_file_repository] = lambda: repo
         app.dependency_overrides[get_file_storage] = lambda: storage
@@ -329,7 +379,7 @@ class TestExtractionRouteSetsLanguage(unittest.TestCase):
 
         try:
             with patch("fastapi_app.routers.extraction.create_extractor", return_value=_GermanExtractor()), \
-                    patch("fastapi_app.lib.services.language_detection.extract_pdf_text", return_value=""):
+                    patch("fastapi_app.routers.extraction.extract_pdf_text", return_value=""):
                 response = TestClient(app).post(
                     "/api/v1/extract",
                     json={"extractor": "mock-extractor", "file_id": file_hash, "options": {}},
@@ -339,10 +389,78 @@ class TestExtractionRouteSetsLanguage(unittest.TestCase):
             assert tei_file is not None
             tei_bytes = storage.read_file(tei_file.id, "tei")
             assert tei_bytes is not None
-            tei_xml = tei_bytes.decode("utf-8")
-            self.assertEqual(_language_idents(tei_xml), ["de"])
+            return response.json(), tei_bytes.decode("utf-8")
         finally:
             app.dependency_overrides.clear()
+
+
+class TestMetadataUpdateKeepsContradictedLanguage(unittest.TestCase):
+    """The batch metadata update does not declare a registry language that the text contradicts."""
+
+    def setUp(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def _update(self, tei_xml: str, registry_language: str) -> tuple[dict, str]:
+        """Run update_tei_metadata on one PDF with one TEI file; return the stats and the updated TEI."""
+        import asyncio
+
+        from fastapi_app.lib.core.database import DatabaseManager
+        from fastapi_app.lib.models.models import FileCreate
+        from fastapi_app.lib.repository.file_repository import FileRepository
+        from fastapi_app.lib.services.metadata_update_utils import update_tei_metadata
+        from fastapi_app.lib.storage.file_storage import FileStorage
+
+        db = DatabaseManager(self.test_dir / "test.db")
+        repo = FileRepository(db)
+        storage = FileStorage(self.test_dir / "files", db)
+        for content, file_type in ((b"%PDF-1.4 metadata update test", "pdf"), (tei_xml.encode("utf-8"), "tei")):
+            file_hash, _ = storage.save_file(content, file_type)
+            repo.insert_file(FileCreate(
+                id=file_hash,
+                filename=f"{file_hash}.{file_type}",
+                doc_id="test-doc-meta",
+                file_type=file_type,
+                file_size=len(content),
+                label="Test doc",
+                doc_collections=["_inbox"],
+            ))
+        metadata = {"title": "Titel", "language": registry_language}
+
+        async def _metadata(**_kwargs):
+            return metadata
+
+        with patch("fastapi_app.lib.services.metadata_update_utils.get_metadata_for_document", side_effect=_metadata), \
+                patch("fastapi_app.lib.services.metadata_update_utils.extract_pdf_text", return_value=""):
+            stats = asyncio.run(update_tei_metadata(repo, storage, force=True))
+        tei_file = repo.list_files(file_type="tei")[0]
+        tei_bytes = storage.read_file(tei_file.id, "tei")
+        assert tei_bytes is not None
+        return stats, tei_bytes.decode("utf-8")
+
+    def test_contradicted_registry_language_is_not_declared(self):
+        extra = """
+    <profileDesc>
+      <langUsage><language ident="de"/></langUsage>
+    </profileDesc>"""
+        stats, tei_xml = self._update(_tei(GERMAN, header_extra=extra), "en")
+        self.assertEqual(stats["updated"], 1)
+        self.assertEqual(_language_idents(tei_xml), ["de"])
+        self.assertEqual(len(stats["language_kept"]), 1)
+        self.assertEqual(stats["language_kept"][0]["registry"], "en")
+        self.assertEqual(stats["language_kept"][0]["detected"], "de")
+
+    def test_detected_language_is_declared_if_none_is(self):
+        stats, tei_xml = self._update(_tei(GERMAN), "en")
+        self.assertEqual(_language_idents(tei_xml), ["de"])
+        self.assertEqual(len(stats["language_kept"]), 1)
+
+    def test_matching_registry_language_is_declared(self):
+        stats, tei_xml = self._update(_tei(GERMAN), "de")
+        self.assertEqual(_language_idents(tei_xml), ["de"])
+        self.assertEqual(stats["language_kept"], [])
 
 
 if __name__ == "__main__":

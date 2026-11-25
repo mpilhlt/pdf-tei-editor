@@ -1583,10 +1583,17 @@
  */
 
 /**
+ * @typedef {Object} LanguageConflict
+ * @property {string} declared - Language declared in teiHeader/profileDesc/langUsage, e.g. taken from CrossRef
+ * @property {string} detected - Language detected with high confidence from the text of the document
+ */
+
+/**
  * @typedef {Object} fastapi_app__lib__models__models_extraction__ExtractResponse
  * @property {string=} id - Document ID (for PDF-based extractions)
  * @property {string=} pdf - PDF file hash (if applicable)
  * @property {string} xml - Extracted/generated XML file hash
+ * @property {LanguageConflict|null=} language_conflict - Set if the declared language contradicts the detected one; the client asks the user whether to declare the detected language
  */
 
 /**
