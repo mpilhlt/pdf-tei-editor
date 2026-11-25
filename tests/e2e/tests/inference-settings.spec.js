@@ -34,12 +34,17 @@ const PROVIDERS = [{
 }];
 
 /**
- * Serve the mocked provider list and no configured default model.
+ * Serve the mocked provider list and no configured default model. Also report no plugin
+ * updates: the update check after an admin login reads the real plugin repositories, and the
+ * resulting toast would cover the Tools menu button.
  * @param {Page} page
  */
 async function mockProviders(page) {
   await page.route('**/api/v1/llm/providers', route => route.fulfill({ json: PROVIDERS }));
   await page.route('**/api/v1/llm/default-model', route => route.fulfill({ json: null }));
+  await page.route('**/api/v1/plugins/admin/available*', route => route.fulfill({
+    json: { fetched_at: Date.now() / 1000, errors: {}, trusted_owners: [], trusted_only: false, plugins: [] }
+  }));
 }
 
 /**
