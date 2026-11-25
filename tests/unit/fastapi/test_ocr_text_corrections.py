@@ -166,6 +166,7 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         assert archived is not None
         self.assertEqual(archived.id, self.pdf_hash)
         self.assertEqual(self.repo.get_file_by_stable_id("tei2").pdf_stable_id, archived.stable_id)  # type: ignore[union-attr]
+        self.assertEqual(self.repo.get_file_by_stable_id("tei1").pdf_stable_id, archived.stable_id)  # type: ignore[union-attr]
         record = pdf.file_metadata["text_corrections"][-1]
         self.assertEqual(record["applied_by"], "rev")
         self.assertEqual(record["tei_stable_id"], "tei1")
@@ -207,6 +208,46 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.tei = self.add_tei(LINES, "tei3", version=3)
         response = self.client.post("/ocr/text-corrections/apply", json={"stable_id": "tei3"})
         self.assertEqual((response.status_code, response.json()["detail"]), (409, "The document has no text corrections to write."))
+
+    def test_preview_without_corrections_lists_unwritable(self):
+        lines = list(LINES)
+        lines[3] = lines[3].replace("Vgl.", "Vgl. neu")
+        self.add_tei(lines, "tei3", version=3)
+        preview = self.client.post("/ocr/text-corrections/preview", json={"stable_id": "tei3"}).json()
+        self.assertEqual(preview["reason"], "The document has no text corrections to write.")
+        self.assertEqual(preview["corrections"], [])
+        self.assertEqual([(u["line"], u["tei_text"]) for u in preview["unwritable"]], [(3, "neu")])
+        self.assertEqual(sorted(f["stable_id"] for f in preview["affected_files"]), ["tei1", "tei2"])
+
+    def test_pdf_changed_during_apply_conflicts(self):
+        other_hash = self.save(b"%PDF other", "pdf")
+
+        def replace_meanwhile(xml: str, doc_id: str, pdf_path: Path, pdf_hash: str, lines: frozenset[int]) -> str:
+            self.repo.replace_pdf_content("pdf1", other_hash, 10, {"ocr": {"engine": "other"}})
+            return xml
+
+        register_corrected_pdf_handler(VARIANT, "test", replace_meanwhile)
+        response = self.apply()
+        self.assertEqual(response.status_code, 409, response.text)
+        pdf = self.repo.get_file_by_stable_id("pdf1")
+        assert pdf is not None
+        self.assertEqual(pdf.id, other_hash)
+        self.assertEqual(pdf.file_metadata, {"ocr": {"engine": "other"}})
+
+    def test_ocr_job_started_during_apply_conflicts(self):
+        def start_job(xml: str, doc_id: str, pdf_path: Path, pdf_hash: str, lines: frozenset[int]) -> str:
+            self.jobs.create("pdf1", "someone")
+            return xml
+
+        register_corrected_pdf_handler(VARIANT, "test", start_job)
+        self.assertEqual(self.apply().status_code, 409)
+        self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
+
+    def test_replace_value_error_is_409(self):
+        with patch.object(self.repo, "replace_pdf_content", side_effect=ValueError("The content of PDF pdf1 is unchanged")):
+            with self.assertLogs("fastapi_app.routers.ocr", level="WARNING"):
+                response = self.apply()
+        self.assertEqual(response.status_code, 409)
 
     def test_active_ocr_job_conflicts(self):
         self.jobs.create("pdf1", "someone")

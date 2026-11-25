@@ -551,7 +551,7 @@
  * @property {Array<TextCorrectionItem>} corrections - Corrections that would be written
  * @property {Array<UnwritableItem>} unwritable - Differences that cannot be written
  * @property {Array<AffectedFile>} affected_files - Other TEI files of the document that would stay linked to the old PDF
- * @property {string|null=} reason - Why the corrections cannot be written; set means the action is not possible
+ * @property {string|null=} reason - Why the corrections cannot be written; set means the action is not possible. The lists are then empty, except when there are no corrections: `unwritable` and `affected_files` explain why
  */
 
 /**

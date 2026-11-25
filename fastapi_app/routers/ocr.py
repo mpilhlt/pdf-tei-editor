@@ -420,7 +420,8 @@ ARCHIVED_VERSION_MESSAGE = "This version was made from an earlier PDF of the doc
 UNSUPPORTED_DOCUMENT_MESSAGE = "Text corrections cannot be written for this kind of document."
 OCR_RUNNING_MESSAGE = "Text recognition is running for the PDF of this document. Please wait until it is finished."
 NO_CORRECTIONS_MESSAGE = "The document has no text corrections to write."
-UNWRITABLE_MESSAGE = "Some differences between the document and the text layer cannot be written. Skip them to write the other corrections."
+PDF_CHANGED_MESSAGE = "The PDF was changed while the corrections were written. Please try again."
+UNWRITABLE_MESSAGE ="Some differences between the document and the text layer cannot be written. Skip them to write the other corrections."
 
 
 @dataclass
@@ -464,7 +465,8 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
 
     Raises:
         HTTPException: 404/403 if the TEI or its PDF is missing or not editable, 409 if the
-            corrections cannot be written (the detail says why), 422 if the PDF cannot be read
+            corrections cannot be written (the detail says why), 422 if the PDF cannot be read.
+            Whether there are corrections at all is left to the caller.
     """
     tei = _get_tei(repo, stable_id, user)
     if tei.pdf_stable_id:
@@ -494,8 +496,6 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
         raise HTTPException(status_code=409, detail=UNSUPPORTED_DOCUMENT_MESSAGE)
     except pikepdf.PdfError as e:
         raise HTTPException(status_code=422, detail=f"The PDF cannot be read: {e}")
-    if not plan.corrections:
-        raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
     return _CorrectionContext(tei, xml, pdf, pdf_path, handler, plan)
 
 
@@ -530,8 +530,10 @@ async def preview_text_corrections(
     would do: the words that would be corrected, the differences that cannot be written, and the
     other versions of the document that would stay linked to the old PDF.
 
-    If the corrections cannot be written, `reason` says why and the lists are empty. A missing
-    TEI file or missing access is reported with 404/403 as usual.
+    If the corrections cannot be written, `reason` says why and the lists are empty, except when
+    there are no corrections: then `unwritable` and `affected_files` are filled, since the
+    unwritable differences explain why. A missing TEI file or missing access is reported with
+    404/403 as usual.
     """
     try:
         context = await _correction_context(request.stable_id, repo, storage, jobs, current_user)
@@ -544,6 +546,8 @@ async def preview_text_corrections(
         corrections=[TextCorrectionItem(page=c.page, line=c.line, old=c.old, new=c.new) for c in context.plan.corrections],
         unwritable=[UnwritableItem(page=u.page, line=u.line, layer_text=u.layer_text, tei_text=u.tei_text, reason=u.reason) for u in context.plan.unwritable],
         affected_files=[AffectedFile(stable_id=f.stable_id, label=_file_label(f)) for f in affected],
+        # the unwritable differences explain why there is nothing to write
+        reason=None if context.plan.corrections else NO_CORRECTIONS_MESSAGE,
     )
 
 
@@ -571,6 +575,8 @@ async def apply_text_corrections(
     """
     context = await _correction_context(request.stable_id, repo, storage, jobs, current_user)
     plan, pdf = context.plan, context.pdf
+    if not plan.corrections:
+        raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
     if plan.unwritable and not request.skip_unwritable:
         raise HTTPException(status_code=409, detail=UNWRITABLE_MESSAGE)
 
@@ -604,7 +610,15 @@ async def apply_text_corrections(
     }
     previous = pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
     file_metadata = {**pdf.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, record]}
-    _, archived = repo.replace_pdf_content(pdf.stable_id, new_hash, len(content), file_metadata)
+    # the handler can take a while: do not overwrite a replacement of the PDF made meanwhile
+    current = repo.get_file_by_stable_id(pdf.stable_id)
+    if current is None or current.id != pdf.id or jobs.find_active(pdf.stable_id) is not None:
+        raise HTTPException(status_code=409, detail=PDF_CHANGED_MESSAGE)
+    try:
+        _, archived = repo.replace_pdf_content(pdf.stable_id, new_hash, len(content), file_metadata)
+    except ValueError as e:
+        logger.warning(f"Cannot replace {pdf.stable_id} with the corrected PDF: {e}")
+        raise HTTPException(status_code=409, detail=PDF_CHANGED_MESSAGE)
     archived_stable_id = archived.stable_id if archived else None
     logger.info(f"Wrote {len(plan.corrections)} text correction(s) of {context.tei.stable_id} into {pdf.stable_id}: {pdf.id[:8]} -> {new_hash[:8]}" + (f", original archived as {archived_stable_id}" if archived_stable_id else ""))
     return TextCorrectionsResult(xml=xml, pdf_stable_id=pdf.stable_id, archived_stable_id=archived_stable_id, corrections=len(plan.corrections))
