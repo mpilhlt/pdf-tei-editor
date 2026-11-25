@@ -380,8 +380,12 @@ class EditorSyncPlugin extends Plugin {
     evt.detail.widget?.setAttribute('help-text', checked ? 'on' : 'off')
     this.uiStorage.set(STORAGE_KEY, checked)
     this.#logger.info(`Sync with editor is: ${checked}`)
+    if (!checked) {
+      this.#pdfViewer.clearHighlight()
+      return
+    }
     const selectedNode = this.#xmlEditor.selectedNode
-    if (checked && selectedNode) {
+    if (selectedNode) {
       await this.searchNode(selectedNode)
     }
   }

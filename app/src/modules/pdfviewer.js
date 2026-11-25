@@ -1031,6 +1031,15 @@ export class PDFJSViewer {
   }
 
   /**
+   * Removes the highlight of the last match from the PDF and forgets the match, so that
+   * it is not drawn again when the page is re-rendered.
+   * @returns {void}
+   */
+  clearHighlight() {
+    this._clearClusterHighlights(true);
+  }
+
+  /**
    * Clears any existing match highlight overlays
    * @param {boolean} clearState - Also clear the stored match state (default: false)
    * @private
