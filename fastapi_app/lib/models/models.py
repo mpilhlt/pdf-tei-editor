@@ -49,6 +49,8 @@ class FileMetadata(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
     created_by: Optional[str] = None  # Username of user who created this file
     parent_stable_id: Optional[str] = None  # stable_id of the version this file was copied from
+    pdf_stable_id: Optional[str] = None  # TEI: archived PDF the version was made from (NULL = the current PDF)
+    superseded_by: Optional[str] = None  # PDF: stable_id of the current PDF that replaced this archived one
 
     @field_validator('file_type')
     @classmethod
@@ -95,6 +97,8 @@ class FileCreate(BaseModel):
     file_metadata: dict = Field(default_factory=dict)
     created_by: Optional[str] = None  # Username of user who created this file
     parent_stable_id: Optional[str] = None  # stable_id of the version this file was copied from
+    pdf_stable_id: Optional[str] = None  # TEI: archived PDF the version was made from (NULL = the current PDF)
+    superseded_by: Optional[str] = None  # PDF: stable_id of the current PDF that replaced this archived one
 
     @field_validator('file_type')
     @classmethod

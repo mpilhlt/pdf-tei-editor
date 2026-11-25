@@ -277,8 +277,13 @@ class FakeRepo:
     def get_file_by_stable_id(self, stable_id: str, include_deleted: bool = False) -> Optional[SimpleNamespace]:
         return self.files.get(stable_id)
 
-    def update_file(self, file_id: str, updates) -> None:
+    def update_file(self, file_id: str, updates, stable_id: Optional[str] = None) -> None:
         self.updates.append((file_id, updates.model_dump(exclude_unset=True)))
+
+    def replace_pdf_content(self, stable_id: str, new_file_id: str, file_size: int, file_metadata: dict):
+        current = self.files[stable_id]
+        self.updates.append((current.id, {"id": new_file_id, "file_size": file_size, "file_metadata": file_metadata}))
+        return current, SimpleNamespace(stable_id="archived1")
 
 
 class TestOcrRouter(unittest.TestCase):
@@ -286,9 +291,9 @@ class TestOcrRouter(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         make_image_only_pdf(self.tmp / "oldhash.pdf")
         shutil.copy(TEXT_PDF, self.tmp / "texthash.pdf")
-        self.pdf = SimpleNamespace(id="oldhash", stable_id="pdf1", file_type="pdf", file_metadata={"x": 1})
-        self.text_pdf = SimpleNamespace(id="texthash", stable_id="pdf2", file_type="pdf", file_metadata={})
-        self.tei = SimpleNamespace(id="teihash", stable_id="tei1", file_type="tei", file_metadata={})
+        self.pdf = SimpleNamespace(id="oldhash", stable_id="pdf1", file_type="pdf", file_metadata={"x": 1}, superseded_by=None)
+        self.text_pdf = SimpleNamespace(id="texthash", stable_id="pdf2", file_type="pdf", file_metadata={}, superseded_by=None)
+        self.tei = SimpleNamespace(id="teihash", stable_id="tei1", file_type="tei", file_metadata={}, superseded_by=None)
         self.repo = FakeRepo({"pdf1": self.pdf, "pdf2": self.text_pdf, "tei1": self.tei})
         self.storage = FakeStorage(self.tmp)
         self.engine = FakeEngine()
@@ -361,6 +366,7 @@ class TestOcrRouter(unittest.TestCase):
         body = self.ocr_result({"stable_id": "pdf1", "engine": "fake", "languages": ["deu", "zh-hans"], "options": {"flag": True}})
         self.assertTrue(body["changed"])
         self.assertEqual(body["stable_id"], "pdf1")
+        self.assertEqual(body["archived_stable_id"], "archived1")
         self.assertEqual(body["quality"]["status"], "good")
         self.assertEqual(body["quality"]["ocr_applied"]["languages"], ["de", "zh-Hans"])
         self.assertEqual(self.engine.calls, [(["de", "zh-Hans"], {"mode": "a", "flag": True})])
@@ -371,6 +377,11 @@ class TestOcrRouter(unittest.TestCase):
         self.assertEqual(update["file_metadata"]["x"], 1)
         self.assertEqual(update["file_metadata"]["ocr"]["engine"], "fake")
         self.assertEqual(update["file_metadata"]["ocr"]["applied_by"], "alice")
+
+    def test_apply_ocr_rejects_archived_pdf(self):
+        self.repo.files["old1"] = SimpleNamespace(id="oldhash", stable_id="old1", file_type="pdf", file_metadata={}, superseded_by="pdf1")
+        response = self.client.post("/ocr", json={"stable_id": "old1", "engine": "fake", "languages": ["en"]})
+        self.assertEqual(response.status_code, 400, response.text)
 
     def test_text_quality_layout_check(self):
         # without an engine that recognizes words, the layout check is skipped

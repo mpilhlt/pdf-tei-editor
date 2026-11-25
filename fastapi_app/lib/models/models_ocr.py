@@ -45,6 +45,7 @@ class OcrResponse(BaseModel):
 
     stable_id: str = Field(..., description="stable_id of the PDF (unchanged)")
     changed: bool = Field(..., description="Whether the PDF content changed")
+    archived_stable_id: Optional[str] = Field(None, description="stable_id of the archived original PDF, if versions were made from it (they stay linked to it)")
     message: Optional[str] = Field(None, description="Message of the engine, if any")
     method: Optional[str] = Field(None, description="How the text layer was created ('skip', 'redo', 'force', 'vectorize'), if the engine reports it")
     fallback_reason: Optional[str] = Field(None, description="Why the engine fell back from the preferred method, if it did")

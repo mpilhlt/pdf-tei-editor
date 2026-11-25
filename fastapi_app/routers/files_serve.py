@@ -74,7 +74,8 @@ def serve_file_by_id(
     logger.debug(f"Serving file: {document_id}")
 
     # Look up file by ID, stable_id, or doc_id (for schemas)
-    file_metadata = repo.get_file_by_id_or_stable_id(document_id)
+    # (by stable_id first: rows of different documents can share a content hash)
+    file_metadata = repo.get_file_by_stable_id(document_id) or repo.get_file_by_id_or_stable_id(document_id)
 
     # If not found and looks like a schema doc_id, try gold standard lookup
     if not file_metadata and document_id.startswith("schema-"):
@@ -86,8 +87,12 @@ def serve_file_by_id(
         logger.warning(f"File not in database: {document_id}")
         raise HTTPException(status_code=404, detail=f"File not found: {document_id}")
 
-    # Check read access
-    if not check_file_access(file_metadata, current_user, 'read'):
+    # Check read access. An archived PDF (replaced by text recognition) is readable by whoever can
+    # read the document's current PDF; its own document fields are a snapshot of the time it was archived
+    access_target = file_metadata
+    if file_metadata.superseded_by:
+        access_target = repo.get_file_by_stable_id(file_metadata.superseded_by) or file_metadata
+    if not check_file_access(access_target, current_user, 'read'):
         logger.warning(
             f"Access denied for user {current_user.get('username') if current_user else 'anonymous'} "
             f"to file {document_id}"

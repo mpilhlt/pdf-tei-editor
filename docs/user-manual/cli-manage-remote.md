@@ -244,6 +244,7 @@ npm run manage-remote -- maintenance reload
 | Task id | What it cleans up |
 | --- | --- |
 | `deleted-files` | Records and physical files of soft-deleted files last updated before `--deleted-before` (default: now) |
+| `superseded-pdfs` | Original PDFs kept after text recognition, once no file record (also no soft-deleted one) references them |
 | `orphaned-storage-files` | Files in storage without a database record |
 | `duplicate-entries` | Duplicate file records (not run with `--dry-run`) |
 | `tei-collections` | Gives TEI files the collections of their PDF (not run with `--dry-run`) |
