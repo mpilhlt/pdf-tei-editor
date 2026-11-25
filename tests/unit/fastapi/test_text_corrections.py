@@ -44,18 +44,18 @@ class TestDeriveCorrections(unittest.TestCase):
         self.assertEqual((plan.corrections, plan.unwritable[0].reason), ([], "visible text"))
 
     def test_nfc_equal_words_are_not_corrections(self):
-        self.assertEqual(derive_corrections(tei(0, "ü"), layer(0, "ü")), CorrectionPlan([], []))
+        self.assertEqual(derive_corrections(tei(0, "u\u0308"), layer(0, "\u00fc")), CorrectionPlan([], []))
 
 
 class TestTeiWords(unittest.TestCase):
     def test_words_are_grouped_by_page_of_their_line(self):
         xml = '<TEI xmlns="http://www.tei-c.org/ns/1.0"><text><body><lb/>eins zwei<lb/>drei<lb/>vier fünf</body></text></TEI>'
         labels = [ZoneLabel("body", "body")]
-        layout = LineLayout(pages=[0, 0, 1])
+        layout = LineLayout(pages=[0, 0, 0, 1])
         with patch("fastapi_app.lib.ocr.text_corrections.get_zone_labels", return_value=labels):
             words = tei_words(xml, "v", layout)
         self.assertEqual({p: [w.text for w in ws] for p, ws in words.items()}, {0: ["eins", "zwei", "drei"], 1: ["vier", "fünf"]})
-        self.assertEqual([w.line for w in words[1]], [2, 2])
+        self.assertEqual([w.line for w in words[1]], [3, 3])
 
     def test_variant_without_zone_labels_raises(self):
         with patch("fastapi_app.lib.ocr.text_corrections.get_zone_labels", return_value=None):
