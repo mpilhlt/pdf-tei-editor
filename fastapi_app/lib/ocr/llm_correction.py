@@ -53,7 +53,12 @@ REASON_NOT_LINES = f"text not structured in lines (a text object with more than 
 PROGRESS_PHASE = "Correcting OCR errors"
 
 PROVIDER_ERRORS = (LLMProviderError, UnusableResponseError, requests.RequestException)
-"""Errors of a review call that stop the pass (LLMRateLimitError is an LLMProviderError)."""
+"""
+Expected errors of a review call (LLMRateLimitError is an LLMProviderError); they are logged without a
+traceback. Any other error stops the pass too, but is logged with one.
+"""
+READ_ERRORS = (PyPdfError, pikepdf.PdfError, OSError)
+"""Expected errors when reading or saving the PDF; they are logged without a traceback."""
 
 
 @dataclass
@@ -75,11 +80,13 @@ class CorrectionRun:
     pages_reviewed: list[int]
     """The pages of the windows the LLM reviewed."""
     skipped: int
-    """Corrections not applied because patching their page failed."""
+    """Corrections not applied because patching their page or saving the PDF failed."""
     error: str | None
     """Why the pass stopped early or could not save, if it did."""
     pages_skipped: list[int] = field(default_factory=list)
-    """Selected pages not reviewed: their text layer cannot be patched or is not structured in lines."""
+    """
+    Selected pages not reviewed: their text layer cannot be patched or is not structured in lines.
+    """
 
 
 # ── Lines and patches ────────────────────────────────────────────────
@@ -195,8 +202,21 @@ def _not_reviewable(page: LayerPage) -> str | None:
 # ── The pass ─────────────────────────────────────────────────────────
 
 
-def _apply_corrections(pdf: pikepdf.Pdf, lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], run: CorrectionRun) -> None:
-    """Patch the corrections page by page into `pdf` and record the applied and skipped ones in `run`."""
+def _log_failure(message: str, error: Exception, expected: tuple[type[Exception], ...]) -> None:
+    """Log a failure of the pass as a warning, with a traceback if `error` is not of an `expected` type."""
+    if isinstance(error, expected):
+        logger.warning(f"{LOG_PREFIX}: {message}: {error}")
+    else:
+        logger.exception(f"{LOG_PREFIX}: {message}: {error!r}")
+
+
+def _apply_corrections(
+    pdf: pikepdf.Pdf, lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], run: CorrectionRun
+) -> None:
+    """
+    Patch the corrections page by page into `pdf` and record the applied and skipped ones in `run`.
+    `patch_text_layer` changes nothing when it fails, so a failing page leaves `pdf` as it was.
+    """
     with_patches, dropped = _correction_patches(lines, corrections)
     for description in dropped:
         logger.info(f"{LOG_PREFIX}: correction not applied, {description}")
@@ -206,8 +226,8 @@ def _apply_corrections(pdf: pikepdf.Pdf, lines: Sequence[LayerLine], corrections
     for page, items in sorted(by_page.items()):
         try:
             patch_text_layer(pdf, [patch for _, patches in items for patch in patches])
-        except ValueError as error:
-            logger.warning(f"{LOG_PREFIX}: {len(items)} correction(s) on page {page + 1} not applied: {error}")
+        except Exception as error:  # noqa: BLE001 - one page must not discard the others
+            _log_failure(f"{len(items)} correction(s) on page {page + 1} not applied", error, (ValueError,))
             run.skipped += len(items)
             continue
         run.corrections.extend(AppliedCorrection(page, c.old, c.new, c.rationale) for c, _ in items)
@@ -244,7 +264,9 @@ def _select_pages(pdf_path: Path, pages: list[int], run: CorrectionRun) -> tuple
     return layer, reviewable
 
 
-def _write_corrections(pdf_path: Path, lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], run: CorrectionRun) -> None:
+def _write_corrections(
+    pdf_path: Path, lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], run: CorrectionRun
+) -> None:
     """Patch the corrections into `pdf_path` in place (if any of them applies)."""
     temp: Path | None = None
     with pikepdf.open(pdf_path) as pdf:
@@ -262,8 +284,9 @@ async def correct_text_layer(
     Let an LLM correct the OCR errors of the text layer of `pdf_path` and write the corrections into it in place.
 
     Only pages selected by `pages_needing_review` whose text layer can be patched and is structured in lines are
-    reviewed. A provider error stops the review; the corrections collected so far are still applied. A page whose
-    patches cannot be applied is left unchanged. These problems are reported in the result, not raised.
+    reviewed. An error of a review call stops the review; the corrections collected so far are still applied. A
+    page whose patches cannot be applied is left unchanged, and if saving fails the file stays as it was. These
+    problems are reported in `error` and `skipped` of the result; the function does not raise.
 
     Args:
         pdf_path: The PDF with the OCR text layer; changed in place.
@@ -282,8 +305,8 @@ async def correct_text_layer(
         if not selected:
             return run
         layer, reviewable = await asyncio.to_thread(_select_pages, pdf_path, selected, run)
-    except (PyPdfError, pikepdf.PdfError, OSError) as error:
-        logger.warning(f"{LOG_PREFIX}: cannot read the text layer of {pdf_path.name}: {error}")
+    except Exception as error:  # noqa: BLE001 - the pass must never fail the OCR run
+        _log_failure(f"cannot read the text layer of {pdf_path.name}", error, READ_ERRORS)
         run.error = f"cannot read the text layer: {error}"
         return run
     if not reviewable:
@@ -296,8 +319,8 @@ async def correct_text_layer(
     for index, window in enumerate(review.windows):
         try:
             found, _, _ = await review_lines_window(review, index, provider, model_id, min_letter_similarity)
-        except PROVIDER_ERRORS as error:
-            logger.warning(f"{LOG_PREFIX}: review stopped at window {index + 1} of {total}: {error}")
+        except Exception as error:  # noqa: BLE001 - keep the corrections of the windows reviewed so far
+            _log_failure(f"review stopped at window {index + 1} of {total}", error, PROVIDER_ERRORS)
             run.error = f"LLM review stopped at window {index + 1} of {total}: {error}"
             break
         corrections.extend(found)
@@ -307,12 +330,11 @@ async def correct_text_layer(
     if corrections:
         try:
             await asyncio.to_thread(_write_corrections, pdf_path, lines, corrections, run)
-        except (pikepdf.PdfError, OSError) as error:
-            logger.warning(f"{LOG_PREFIX}: cannot save the corrected text layer of {pdf_path.name}: {error}")
+        except Exception as error:  # noqa: BLE001 - the temp file and atomic replace keep the original intact
+            _log_failure(f"cannot save the corrected text layer of {pdf_path.name}", error, READ_ERRORS)
             run.error = f"cannot save the corrected text layer: {error}"
             run.skipped += len(run.corrections)
             run.corrections = []
-    logger.info(
-        f"{LOG_PREFIX}: {len(run.corrections)} correction(s) applied on {len(run.pages_reviewed)} reviewed page(s), {run.skipped} skipped"
-    )
+    applied, reviewed = len(run.corrections), len(run.pages_reviewed)
+    logger.info(f"{LOG_PREFIX}: {applied} correction(s) applied on {reviewed} reviewed page(s), {run.skipped} skipped")
     return run

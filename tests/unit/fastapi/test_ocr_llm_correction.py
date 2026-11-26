@@ -25,7 +25,15 @@ from fastapi_app.lib.ocr.llm_correction import (
     patches_from_corrections,
     review_lines_for_pages,
 )
-from fastapi_app.lib.ocr.text_layer import LayerLine, LayerPage, LayerWord, WordPatch, layer_lines, patch_text_layer, read_text_layer
+from fastapi_app.lib.ocr.text_layer import (
+    LayerLine,
+    LayerPage,
+    LayerWord,
+    WordPatch,
+    layer_lines,
+    patch_text_layer,
+    read_text_layer,
+)
 from tests.unit.fastapi.test_text_layer import make_digital_pdf, make_layer_pdf
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -42,11 +50,13 @@ def answer(*items: tuple[str, str, str]) -> str:
 class FakeProvider:
     """Returns the given answers in turn; an exception in the list is raised instead."""
 
-    def __init__(self, responses: Sequence[str | Exception]) -> None:
+    def __init__(self, responses: Sequence[str | Exception | None]) -> None:
         self.responses = list(responses)
         self.user_prompts: list[str] = []
 
-    async def chat_completion(self, model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+    async def chat_completion(
+        self, model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2
+    ) -> str | None:
         self.user_prompts.append(user_prompt)
         response = self.responses.pop(0)
         if isinstance(response, Exception):
@@ -72,7 +82,10 @@ class CorrectTextLayerTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp)
 
     def make_pdf(self, extra: Sequence[Path] = (), fixture_pages: int = 1) -> Path:
-        """Copy the fixture into the temp dir, with `fixture_pages` copies of its page and the first page of each `extra` PDF."""
+        """
+        Copy the fixture into the temp dir, with `fixture_pages` copies of its page and the first page
+        of each `extra` PDF.
+        """
         path = self.tmp / "doc.pdf"
         shutil.copy(FIXTURE, path)
         if fixture_pages == 1 and not extra:
@@ -86,7 +99,9 @@ class CorrectTextLayerTest(unittest.TestCase):
             source.close()
         return path
 
-    def run_pass(self, path: Path, provider: FakeProvider, selected: list[int], threshold: float = 0.7) -> CorrectionRun:
+    def run_pass(
+        self, path: Path, provider: FakeProvider, selected: list[int], threshold: float = 0.7
+    ) -> CorrectionRun:
         with mock.patch.object(llm_correction, "pages_needing_review", return_value=selected):
             return asyncio.run(correct_text_layer(path, provider, "m", ["de"], threshold))  # type: ignore[arg-type]
 
@@ -125,7 +140,7 @@ class CorrectTextLayerTest(unittest.TestCase):
         self.assertIn("Regel12).", words(path, 0))
         self.assertIn("Regel’).", words(path, 2))
 
-    def test_unpatchable_page_skipped(self) -> None:
+    def test_page_patch_failure_skipped(self) -> None:
         path = self.make_pdf(fixture_pages=2)
         provider = FakeProvider([answer(("0001", "Regel’).", "Regel12)."), ("0010", "Regel’).", "Regel12)."))])
 
@@ -143,6 +158,52 @@ class CorrectTextLayerTest(unittest.TestCase):
         self.assertEqual([c.page for c in run.corrections], [0])
         self.assertIn("Regel12).", words(path, 0))
         self.assertIn("Regel’).", words(path, 1))
+
+    def assert_first_window_kept(self, second: Exception | None) -> None:
+        """Window 2 fails with `second` (None: an empty answer); window 1's correction is still applied."""
+        path = self.make_pdf(fixture_pages=3)
+        provider = FakeProvider([answer(("0001", "Regel’).", "Regel12).")), second])
+        with self.assertLogs("fastapi_app.lib.ocr.llm_correction", level="WARNING"):
+            run = self.run_pass(path, provider, [0, 2])
+        self.assertIsNotNone(run.error)
+        self.assertEqual(run.pages_reviewed, [0])
+        self.assertEqual([c.new for c in run.corrections], ["Regel12)."])
+        self.assertIn("Regel12).", words(path, 0))
+
+    def test_empty_answer_keeps_earlier_windows(self) -> None:
+        self.assert_first_window_kept(None)
+
+    def test_unexpected_error_keeps_earlier_windows(self) -> None:
+        self.assert_first_window_kept(KeyError("message"))
+
+    def test_unexpected_patch_error_skips_only_its_page(self) -> None:
+        path = self.make_pdf(fixture_pages=2)
+        provider = FakeProvider([answer(("0001", "Regel’).", "Regel12)."), ("0010", "Regel’).", "Regel12)."))])
+
+        def fail_on_page_0(pdf: pikepdf.Pdf, patches: Sequence[WordPatch]) -> None:
+            if any(p.word.page == 0 for p in patches):
+                raise RuntimeError("unexpected")
+            patch_text_layer(pdf, patches)
+
+        with mock.patch.object(llm_correction, "patch_text_layer", side_effect=fail_on_page_0):
+            with self.assertLogs("fastapi_app.lib.ocr.llm_correction", level="WARNING"):
+                run = self.run_pass(path, provider, [0, 1])
+        self.assertEqual(run.skipped, 1)
+        self.assertEqual([c.page for c in run.corrections], [1])
+        self.assertIn("Regel’).", words(path, 0))
+        self.assertIn("Regel12).", words(path, 1))
+
+    def test_save_failure_reports_error(self) -> None:
+        path = self.make_pdf()
+        before = path.read_bytes()
+        provider = FakeProvider([answer(("0001", "Regel’).", "Regel12)."))])
+        with mock.patch.object(pikepdf.Pdf, "save", side_effect=RuntimeError("disk on fire")):
+            with self.assertLogs("fastapi_app.lib.ocr.llm_correction", level="WARNING"):
+                run = self.run_pass(path, provider, [0])
+        self.assertIn("disk on fire", run.error or "")
+        self.assertEqual((run.corrections, run.skipped), ([], 1))
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(self.tmp.iterdir()), [path])
 
     def test_stricter_threshold_drops_rewrite(self) -> None:
         corrections = [("0005", "Gesetz", "Gesetze"), ("0007", "Begründung", "Bedrängung")]  # ratios 0.92 and 0.6
