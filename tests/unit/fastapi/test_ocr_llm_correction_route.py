@@ -223,11 +223,17 @@ class TestLlmCorrectionMessage(unittest.TestCase):
         self.assertEqual(self.message(pages_selected=[0, 1], pages_skipped=[0, 1]), "2 pages could not be corrected (text layer not patchable or not line-structured).")
         self.assertEqual(self.message(pages_selected=[0], pages_skipped=[0]), "1 page could not be corrected (text layer not patchable or not line-structured).")
 
+    def test_selected_pages_outside_the_layer(self) -> None:
+        self.assertEqual(self.message(pages_selected=[7]), "1 page could not be corrected (text layer not patchable or not line-structured).")
+
+    def test_one_correction_dropped(self) -> None:
+        self.assertEqual(self.message(pages_selected=[0], pages_reviewed=[0], found=1), "1 correction was dropped or could not be applied.")
+
     def test_nothing_found(self) -> None:
         self.assertEqual(self.message(pages_selected=[0, 1, 2], pages_reviewed=[0, 1], pages_skipped=[2]), "No OCR errors found on 2 reviewed pages.")
 
     def test_found_but_not_applied(self) -> None:
-        self.assertEqual(self.message(pages_selected=[0], pages_reviewed=[0], found=3, skipped=1), "3 corrections could not be applied.")
+        self.assertEqual(self.message(pages_selected=[0], pages_reviewed=[0], found=3, skipped=1), "3 corrections were dropped or could not be applied.")
 
     def test_corrected(self) -> None:
         applied = [llm_correction.AppliedCorrection(0, "a’)", "a1)", ""), llm_correction.AppliedCorrection(0, "b’)", "b2)", "")]

@@ -150,6 +150,21 @@ class CorrectTextLayerTest(unittest.TestCase):
         run = self.run_pass(path, provider, [0])
         self.assertEqual((run.found, len(run.corrections)), (2, 1))
 
+    def test_number_change_outside_marker_not_written(self) -> None:
+        path = self.make_pdf()
+        provider = FakeProvider([answer(("0001", "Regel’).", "Regel1234)."))])
+        with self.assertLogs("fastapi_app.lib.ocr.llm_correction", level="INFO") as logs:
+            run = self.run_pass(path, provider, [0])
+        self.assertIn("number change outside a footnote marker", "\\n".join(logs.output))
+        self.assertEqual((run.found, run.corrections), (1, []))
+        self.assertIn("Regel’).", words(path, 0))
+
+    def test_pages_outside_the_layer_skipped(self) -> None:
+        path = self.make_pdf()
+        with self.assertLogs("fastapi_app.lib.ocr.llm_correction", level="INFO"):
+            run = self.run_pass(path, FakeProvider([]), [5])
+        self.assertEqual((run.pages_selected, run.pages_skipped, run.pages_reviewed), ([5], [5], []))
+
     def test_no_pages_selected_makes_no_call(self) -> None:
         path = self.make_pdf()
         before = path.read_bytes()
@@ -409,7 +424,7 @@ class PatchesFromCorrectionsTest(unittest.TestCase):
         ]:
             self.assertTrue(_marker_change(old, new), (old, new))
         for old, new in [("1920", "1926"), ("12", "13"), ("3a", "3b"), ("Regel", "Regel12"), ("tut?!?!?", "tut3"),
-                         ("(’)", "(1)"), ("ab’).", "ac1)."), ("?!", "1234")]:
+                         ("(’)", "(1)"), ("ab’).", "ac1)."), ("?!", "1234"), ("§", "8"), ("-", "1"), ("Abs.", "Abs1.")]:
             self.assertFalse(_marker_change(old, new), (old, new))
 
     def test_marker_changes_of_words_without_letters_kept(self) -> None:
@@ -425,8 +440,26 @@ class PatchesFromCorrectionsTest(unittest.TestCase):
         self.assert_dropped("1920", "1926", REASON_NUMBER, "im Jahre 1920 erlassen")
         self.assert_dropped("S. 12", "S. 13", REASON_NUMBER, "vgl. S. 12 oben")
         self.assert_dropped("12", "13", REASON_NUMBER, "Fußnote 12 oben")
-        self.assert_dropped("3a", "3b", REASON_NUMBER, "Art. 3a GG")
+        self.assert_dropped("3a", "3b", REASON_FEW_LETTERS, "Art. 3a GG")  # same digits, a short word
         self.assert_dropped("zu", "zur", REASON_FEW_LETTERS, "zu finden")
+
+    def test_number_changes_of_long_words_need_marker_shape(self) -> None:
+        for old, new, text in [
+            ("Regel12).", "Regel13).", None),
+            ("Seite12", "Seite13", None),
+            ("Regel’).", "Regel1234).", None),
+            ("Abs.", "Abs1.", "nach Abs. 2"),
+            ("BGBl.", "BGBl12.", "vgl. BGBl. I"),
+            ("§", "8", "nach § 3"),
+            ("-", "1", "a - b"),
+        ]:
+            with self.subTest(old=old, new=new):
+                self.assert_dropped(old, new, REASON_NUMBER, text)
+
+    def test_marker_changes_accepted_in_pipeline(self) -> None:
+        for old, new, text in [("Regel’).", "Regel12).", None), ("tut?!?", "tut312", None), ("?!", "12", "siehe ?! unten")]:
+            with self.subTest(old=old, new=new):
+                self.assert_kept(old, new, text)
 
     def test_patches_apply_to_the_fixture(self) -> None:
         patches, _ = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")], 0.7)

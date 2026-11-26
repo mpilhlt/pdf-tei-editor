@@ -45,7 +45,7 @@ from fastapi_app.lib.ocr.text_layer import (
     patch_text_layer,
     read_text_layer,
 )
-from fastapi_app.lib.ocr.text_quality import pages_needing_review
+from fastapi_app.lib.ocr.text_quality import MARKER_GARBAGE, pages_needing_review
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,8 @@ e.g. "tut312", "Regel12)." or "12".
 """
 MAX_MISREAD_MARKER = 4
 """The most characters OCR reads a footnote marker as."""
+MISREAD_MARKER_CHARS = frozenset(MARKER_GARBAGE + ")].,;:")
+"""The characters a misread footnote marker may consist of."""
 
 PROGRESS_PHASE = "Correcting OCR errors"
 
@@ -187,7 +189,7 @@ def _marker_change(old: str, new: str) -> bool:
     """
     Whether the change from `old` to `new` restores a footnote marker that OCR misread, judged by its shape
     (with or without a bracket): `new` is letters W, 1-3 digits and trailing punctuation P (see `MARKER_WORD`),
-    and `old` is W, 1-4 characters that are neither letters, digits nor spaces, and P. W may be empty for a
+    and `old` is W, 1-4 characters OCR reads a marker as (`MISREAD_MARKER_CHARS`), and P. W may be empty for a
     standalone marker. E.g. "tut?!?" -> "tut312", "würde‘." -> "würde165.", "?!" -> "12", "*," -> "7,".
     """
     match = MARKER_WORD.match(new)
@@ -197,20 +199,25 @@ def _marker_change(old: str, new: str) -> bool:
     if not old.startswith(word) or not old.endswith(end):
         return False
     misread = old[len(word) : len(old) - len(end)]
-    return 1 <= len(misread) <= MAX_MISREAD_MARKER and not any(c.isalnum() or c.isspace() for c in misread)
+    return 1 <= len(misread) <= MAX_MISREAD_MARKER and all(c in MISREAD_MARKER_CHARS for c in misread)
+
+
+def _digits(text: str) -> str:
+    return "".join(char for char in text if char.isdigit())
 
 
 def _implausible_word(old: str, new: str, min_letter_similarity: float) -> str | None:
     """
-    Why the change of a single word from `old` to `new` is not plausible as an OCR fix, or None. A word with
-    fewer than 3 letters on either side may only change in a footnote marker (see `_marker_change`); the
-    letters of other words must be similar (see `letters_similar`).
+    Why the change of a single word from `old` to `new` is not plausible as an OCR fix, or None. A change of
+    the digits of a word is only accepted as a restored footnote marker (see `_marker_change`), whatever the
+    length of the word. Otherwise the letters must be similar (see `letters_similar`), and a word with fewer
+    than 3 letters on either side cannot be checked and is not changed.
     """
+    if _digits(old) != _digits(new):
+        return None if _marker_change(old, new) else REASON_NUMBER
     letters = [sum(char.isalpha() for char in text.casefold()) for text in (old, new)]
     if min(letters) < MIN_LETTERS:
-        if _marker_change(old, new):
-            return None
-        return REASON_NUMBER if any(c.isdigit() for c in old + new) else REASON_FEW_LETTERS
+        return REASON_FEW_LETTERS
     return None if letters_similar(old, new, min_letter_similarity) else REASON_LETTERS
 
 
@@ -355,6 +362,8 @@ def _select_pages(pdf_path: Path, pages: list[int], run: CorrectionRun) -> tuple
     reviewable: list[int] = []
     for index in sorted(set(pages)):
         if not 0 <= index < len(layer):
+            logger.info(f"{LOG_PREFIX}: page {index + 1} not reviewed: not in the text layer")
+            run.pages_skipped.append(index)
             continue
         reason = _not_reviewable(layer[index])
         if reason is not None:

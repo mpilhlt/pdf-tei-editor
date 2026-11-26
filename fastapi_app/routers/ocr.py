@@ -394,13 +394,14 @@ def _llm_correction_message(run: llm_correction.CorrectionRun, model_id: str) ->
     elif not run.pages_selected:
         message = "No pages needed correction."
     elif not run.pages_reviewed:
-        skipped = len(run.pages_skipped) - len(run.pages_over_limit)
+        # every selected page was skipped, beyond the limit or not in the text layer
+        skipped = len(run.pages_selected) - len(run.pages_over_limit)
         message = f"{_pages(skipped)} could not be corrected (text layer not patchable or not line-structured)." if skipped else ""
     elif not run.found:
         reviewed = len(run.pages_reviewed)
         message = f"No OCR errors found on {reviewed} reviewed {'page' if reviewed == 1 else 'pages'}."
     else:
-        message = f"{run.found} {'correction' if run.found == 1 else 'corrections'} could not be applied."
+        message = f"{run.found} {'correction' if run.found == 1 else 'corrections'} {'was' if run.found == 1 else 'were'} dropped or could not be applied."
     if run.pages_over_limit:
         over = len(run.pages_over_limit)
         note = f"{_pages(over)} {'was' if over == 1 else 'were'} not reviewed: the correction reviews at most {run.max_pages} pages per run."
