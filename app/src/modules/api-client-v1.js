@@ -493,10 +493,11 @@
  * @property {TextQualityReport} quality - Text layer quality after OCR
  * @property {Array<OcrLlmCorrection>=} llm_corrections - Corrections made by the LLM correction pass, if it was requested
  * @property {string|null=} llm_correction_error - Why the LLM correction pass stopped or failed; the OCR result is kept
+ * @property {boolean=} llm_correction_cancelled - Whether the user cancelled the LLM correction pass; the OCR result was stored before it started and is kept
  */
 
 /**
- * @typedef {'queued'|'running'|'done'|'failed'} OcrJobStatus
+ * @typedef {'queued'|'running'|'done'|'failed'|'cancelled'} OcrJobStatus
  */
 
 /**
@@ -514,7 +515,7 @@
  * @typedef {Object} OcrJob
  * @property {string} job_id - Id of the job
  * @property {string} stable_id - stable_id of the PDF
- * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`) or 'failed' (see `error`)
+ * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`), 'failed' (see `error`) or 'cancelled' (stopped by the user, see {@link ApiClientV1#ocrCancelJob})
  * @property {OcrProgress|null=} progress - Progress of the run if the status is 'running' and the engine reports it
  * @property {OcrResponse|null=} result - Result of the run if the status is 'done'
  * @property {string|null=} error - Error message if the status is 'failed'
@@ -2512,6 +2513,20 @@ export class ApiClientV1 {
   async ocrJob(jobId) {
     const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}`
     return this.callApi(endpoint);
+  }
+
+  /**
+   * Cancel an OCR run started with {@link ApiClientV1#ocr}; the stored PDF stays unchanged. A queued
+   * job stops at once, a running one at the next progress report of the engine or of the LLM
+   * correction pass. Poll {@link ApiClientV1#ocrJob} until the status is 'cancelled', or 'done' if
+   * only the correction pass was stopped. A finished job is returned as it is.
+   *
+   * @param {string} jobId - Id of the job
+   * @returns {Promise<OcrJob>}
+   */
+  async ocrCancelJob(jobId) {
+    const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}/cancel`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

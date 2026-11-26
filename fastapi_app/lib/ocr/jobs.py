@@ -7,6 +7,9 @@ directory that all workers share, not in memory. The same directory holds two lo
 
 - the store lock makes checking for a running job of a PDF and creating a new one atomic
 - the run lock lets only one OCR run happen at a time on the server, since OCR uses all cores
+
+A job is cancelled with a marker file next to the job (`<job_id>.cancel`), since the worker that
+runs the job rewrites the job file with every progress report and would overwrite a flag in it.
 """
 
 import asyncio
@@ -20,6 +23,7 @@ from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from fastapi_app.lib.models.models_ocr import OcrJob, OcrJobStatus, OcrProgress, OcrResponse
+from fastapi_app.lib.ocr.progress import OcrCancelled
 from fastapi_app.lib.utils.file_lock import NonBlockingFileLock, exclusive_file_lock
 
 JOB_MAX_AGE_SECONDS = 24 * 3600
@@ -74,6 +78,9 @@ class OcrJobStore:
     def _path(self, job_id: str) -> Path:
         return self.directory / f"{job_id}.json"
 
+    def _cancel_path(self, job_id: str) -> Path:
+        return self.directory / f"{job_id}.cancel"
+
     def _write(self, job: OcrJob) -> None:
         """Write a job atomically, so that a concurrent reader never sees a partial file."""
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -127,9 +134,14 @@ class OcrJobStore:
 
         Yields:
             The job with the status 'running'
+
+        Raises:
+            OcrCancelled: if the job is cancelled while it waits
         """
         lock = NonBlockingFileLock(self.directory / ".run.lock")
         while not lock.try_acquire():
+            if self.is_cancel_requested(job.job_id):
+                raise OcrCancelled()
             await asyncio.sleep(self.poll_seconds)
         try:
             yield self._set_status(job, "running")
@@ -150,9 +162,28 @@ class OcrJobStore:
         """Record the failure of a job."""
         return self._set_status(job, "failed", error=error, error_status=error_status)
 
+    def request_cancel(self, job: OcrJob) -> None:
+        """
+        Ask the worker that runs a queued or running job to stop it. The job gets the status
+        'cancelled' when the worker has stopped it (see `cancel()`).
+        """
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self._cancel_path(job.job_id).touch()
+
+    def is_cancel_requested(self, job_id: str) -> bool:
+        """Return whether the job was asked to stop with `request_cancel()`."""
+        return self._cancel_path(job_id).exists()
+
+    def cancel(self, job: OcrJob) -> OcrJob:
+        """Record that a job was stopped because the user cancelled it."""
+        # no `error`: the client treats a 200 response with `error` as a failure (legacy protocol)
+        return self._set_status(job, "cancelled")
+
     def _set_status(self, job: OcrJob, status: OcrJobStatus, result: Optional[OcrResponse] = None, error: Optional[str] = None, error_status: Optional[int] = None) -> OcrJob:
         updated = job.model_copy(update={"status": status, "progress": None, "result": result, "error": error, "error_status": error_status, "updated_at": _now()})
         self._write(updated)
+        if status not in ACTIVE_STATUSES:
+            self._cancel_path(job.job_id).unlink(missing_ok=True)
         return updated
 
     def get(self, job_id: str) -> Optional[OcrJob]:
@@ -180,10 +211,16 @@ class OcrJobStore:
         return job
 
     def cleanup(self, max_age: float = JOB_MAX_AGE_SECONDS) -> None:
-        """Delete job files older than max_age seconds. Active jobs are kept."""
+        """Delete job files and cancel markers older than max_age seconds. Active jobs are kept."""
         if not self.directory.exists():
             return
         limit = time.time() - max_age
+        for path in self.directory.glob("*.cancel"):
+            try:
+                if path.stat().st_mtime < limit:
+                    path.unlink()
+            except FileNotFoundError:
+                pass
         for path in self.directory.glob("*.json"):
             try:
                 if path.stat().st_mtime >= limit:

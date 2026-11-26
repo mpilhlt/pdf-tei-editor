@@ -33,7 +33,7 @@ import pypdfium2 as pdfium
 from fastapi_app.lib.models.models_ocr import OcrJob, TextQualityReport
 from fastapi_app.lib.ocr.base import OcrEngine, OcrOption, OcrOptionValue, OcrResult, OcrWord
 from fastapi_app.lib.ocr.jobs import OcrJobConflict, OcrJobStore
-from fastapi_app.lib.ocr.progress import ProgressTracker, report_progress
+from fastapi_app.lib.ocr.progress import OcrCancelled, ProgressTracker, progress_reporter, report_progress
 from fastapi_app.lib.utils.file_lock import NonBlockingFileLock
 from fastapi_app.lib.ocr.languages import normalize_ocr_language, to_iso639_3
 from fastapi_app.lib.ocr.layout_check import (
@@ -544,6 +544,69 @@ class TestOcrRouter(unittest.TestCase):
         self.assertEqual(self.wait_for(job)["status"], "done")
         self.assertEqual(len(self.engine.calls), 1)
 
+    def test_running_job_is_cancelled_at_the_next_progress_report(self):
+        reports_after_cancel = []
+
+        def during_recognize() -> None:
+            job_file = next((self.tmp / "jobs").glob("*.json"))
+            job_id = job_file.stem
+            response = self.client.post(f"/ocr/jobs/{job_id}/cancel")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["status"], "running")
+            report_progress("Recognizing text", 1, 4, "page")
+            reports_after_cancel.append(True)
+
+        self.engine.during_recognize = during_recognize
+        job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        self.assertEqual(job["status"], "cancelled")
+        self.assertIsNone(job["error"])
+        self.assertEqual(reports_after_cancel, [])
+        # the PDF is not replaced and the cancel marker is gone
+        self.assertEqual(self.repo.updates, [])
+        self.assertEqual(list((self.tmp / "jobs").glob("*.cancel")), [])
+        # the PDF can be processed again
+        self.engine.during_recognize = None
+        self.assertEqual(self.run_ocr({"stable_id": "pdf1", "engine": "fake"})["status"], "done")
+
+    def test_cancelled_run_of_an_engine_without_progress_reports_is_discarded(self):
+        def during_recognize() -> None:
+            job_id = next((self.tmp / "jobs").glob("*.json")).stem
+            self.client.post(f"/ocr/jobs/{job_id}/cancel")
+
+        self.engine.during_recognize = during_recognize
+        job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(self.repo.updates, [])
+
+    def test_engine_error_after_cancel_is_reported_as_cancelled(self):
+        def during_recognize() -> None:
+            job_id = next((self.tmp / "jobs").glob("*.json")).stem
+            self.client.post(f"/ocr/jobs/{job_id}/cancel")
+
+        self.engine.during_recognize = during_recognize
+        # e.g. an engine that wraps the cancellation raised in its progress report in its own error
+        self.engine.error = RuntimeError("pipeline aborted")
+        job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        self.assertEqual(job["status"], "cancelled")
+
+    def test_queued_job_is_cancelled_at_once(self):
+        run_lock = NonBlockingFileLock(self.jobs.directory / ".run.lock")
+        self.assertTrue(run_lock.try_acquire())
+        try:
+            job = self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake"}).json()
+            self.assertEqual(self.client.post(f"/ocr/jobs/{job['job_id']}/cancel").status_code, 200)
+            self.assertEqual(self.wait_for(job)["status"], "cancelled")
+        finally:
+            run_lock.release()
+        self.assertEqual(self.engine.calls, [])
+
+    def test_cancel_of_a_finished_or_foreign_job(self):
+        job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
+        response = self.client.post(f"/ocr/jobs/{job['job_id']}/cancel")
+        self.assertEqual((response.status_code, response.json()["status"]), (200, "done"))
+        self.assertEqual(list((self.tmp / "jobs").glob("*.cancel")), [])
+        self.assertEqual(self.client.post("/ocr/jobs/unknown/cancel").status_code, 404)
+
     def test_jobs_are_private(self):
         job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
         self.assertEqual(self.client.get("/ocr/jobs/nope").status_code, 404)
@@ -647,6 +710,31 @@ class TestProgressTracker(unittest.TestCase):
 
     def test_report_without_reporter_is_ignored(self):
         report_progress("Recognizing text", 1, 2)
+
+    def test_report_raises_when_cancelled(self):
+        cancelled = [False]
+        reports = []
+        with progress_reporter(reports.append, lambda: cancelled[0]):
+            report_progress("Recognizing text", 1, 2)
+            cancelled[0] = True
+            with self.assertRaises(OcrCancelled):
+                report_progress("Recognizing text", 2, 2)
+        self.assertEqual(len(reports), 1)
+        # not an Exception, so that handlers that keep a run going do not catch it
+        self.assertFalse(issubclass(OcrCancelled, Exception))
+
+    def test_cancel_marker_of_the_store(self):
+        store = OcrJobStore(Path(tempfile.mkdtemp()))
+        try:
+            job = store.create("pdf1", "alice")
+            self.assertFalse(store.is_cancel_requested(job.job_id))
+            store.request_cancel(job)
+            self.assertTrue(store.is_cancel_requested(job.job_id))
+            cancelled = store.cancel(job)
+            self.assertEqual(cancelled.status, "cancelled")
+            self.assertFalse(store.is_cancel_requested(job.job_id))
+        finally:
+            shutil.rmtree(store.directory)
 
 
 class UnavailableEngine(FakeEngine):

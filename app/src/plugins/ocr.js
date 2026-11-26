@@ -33,6 +33,28 @@ const OCR_POLL_INTERVAL_MS = 2000
  */
 
 /**
+ * Thrown by {@link OcrPlugin#recognize} when the run was cancelled before its result was stored:
+ * the PDF is unchanged
+ */
+export class OcrCancelledError extends Error {
+  constructor() {
+    super('Text recognition was cancelled.')
+    this.name = 'OcrCancelledError'
+  }
+}
+
+/**
+ * Options of {@link OcrPlugin#recognize}
+ * @typedef {object} OcrRecognizeOptions
+ * @property {(status: OcrJobStatus, message: string, job: OcrJob) => void} [onStatus] - Called with the
+ *   initial status of the job ('queued' or 'running') and whenever the status or the progress changes
+ *   while it is not finished, with a description for the user (see {@link describeOcrJob})
+ * @property {AbortSignal} [signal] - Cancels the run when aborted: the server stops it at the next
+ *   progress report. If the OCR result was already stored, only the LLM correction pass stops and
+ *   the result has `llm_correction_cancelled`
+ */
+
+/**
  * @typedef {object} OcrRunOptions
  * @property {string} engine - Id of the OCR engine
  * @property {string[]} languages - Normalized language codes
@@ -275,18 +297,18 @@ class OcrPlugin extends Plugin {
    * The server runs OCR in the background, since a long document can take longer than a reverse
    * proxy waits for a response. This method starts the job and polls it until it is finished.
    * Only one OCR run happens at a time on the server, so the job may first wait in the queue.
+   *
+   * The OCR result is stored before the optional LLM correction pass starts, so that it is kept if
+   * the pass fails or is cancelled.
    * @param {string} stableId - stable_id of the PDF
    * @param {OcrRunOptions} run - Engine and parameters
-   * @param {(status: OcrJobStatus, message: string) => void} [onStatus] - Called with the initial status of
-   *   the job ('queued' or 'running') and whenever the status or the progress changes while it is not
-   *   finished, with a description for the user (see {@link describeOcrJob})
-   * @param {{before?: () => void, after?: () => void}} [blocker] - Called around the dialog that asks for the
-   *   API key of the language model's provider if the server needs it, e.g. to lift a spinner that would cover it
+   * @param {OcrRecognizeOptions} [recognizeOptions]
    * @returns {Promise<OcrResponse>}
+   * @throws {OcrCancelledError} If the run was cancelled before the OCR result was stored
    * @throws {Error} An ApiError (invalid request, or 409 if OCR is already running for this PDF) or
    *   ServerError (failure of the engine or the server) if the run fails
    */
-  async recognize(stableId, run, onStatus, blocker) {
+  async recognize(stableId, run, { onStatus, signal } = {}) {
     const logger = this.getDependency('logger')
     logger.info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
@@ -299,22 +321,40 @@ class OcrPlugin extends Plugin {
       options: run.options,
       rebuild: Boolean(run.rebuild),
       ...(model ? { llm_correction: true, provider_id: model.providerId, model_id: model.modelId } : {})
-    }), blocker)
+    }))
+    const jobId = job.job_id
+    let cancelRequested = false
+    const requestCancel = () => {
+      if (cancelRequested) return
+      cancelRequested = true
+      testLog('OCR_CANCEL_REQUESTED', { stableId, jobId })
+      client.apiClient.ocrCancelJob(jobId).catch(error => logger.warn(`Could not cancel OCR job ${jobId}: ${String(error)}`))
+    }
+    if (signal?.aborted) requestCancel()
+    signal?.addEventListener('abort', requestCancel, { once: true })
     /** @type {OcrJobStatus|null} */
     let reported = null
     let described = ''
-    while (job.status === 'queued' || job.status === 'running') {
-      if (job.status !== reported) {
-        reported = job.status
-        testLog('OCR_JOB_STATUS', { stableId, status: job.status })
+    try {
+      while (job.status === 'queued' || job.status === 'running') {
+        if (job.status !== reported) {
+          reported = job.status
+          testLog('OCR_JOB_STATUS', { stableId, status: job.status })
+        }
+        const message = describeOcrJob(job)
+        if (message !== described) {
+          described = message
+          onStatus?.(job.status, message, job)
+        }
+        await new Promise(resolve => setTimeout(resolve, OCR_POLL_INTERVAL_MS))
+        job = await client.apiClient.ocrJob(jobId)
       }
-      const message = describeOcrJob(job)
-      if (message !== described) {
-        described = message
-        onStatus?.(job.status, message)
-      }
-      await new Promise(resolve => setTimeout(resolve, OCR_POLL_INTERVAL_MS))
-      job = await client.apiClient.ocrJob(job.job_id)
+    } finally {
+      signal?.removeEventListener('abort', requestCancel)
+    }
+    if (job.status === 'cancelled') {
+      testLog('OCR_CANCELLED', { stableId })
+      throw new OcrCancelledError()
     }
     if (job.status === 'failed') {
       const message = job.error || 'Text recognition failed'
@@ -326,11 +366,13 @@ class OcrPlugin extends Plugin {
     testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
     const corrections = result.llm_corrections ?? []
     const error = result.llm_correction_error ?? null
-    testLog('OCR_LLM_CORRECTION', { requested: Boolean(model), corrections: corrections.length, error })
+    testLog('OCR_LLM_CORRECTION', { requested: Boolean(model), corrections: corrections.length, error, cancelled: Boolean(result.llm_correction_cancelled) })
     if (corrections.length) {
       notify(describeLlmCorrections(corrections), 'primary', 'info-circle', 15000)
     }
-    if (error) {
+    if (result.llm_correction_cancelled) {
+      notify('The correction with a language model was cancelled. The result of the text recognition was kept.', 'primary', 'info-circle', 10000)
+    } else if (error) {
       notify(`The correction with a language model did not finish: ${error}`, 'warning', 'exclamation-triangle', 10000)
     } else if (model && !corrections.length && result.message) {
       // Why nothing was corrected, e.g. "No OCR errors found on 3 reviewed pages."

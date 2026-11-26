@@ -112,7 +112,7 @@ test.describe('OCR dialog: LLM correction', () => {
       expect(requestBody.provider_id).toBe('mock-provider');
       expect(requestBody.model_id).toBe('mock-model');
       const logged = await waitForTestMessage(consoleLogs, 'OCR_LLM_CORRECTION', 10000);
-      expect(logged.value).toEqual({ requested: true, corrections: 2, error: null });
+      expect(logged.value).toEqual({ requested: true, corrections: 2, error: null, cancelled: false });
       await expect(page.locator('sl-alert', { hasText: '“1O” → “10”' })).toBeVisible();
 
       // the choice is remembered
@@ -168,7 +168,7 @@ test.describe('OCR dialog: LLM correction', () => {
       expect(prompted).toEqual(['mock-provider']);
       expect(posts).toBe(2);
       const logged = await waitForTestMessage(consoleLogs, 'OCR_LLM_CORRECTION', 10000);
-      expect(logged.value).toEqual({ requested: true, corrections: 0, error: null });
+      expect(logged.value).toEqual({ requested: true, corrections: 0, error: null, cancelled: false });
       await expect(page.locator('sl-alert', { hasText: message })).toBeVisible();
     } finally {
       stopErrorMonitoring();

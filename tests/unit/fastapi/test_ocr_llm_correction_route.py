@@ -143,8 +143,11 @@ class TestOcrLlmCorrectionRoute(unittest.TestCase):
         self.assertEqual(result["llm_corrections"], [{"page": 0, "old": "Regel’).", "new": "Regel12).", "rationale": "OCR"}])
         self.assertIsNone(result["llm_correction_error"])
         self.assertEqual(result["message"], "done Corrected 1 OCR error with m.")
-        self.assertEqual(len(self.storage.saved), 1)
-        stored = layer_words(self.storage.saved[0], self.tmp / "check.pdf")
+        # the OCR result is stored before the correction starts, the corrected PDF afterwards
+        self.assertEqual(len(self.storage.saved), 2)
+        ocr_only = layer_words(self.storage.saved[0], self.tmp / "check-ocr.pdf")
+        self.assertIn("Regel’).", ocr_only)
+        stored = layer_words(self.storage.saved[-1], self.tmp / "check.pdf")
         self.assertIn("Regel12).", stored)
         self.assertNotIn("Regel’).", stored)
         records = self.stored_metadata()["text_corrections"]
@@ -201,6 +204,29 @@ class TestOcrLlmCorrectionRoute(unittest.TestCase):
         self.assertIn("LLM correction failed", result["message"])
         stored = layer_words(self.storage.saved[0], self.tmp / "check.pdf")
         self.assertIn("Regel’).", stored)
+
+    def test_cancelled_correction_keeps_ocr_result(self) -> None:
+        jobs = self.jobs
+        original = self.provider.chat_completion
+
+        async def cancel_then_answer(model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+            # the user cancels while the LLM reviews the first window
+            job_id = next(jobs.directory.glob("*.json")).stem
+            (jobs.directory / f"{job_id}.cancel").touch()
+            return await original(model_id, system_prompt, user_prompt, temperature)
+
+        with patch.object(self.provider, "chat_completion", cancel_then_answer):
+            result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
+        self.assertTrue(result["llm_correction_cancelled"])
+        self.assertEqual(result["llm_corrections"], [])
+        self.assertIsNone(result["llm_correction_error"])
+        self.assertEqual(result["message"], "done The correction with m was cancelled.")
+        # only the OCR result is stored, with its OCR record and without the correction
+        self.assertEqual(len(self.storage.saved), 1)
+        self.assertIn("Regel’).", layer_words(self.storage.saved[0], self.tmp / "check.pdf"))
+        metadata = self.stored_metadata()
+        self.assertIn("ocr", metadata)
+        self.assertEqual(metadata["text_corrections"], [{"source": "earlier"}])
 
     def test_unexpected_exception_keeps_ocr_result(self) -> None:
         with patch.object(ocr_router.llm_correction, "correct_text_layer", side_effect=RuntimeError("boom")), self.assertLogs(ocr_router.logger.name, level="ERROR"):
