@@ -34,7 +34,7 @@ from fastapi_app.lib.tei.zone_lines import ZoneLabel
 from fastapi_app.routers import ocr as ocr_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-FIXTURE_PDF = PROJECT_ROOT / "fastapi_app" / "plugins" / "ocrmypdf" / "tests" / "fixtures" / "ocr-text-layer.pdf"
+FIXTURE_PDF = PROJECT_ROOT / "tests" / "unit" / "fastapi" / "fixtures" / "ocr-text-layer.pdf"
 VARIANT = "test.text-corrections"
 REVIEWER = {"username": "rev", "roles": ["reviewer"], "groups": []}
 ANNOTATOR = {"username": "ann", "roles": ["annotator"], "groups": []}
