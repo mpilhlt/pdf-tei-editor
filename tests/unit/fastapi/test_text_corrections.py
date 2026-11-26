@@ -29,7 +29,7 @@ def tei(page: int, text: str, line: int = 0) -> dict[int, list[TeiWord]]:
 
 
 def layer(page: int, text: str, unpatchable: str | None = None) -> list[LayerPage]:
-    words = [LayerWord(page, 1, 0, i * 10, i * 10 + len(w), w) for i, w in enumerate(text.split())]
+    words = [LayerWord(page, 1, 0, i * 10, i * 10 + len(w), w, 0) for i, w in enumerate(text.split())]
     return [LayerPage(page, words, unpatchable)]
 
 

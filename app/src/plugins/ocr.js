@@ -16,6 +16,8 @@ import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system
 import { SlSelect as SlSelectClass, SlOption, SlInput as SlInputClass, SlCheckbox as SlCheckboxClass } from '../ui.js'
 import { setLanguageOptions, getSelectedLanguages, matchLanguages } from '../modules/language-chooser.js'
 import { testLog } from '../modules/test-log.js'
+import { notify } from '../modules/sl-utils.js'
+import { describeLlmCorrections } from '../modules/ocr-llm-corrections.js'
 
 await registerTemplate('ocr-dialog', 'ocr-dialog.html')
 
@@ -27,6 +29,7 @@ const OCR_POLL_INTERVAL_MS = 2000
  * @typedef {object} OcrSettings
  * @property {string[]} languages - Normalized language codes
  * @property {Record<string, OcrOptionValue>} options - Engine parameters
+ * @property {boolean} [llmCorrection] - Correct OCR errors with the default language model after recognition
  */
 
 /**
@@ -34,13 +37,14 @@ const OCR_POLL_INTERVAL_MS = 2000
  * @property {string} engine - Id of the OCR engine
  * @property {string[]} languages - Normalized language codes
  * @property {Record<string, OcrOptionValue>} options - Engine parameters
+ * @property {boolean} [llmCorrection] - Correct OCR errors with the default language model after recognition; ignored if no default model is selected
  * @property {boolean} [rebuild] - The user explicitly asked to recreate the text layer, so a digital text layer is replaced even if it looks fine
  */
 
 class OcrPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'ocr', deps: ['client', 'logger'] })
+    super(context, { name: 'ocr', deps: ['client', 'logger', 'inference-settings', 'api-keys'] })
   }
 
   get #client() { return this.getDependency('client') }
@@ -160,7 +164,7 @@ class OcrPlugin extends Plugin {
     let languages = matchLanguages(suggestedLanguages, engine.languages).slice(0, 1)
     if (!languages.length) languages = matchLanguages(saved?.languages ?? [], engine.languages)
     if (!languages.length) languages = [...engine.default_languages]
-    return { languages, options }
+    return { languages, options, llmCorrection: this.uiStorage.get('llmCorrection', false) === true }
   }
 
   /**
@@ -176,6 +180,19 @@ class OcrPlugin extends Plugin {
   }
 
   /**
+   * Describe the LLM correction for display in the extraction dialog, if it will be applied to the
+   * next run: the user chose it earlier and a default model is selected.
+   * @returns {string} The note, or an empty string if the correction is off
+   */
+  getLlmCorrectionNote() {
+    if (this.uiStorage.get('llmCorrection', false) !== true) return ''
+    const inference = this.getDependency('inference-settings')
+    const model = inference.getDefaultModel()
+    if (!model) return ''
+    return `LLM correction of OCR errors is on (${inference.getModelLabel(model.providerId, model.modelId)}).`
+  }
+
+  /**
    * Show the dialog to configure the parameters of an engine. The result is stored as the
    * default for later runs (see {@link OcrPlugin#getSettings}).
    * @param {OcrEngineInfo} engine
@@ -188,6 +205,19 @@ class OcrPlugin extends Plugin {
     dialogUi.label = `Text recognition options: ${engine.name}`
     dialogUi.engineDescription.textContent = engine.description
     setLanguageOptions(dialogUi.languages, engine.languages, settings.languages)
+
+    const inference = this.getDependency('inference-settings')
+    const model = inference.getDefaultModel()
+    const llm = dialogUi.llmCorrection
+    llm.disabled = !model
+    llm.checked = Boolean(model) && settings.llmCorrection === true
+    if (model) {
+      llm.title = ''
+      llm.setAttribute('help-text', `Uses ${inference.getModelLabel(model.providerId, model.modelId)} to correct misread words, mainly footnote numbers, on pages that look poor. Changes the text without review; every correction is listed afterwards. Costs about one LLM call per two such pages.`)
+    } else {
+      llm.title = 'Select a default model in Tools > Inference first.'
+      llm.setAttribute('help-text', 'Select a default model in Tools > Inference first.')
+    }
 
     const optionsContainer = dialogUi.engineOptions
     optionsContainer.innerHTML = ''
@@ -227,8 +257,10 @@ class OcrPlugin extends Plugin {
         for (const { key, info, element } of fields) {
           options[key] = readOptionField(info, element)
         }
-        const result = { languages, options }
-        this.saveSettings(engine.id, result)
+        const llmCorrection = !llm.disabled && llm.checked
+        if (!llm.disabled) this.uiStorage.set('llmCorrection', llmCorrection)
+        const result = { languages, options, llmCorrection }
+        this.saveSettings(engine.id, { languages, options })
         testLog('OCR_OPTIONS_SAVED', { engine: engine.id, ...result })
         return result
       }
@@ -248,21 +280,26 @@ class OcrPlugin extends Plugin {
    * @param {(status: OcrJobStatus, message: string) => void} [onStatus] - Called with the initial status of
    *   the job ('queued' or 'running') and whenever the status or the progress changes while it is not
    *   finished, with a description for the user (see {@link describeOcrJob})
+   * @param {{before?: () => void, after?: () => void}} [blocker] - Called around the dialog that asks for the
+   *   API key of the language model's provider if the server needs it, e.g. to lift a spinner that would cover it
    * @returns {Promise<OcrResponse>}
    * @throws {Error} An ApiError (invalid request, or 409 if OCR is already running for this PDF) or
    *   ServerError (failure of the engine or the server) if the run fails
    */
-  async recognize(stableId, run, onStatus) {
+  async recognize(stableId, run, onStatus, blocker) {
     const logger = this.getDependency('logger')
     logger.info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
-    let job = await client.apiClient.ocr({
+    const model = run.llmCorrection ? this.getDependency('inference-settings').getDefaultModel() : null
+    // 428 if the provider of the model needs an API key of the user: ask for it and start the run again
+    let job = await this.getDependency('api-keys').withKeyPrompt(() => client.apiClient.ocr({
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
       options: run.options,
-      rebuild: Boolean(run.rebuild)
-    })
+      rebuild: Boolean(run.rebuild),
+      ...(model ? { llm_correction: true, provider_id: model.providerId, model_id: model.modelId } : {})
+    }), blocker)
     /** @type {OcrJobStatus|null} */
     let reported = null
     let described = ''
@@ -287,6 +324,18 @@ class OcrPlugin extends Plugin {
     }
     const result = job.result
     testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
+    const corrections = result.llm_corrections ?? []
+    const error = result.llm_correction_error ?? null
+    testLog('OCR_LLM_CORRECTION', { requested: Boolean(model), corrections: corrections.length, error })
+    if (corrections.length) {
+      notify(describeLlmCorrections(corrections), 'primary', 'info-circle', 15000)
+    }
+    if (error) {
+      notify(`The correction with a language model did not finish: ${error}`, 'warning', 'exclamation-triangle', 10000)
+    } else if (model && !corrections.length && result.message) {
+      // Why nothing was corrected, e.g. "No OCR errors found on 3 reviewed pages."
+      notify(result.message, 'primary', 'info-circle', 10000)
+    }
     return result
   }
 }

@@ -266,7 +266,7 @@ class ExtractionPlugin extends Plugin {
           }
           const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr, (_status, message) => {
             ui.spinner.show(message)
-          })
+          }, { before: () => ui.spinner.hide(), after: () => ui.spinner.show('Applying text recognition') })
           if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
             notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
           }
@@ -738,6 +738,12 @@ class ExtractionPlugin extends Plugin {
     /** @param {OcrEngineInfo} engine */
     const settingsFor = engine => chosen?.engine === engine.id ? chosen.settings : ocrPlugin.getSettings(engine, hints())
 
+    const updateLlmNote = () => {
+      const note = section.applyOcr.checked ? ocrPlugin.getLlmCorrectionNote() : ''
+      section.llmNote.textContent = note
+      section.llmNote.style.display = note ? '' : 'none'
+    }
+
     const render = () => {
       // Until the engine list is known, a placeholder shows that text recognition will be offered
       loading.style.display = wanted && !enginesLoaded ? '' : 'none'
@@ -749,6 +755,7 @@ class ExtractionPlugin extends Plugin {
       } else if (!userToggled && quality) {
         section.applyOcr.checked = quality.status === 'poor'
       }
+      updateLlmNote()
     }
 
     /** @param {OcrEngineInfo[]} list */
@@ -816,10 +823,14 @@ class ExtractionPlugin extends Plugin {
         .catch(showCheckError)
     }
 
-    section.applyOcr.addEventListener('sl-change', () => { userToggled = true }, { signal })
+    section.applyOcr.addEventListener('sl-change', () => {
+      userToggled = true
+      updateLlmNote()
+    }, { signal })
     section.ocrEngine.addEventListener('sl-change', () => {
       const engine = selectedEngine()
       if (engine) ocrPlugin.setPreferredEngine(engine.id)
+      updateLlmNote()
     }, { signal })
     section.configureOcr.addEventListener('click', async () => {
       const engine = selectedEngine()
@@ -827,6 +838,7 @@ class ExtractionPlugin extends Plugin {
       try {
         const settings = await ocrPlugin.configure(engine, settingsFor(engine))
         if (settings) chosen = { engine: engine.id, settings }
+        updateLlmNote()
       } catch (error) {
         this.getDependency('dialog').error(String(error))
       }

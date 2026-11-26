@@ -1,6 +1,8 @@
 """
 Read the invisible text layer that OCRmyPDF writes (`3 Tr` text in Identity-H fonts) as words,
 each with the location of the `Tj`/`TJ` operator that shows it, and patch the text of such words.
+
+For the LLM review of OCR errors (#931), the words are grouped into lines (one text object per line).
 """
 
 import importlib.util
@@ -41,6 +43,7 @@ class LayerWord:
     start: int  # code index (not byte) of the first character within the operator's string
     end: int  # code index after the last character; for TJ counted across the string elements
     text: str
+    line: int  # index of the text object (BT … ET) on the page in drawing order; OCRmyPDF writes one per line
 
 
 @dataclass
@@ -185,6 +188,8 @@ class _ContentWalker:
                 form = _form(resources, str(operands[0]))
                 if form is not None:
                     self.walk(form, _form_resources(form, resources), state, [], (*path, stream.objgen))
+            elif name == "BT":
+                self.on_begin_text()
             elif name in TEXT_OPERATORS:
                 if name == '"' and len(operands) == 3 and (spacing := _number(operands[1])) is not None:
                     state = replace(state, char_spacing=spacing)
@@ -196,6 +201,9 @@ class _ContentWalker:
 
     def on_unaddressable(self) -> None:
         """Handle a content stream that cannot be addressed by object number."""
+
+    def on_begin_text(self) -> None:
+        """Handle the start of a text object."""
 
 
 def _strings(name: str, operands: list[pikepdf.Object]) -> list[bytes] | None:
@@ -217,7 +225,8 @@ class _Reader(_ContentWalker):
         self.not_addressable = False
         self.odd_string = False
         self.fonts: dict[tuple[int, int], _Font] = {}
-        self.known_words: set[LayerWord] = set()
+        self.known_words: set[tuple[int, int, int, int]] = set()  # (stream, op_index, start, end)
+        self.line = -1  # index of the current text object
 
     def font_info(self, font: pikepdf.Dictionary | None) -> _Font:
         """Return the parsed font, cached per (indirect) font object."""
@@ -231,6 +240,9 @@ class _Reader(_ContentWalker):
 
     def on_unaddressable(self) -> None:
         self.not_addressable = True
+
+    def on_begin_text(self) -> None:
+        self.line += 1
 
     def on_text(self, location: Location, name: str, operands: list[pikepdf.Object], state: _TextState) -> None:
         if state.render_mode != INVISIBLE:
@@ -263,10 +275,11 @@ class _Reader(_ContentWalker):
                     start = position
                 text += char
             elif start is not None:
-                word = LayerWord(self.result.index, location[0], location[1], start, position, text)
-                if word not in self.known_words:  # a Form XObject can be drawn more than once
-                    self.known_words.add(word)
-                    self.result.words.append(word)
+                key = (location[0], location[1], start, position)
+                if key not in self.known_words:  # a Form XObject can be drawn more than once
+                    self.known_words.add(key)
+                    line = max(self.line, 0)  # text shown outside BT … ET counts to the first text object
+                    self.result.words.append(LayerWord(self.result.index, location[0], location[1], start, position, text, line))
                 start, text = None, ""
 
 
@@ -684,3 +697,27 @@ def patch_text_layer(pdf: pikepdf.Pdf, patches: Sequence[WordPatch]) -> None:
         stream.write(zlib.compress(data), filter=pikepdf.Name.FlateDecode)
     for font in fonts:
         font.apply_widths()
+
+
+# --- Lines for the LLM review -----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LayerLine:
+    """The words of one text object of a page."""
+
+    page: int
+    words: list[LayerWord]
+
+    @property
+    def text(self) -> str:
+        """The words joined by single spaces."""
+        return " ".join(word.text for word in self.words)
+
+
+def layer_lines(page: LayerPage) -> list[LayerLine]:
+    """Group the words of a page into lines by their text object, in drawing order."""
+    lines: dict[int, list[LayerWord]] = {}
+    for word in page.words:
+        lines.setdefault(word.line, []).append(word)
+    return [LayerLine(page.index, words) for words in lines.values()]

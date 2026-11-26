@@ -4,7 +4,7 @@ Pydantic models for the OCR API.
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fastapi_app.lib.ocr.base import OcrOptionValue
 
@@ -38,6 +38,25 @@ class OcrRequest(BaseModel):
     languages: list[str] = Field(default_factory=list, description="Languages of the document as BCP 47 codes; the engine default if empty")
     options: dict[str, OcrOptionValue] = Field(default_factory=dict, description="Engine parameters")
     rebuild: bool = Field(False, description="The user explicitly asked to recreate the text layer: a digital text layer is replaced even if it looks fine")
+    llm_correction: bool = Field(False, description="Let an LLM correct OCR errors of the new text layer before the PDF is stored; requires provider_id and model_id")
+    provider_id: Optional[str] = Field(None, min_length=1, description="Id of the LLM provider of the correction pass")
+    model_id: Optional[str] = Field(None, min_length=1, description="Id of the model of the correction pass")
+
+    @model_validator(mode="after")
+    def _require_llm_ids(self) -> "OcrRequest":
+        """The LLM correction pass needs a provider and a model."""
+        if self.llm_correction and not (self.provider_id and self.model_id):
+            raise ValueError("provider_id and model_id are required for the LLM correction")
+        return self
+
+
+class OcrLlmCorrection(BaseModel):
+    """A correction of the text layer made by the LLM correction pass of an OCR run."""
+
+    page: int = Field(..., description="Page index (0-based)")
+    old: str = Field(..., description="Text of the text layer before the correction")
+    new: str = Field(..., description="Corrected text")
+    rationale: str = Field(..., description="Why the text is an OCR error")
 
 
 class OcrResponse(BaseModel):
@@ -50,6 +69,8 @@ class OcrResponse(BaseModel):
     method: Optional[str] = Field(None, description="How the text layer was created ('skip', 'redo', 'force', 'vectorize'), if the engine reports it")
     fallback_reason: Optional[str] = Field(None, description="Why the engine fell back from the preferred method, if it did")
     quality: "TextQualityReport" = Field(..., description="Text layer quality after OCR")
+    llm_corrections: list[OcrLlmCorrection] = Field(default_factory=list, description="Corrections made by the LLM correction pass, if it was requested")
+    llm_correction_error: Optional[str] = Field(None, description="Why the LLM correction pass stopped or failed; the OCR result is kept")
 
 
 class TextCorrectionsRequest(BaseModel):

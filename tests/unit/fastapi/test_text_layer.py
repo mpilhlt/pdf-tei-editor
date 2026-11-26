@@ -15,7 +15,15 @@ import pdfminer.high_level
 import pikepdf
 import pymupdf
 
-from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord, WordPatch, parse_to_unicode, patch_text_layer, read_text_layer
+from fastapi_app.lib.ocr.text_layer import (
+    LayerPage,
+    LayerWord,
+    WordPatch,
+    layer_lines,
+    parse_to_unicode,
+    patch_text_layer,
+    read_text_layer,
+)
 from tests.unit.fastapi.test_ocr import make_image_only_pdf
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -432,7 +440,7 @@ class TestPatchTextLayer(unittest.TestCase):
 
     def test_visible_text_after_q_is_not_patched(self):
         pdf = self.synthetic(b"q BT 3 Tr /F1 10 Tf <0044> Tj ET Q BT /F1 10 Tf <0045> Tj ET")
-        word = LayerWord(0, pdf.pages[0].Contents.objgen[0], 9, 0, 1, "E")  # the second Tj
+        word = LayerWord(0, pdf.pages[0].Contents.objgen[0], 9, 0, 1, "E", 1)  # the second Tj
         before = streams(pdf)
         with self.assertRaises(ValueError):
             patch_text_layer(pdf, [WordPatch(word, "DD")])
@@ -471,6 +479,36 @@ class TestPatchTextLayer(unittest.TestCase):
         self.assertNotIn(0x47, cmap)
         self.assertEqual(cmap[0x48], "Ω")
         self.assertEqual([w.text for w in read_text_layer(pdf)[0].words], ["Ω"])
+
+
+FIRST_LINE = "Die Gesellschaft haftet nach der neuen Regel’). Weitere Ausführungen"
+
+
+class TestLayerLines(unittest.TestCase):
+    def setUp(self):
+        self.page = read_text_layer(pikepdf.open(FIXTURE))[0]
+        self.lines = layer_lines(self.page)
+
+    def test_words_carry_line_index(self):
+        count = len(FIRST_LINE.split())
+        self.assertEqual([w.line for w in self.page.words[:count]], [0] * count)
+        self.assertEqual(self.page.words[count].line, 1)
+
+    def test_layer_lines_text(self):
+        self.assertEqual(self.lines[0].text, FIRST_LINE)
+        self.assertEqual(self.lines[0].page, 0)
+        self.assertEqual(len(self.lines), 9)
+        self.assertEqual([w for line in self.lines for w in line.words], self.page.words)
+
+    def test_line_of_a_form_drawn_twice_is_read_once(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        path = tmp / "form.pdf"
+        make_layer_pdf(path, b"/Fm Do /Fm Do")
+        pdf = pikepdf.open(path)
+        add_form(pdf, b"BT 3 Tr /F1 10 Tf <0044> Tj ET BT 3 Tr /F1 10 Tf <0045> Tj ET")
+        lines = layer_lines(read_text_layer(pdf)[0])
+        self.assertEqual([line.text for line in lines], ["D", "E"])
 
 
 if __name__ == "__main__":
