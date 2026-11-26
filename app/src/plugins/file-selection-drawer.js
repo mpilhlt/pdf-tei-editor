@@ -29,7 +29,10 @@ import {
   groupFilesByCollection,
   findMatchingGold,
   findFileBySourceId,
-  getCollectionName
+  getCollectionName,
+  documentHasPdf,
+  getDocumentPdfs,
+  formatDocumentPdfLabel
 } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import Plugin from '../modules/plugin-base.js'
@@ -521,6 +524,30 @@ class FileSelectionDrawerPlugin extends Plugin {
         });
         pdfItem.appendChild(versionsSection);
       }
+
+      // The PDFs of the document, if it has more than one (#944): a PDF can be opened without a
+      // version, e.g. the result of text recognition that nothing was extracted from yet
+      const pdfs = getDocumentPdfs(file);
+      if (pdfs.length > 1) {
+        const pdfsSection = document.createElement('sl-tree-item');
+        pdfsSection.expanded = pdfs.some(pdf => !pdf.isMain && pdf.id === state.pdf);
+        pdfsSection.className = 'pdfs-section';
+        pdfsSection.dataset.type = 'section';
+        pdfsSection.innerHTML = `<sl-icon name="files"></sl-icon><span>PDFs</span>`;
+        for (const pdf of pdfs) {
+          const pdfFileItem = document.createElement('sl-tree-item');
+          pdfFileItem.className = 'pdf-file-item';
+          pdfFileItem.dataset.type = 'pdf-file';
+          pdfFileItem.dataset.hash = pdf.id;
+          pdfFileItem.dataset.collection = itemCollection;
+          pdfFileItem.innerHTML = '<sl-icon name="file-pdf"></sl-icon>';
+          const pdfLabel = document.createElement('span');
+          pdfLabel.textContent = formatDocumentPdfLabel(pdf);
+          pdfFileItem.appendChild(pdfLabel);
+          pdfsSection.appendChild(pdfFileItem);
+        }
+        pdfItem.appendChild(pdfsSection);
+      }
       collectionItem.appendChild(pdfItem);
     }
     return collectionItem;
@@ -551,7 +578,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       const files = groupedFiles[collectionName];
       if (!files) return false;
       return files.some(file => {
-        if (state.pdf && file.source?.id === state.pdf) return true;
+        if (documentHasPdf(file, state.pdf)) return true;
         if (state.xml) {
           return file.artifacts?.some(artifact => artifact.id === state.xml);
         }
@@ -562,7 +589,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     /** @type { (file:DocumentItem) => boolean} */
     const shouldExpandPdf = (file) => {
       if (!state.pdf && !state.xml) return false;
-      if (state.pdf && file.source?.id === state.pdf) return true;
+      if (documentHasPdf(file, state.pdf)) return true;
       if (state.xml) {
         return file.artifacts?.some(artifact => artifact.id === state.xml);
       }
@@ -662,7 +689,11 @@ class FileSelectionDrawerPlugin extends Plugin {
     if (state.xml) {
       itemToSelect = fileTree.querySelector(`[data-type="gold"][data-hash="${state.xml}"], [data-type="version"][data-hash="${state.xml}"], [data-type="xml-only"][data-hash="${state.xml}"]`);
     } else if (state.pdf) {
-      itemToSelect = fileTree.querySelector(`[data-type="pdf"][data-hash="${state.pdf}"]`);
+      // a PDF opened without a version is selected in the PDFs of its document, else the document,
+      // which is listed by its canonical PDF (#944)
+      const sourceId = (state.fileData && findFileBySourceId(state.fileData, state.pdf)?.source.id) || state.pdf;
+      itemToSelect = fileTree.querySelector(`[data-type="pdf-file"][data-hash="${state.pdf}"]`)
+        || fileTree.querySelector(`[data-type="pdf"][data-hash="${sourceId}"]`);
     }
 
     if (itemToSelect) {
@@ -732,6 +763,12 @@ class FileSelectionDrawerPlugin extends Plugin {
           stateUpdates.xml = null;
         }
       }
+    } else if (type === 'pdf-file') {
+      // a PDF of the document, opened without a version (#944)
+      stateUpdates.pdf = hash;
+      stateUpdates.xml = null;
+      stateUpdates.collection = collection;
+      stateUpdates.project = _owningProject ? _owningProject.id : null;
     } else if (type === 'xml-only') {
       stateUpdates.xml = hash;
       stateUpdates.pdf = null;

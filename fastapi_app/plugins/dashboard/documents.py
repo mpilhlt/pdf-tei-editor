@@ -73,7 +73,7 @@ class DocumentInfoResolver:
         title = next((label for label in map(_usable_label, candidates) if label), tei_file.doc_id)
         return {
             "stable_id": tei_file.stable_id,
-            "pdf_stable_id": pdf.stable_id if pdf else None,
+            "pdf_stable_id": tei_file.pdf_stable_id or (pdf.stable_id if pdf else None),
             "doc_id": tei_file.doc_id,
             "title": title,
             "label": _usable_label(tei_file.label),

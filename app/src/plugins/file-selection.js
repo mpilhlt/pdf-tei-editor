@@ -13,7 +13,7 @@ import { SlOption, SlDivider } from '../ui.js'
 import { registerTemplate, createFromTemplate, createHtmlElements } from '../modules/ui-system.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
-import { groupFilesByCollection, getCollectionName, pickDocumentCollection } from '../modules/file-data-utils.js'
+import { groupFilesByCollection, getCollectionName, pickDocumentCollection, findFileBySourceId, documentHasPdf } from '../modules/file-data-utils.js'
 import { getActiveProjects, getArchivedCollectionIds, compareCollectionNames } from '../modules/collection-utils.js'
 import { filterFileData, getFileIdentifier, getSelectedFileVersions, appendVersionOptions } from '../modules/version-options.js'
 
@@ -233,7 +233,8 @@ class FileSelectionPlugin extends Plugin {
 
   /** @param {ApplicationState} state */
   #updateSelectboxValues(state) {
-    let sourceValue = state.pdf || "";
+    // the selectbox lists a document by its canonical PDF; the open version can use another PDF (#944)
+    let sourceValue = (state.pdf && state.fileData && findFileBySourceId(state.fileData, state.pdf)?.source.id) || state.pdf || "";
     if (!state.pdf && state.xml && state.fileData) {
       const xmlFile = state.fileData.find(file =>
         file.artifacts && file.artifacts.some(a => a.id === state.xml)
@@ -583,9 +584,7 @@ class FileSelectionPlugin extends Plugin {
 
     let shouldClearSelection = false;
     if (collectionFilter && state.pdf && state.fileData) {
-      const currentFile = state.fileData.find(file =>
-        file.source && file.source.id === state.pdf
-      );
+      const currentFile = state.fileData.find(file => documentHasPdf(file, state.pdf));
       if (currentFile && !currentFile.collections.includes(collectionFilter)) {
         shouldClearSelection = true;
       }

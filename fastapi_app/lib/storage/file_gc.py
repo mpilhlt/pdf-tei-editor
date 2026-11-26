@@ -4,7 +4,7 @@ Garbage-collection tasks of the file repository and storage (see ``lib/core/gc_r
 Tasks, in run order:
 
 - ``deleted-files``: purge soft-deleted files older than ``deleted_before`` (records and physical files)
-- ``superseded-pdfs``: purge archived PDFs (replaced by text recognition) that no file record references
+- ``superseded-pdfs``: purge PDFs that no file record references and that are not the canonical PDF of their document
 - ``orphaned-storage-files``: delete storage files without a database record, remove empty shard dirs
 - ``duplicate-entries``: remove duplicate database records (no dry run)
 - ``tei-collections``: sync the collections of TEI files with their PDF (no dry run)
@@ -97,17 +97,17 @@ def purge_deleted_files(ctx: GcContext) -> GcResult:
     return _purge_records(ctx.file_repo, ctx.file_storage, files, ctx.dry_run, "file")
 
 
-def purge_unreferenced_archived_pdfs(ctx: GcContext) -> GcResult:
+def purge_unreferenced_pdfs(ctx: GcContext) -> GcResult:
     """
-    Purge archived PDFs (originals replaced by text recognition) that no file record references any
-    more. Runs after ``deleted-files``: a soft-deleted version keeps its archived PDF until it is
-    purged itself, so that it can still be restored.
+    Purge PDFs that no file record references any more and that are not the canonical PDF of their
+    document, e.g. the PDF a text recognition run started from when no version was made from it
+    (#944). Runs after ``deleted-files``: a soft-deleted version keeps its PDF until it is purged
+    itself, so that it can still be restored.
     """
-    files = ctx.file_repo.get_unreferenced_archived_pdfs()
+    files = ctx.file_repo.get_unreferenced_pdfs()
     for pdf in files:
-        logger.info(f"{'Would delete' if ctx.dry_run else 'Deleting'} unreferenced archived PDF {pdf.stable_id} "
-                    f"(doc_id={pdf.doc_id}, replaced by {pdf.superseded_by})")
-    return _purge_records(ctx.file_repo, ctx.file_storage, files, ctx.dry_run, "archived PDF", release_refs=True)
+        logger.info(f"{'Would delete' if ctx.dry_run else 'Deleting'} unreferenced PDF {pdf.stable_id} (doc_id={pdf.doc_id})")
+    return _purge_records(ctx.file_repo, ctx.file_storage, files, ctx.dry_run, "unreferenced PDF", release_refs=True)
 
 
 def delete_orphaned_storage_files(ctx: GcContext) -> GcResult:
@@ -168,7 +168,7 @@ def purge_orphaned_xml(ctx: GcContext) -> GcResult:
 def register_file_gc_tasks() -> None:
     """Register the tasks of the file repository and storage."""
     register_gc_task("deleted-files", "Deleted files", purge_deleted_files, order=100)
-    register_gc_task("superseded-pdfs", "Unreferenced archived PDFs", purge_unreferenced_archived_pdfs, order=150)
+    register_gc_task("superseded-pdfs", "Unreferenced PDFs", purge_unreferenced_pdfs, order=150)
     register_gc_task("orphaned-storage-files", "Orphaned storage files", delete_orphaned_storage_files, order=200)
     register_gc_task("duplicate-entries", "Duplicate file records", remove_duplicate_entries, order=300,
                      supports_dry_run=False)

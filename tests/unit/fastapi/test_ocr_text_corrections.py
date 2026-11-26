@@ -143,26 +143,22 @@ class TestTextCorrectionRoutes(unittest.TestCase):
     def apply(self, **body: Any) -> Any:
         return self.client.post("/ocr/text-corrections/apply", json={"stable_id": "tei1", **body})
 
-    def test_get_current_pdf_teis(self):
-        self.assertEqual(sorted(f.stable_id for f in self.repo.get_current_pdf_teis("doc1")), ["tei1", "tei2"])
-        self.repo.delete_file(self.other.id, stable_id="tei2")
-        self.assertEqual([f.stable_id for f in self.repo.get_current_pdf_teis("doc1")], ["tei1"])
-
     def test_preview_lists_corrections(self):
         preview = self.preview()
         self.assertIsNone(preview["reason"])
         self.assertEqual(preview["corrections"], [{"page": 0, "line": 0, "old": "Regel’).", "new": "Regel12)."}])
         self.assertEqual(preview["unwritable"], [])
-        self.assertEqual(preview["affected_files"], [{"stable_id": "tei2", "label": "Other version"}])
 
-    def test_apply_replaces_pdf_and_returns_xml(self):
+    def test_apply_creates_corrected_pdf_and_returns_xml(self):
         response = self.apply()
         self.assertEqual(response.status_code, 200, response.text)
         result = response.json()
-        pdf = self.repo.get_file_by_stable_id("pdf1")
+        self.assertEqual(result["source_pdf_stable_id"], "pdf1")
+        pdf = self.repo.get_file_by_stable_id(result["pdf_stable_id"])
         assert pdf is not None
+        self.assertNotEqual(pdf.stable_id, "pdf1")
         self.assertNotEqual(pdf.id, self.pdf_hash)
-        self.assertEqual(result["pdf_stable_id"], "pdf1")
+        self.assertEqual(pdf.doc_id, "doc1")
         self.assertEqual(result["corrections"], 1)
         self.assertIn(pdf.id, result["xml"])
         self.assertNotIn("OLD-HASH", result["xml"])
@@ -173,12 +169,10 @@ class TestTextCorrectionRoutes(unittest.TestCase):
             words = [w.text for w in read_text_layer(new_pdf)[0].words]
         self.assertIn("Regel12).", words)
         self.assertNotIn("Regel’).", words)
-        # the old content is archived, and the versions are linked to it
-        archived = self.repo.get_file_by_stable_id(result["archived_stable_id"])
-        assert archived is not None
-        self.assertEqual(archived.id, self.pdf_hash)
-        self.assertEqual(self.repo.get_file_by_stable_id("tei2").pdf_stable_id, archived.stable_id)  # type: ignore[union-attr]
-        self.assertEqual(self.repo.get_file_by_stable_id("tei1").pdf_stable_id, archived.stable_id)  # type: ignore[union-attr]
+        # the source PDF and the versions attached to it are not changed
+        self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
+        self.assertEqual(self.repo.get_file_by_stable_id("tei2").pdf_stable_id, "pdf1")  # type: ignore[union-attr]
+        self.assertEqual(self.repo.get_file_by_stable_id("tei1").pdf_stable_id, "pdf1")  # type: ignore[union-attr]
         record = pdf.file_metadata["text_corrections"][-1]
         self.assertEqual(record["applied_by"], "rev")
         self.assertEqual(record["tei_stable_id"], "tei1")
@@ -219,13 +213,14 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.assertEqual(self.apply().status_code, 200)
         self.sse.send_message.assert_not_called()
 
-    def test_archived_version_is_refused(self):
-        self.repo.replace_pdf_content("pdf1", self.save(b"%PDF other", "pdf"), 10, {})
-        message = "This version was made from an earlier PDF of the document. Open a version based on the current PDF."
-        self.assertEqual(self.preview()["reason"], message)
+    def test_version_of_an_older_pdf_writes_from_its_own_pdf(self):
+        # another lineage has a newer PDF, which is the canonical one
+        newer = self.repo.create_pdf_version("pdf1", self.save(b"%PDF other", "pdf"), 10, {})
+        self.assertEqual(self.repo.get_pdf_for_document("doc1").stable_id, newer.stable_id)  # type: ignore[union-attr]
+        self.assertIsNone(self.preview()["reason"])
         response = self.apply()
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["detail"], message)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["source_pdf_stable_id"], "pdf1")
 
     def test_requires_reviewer(self):
         self.user = ANNOTATOR
@@ -260,37 +255,6 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.assertEqual(preview["reason"], "The document has no text corrections to write.")
         self.assertEqual(preview["corrections"], [])
         self.assertEqual([(u["line"], u["tei_text"]) for u in preview["unwritable"]], [(3, "neu")])
-        self.assertEqual(sorted(f["stable_id"] for f in preview["affected_files"]), ["tei1", "tei2"])
-
-    def test_pdf_changed_during_apply_conflicts(self):
-        other_hash = self.save(b"%PDF other", "pdf")
-
-        def replace_meanwhile(xml: str, doc_id: str, pdf_path: Path, pdf_hash: str, lines: frozenset[int]) -> str:
-            self.repo.replace_pdf_content("pdf1", other_hash, 10, {"ocr": {"engine": "other"}})
-            return xml
-
-        register_corrected_pdf_handler(VARIANT, "test", replace_meanwhile)
-        response = self.apply()
-        self.assertEqual(response.status_code, 409, response.text)
-        pdf = self.repo.get_file_by_stable_id("pdf1")
-        assert pdf is not None
-        self.assertEqual(pdf.id, other_hash)
-        self.assertEqual(pdf.file_metadata, {"ocr": {"engine": "other"}})
-
-    def test_ocr_job_started_during_apply_conflicts(self):
-        def start_job(xml: str, doc_id: str, pdf_path: Path, pdf_hash: str, lines: frozenset[int]) -> str:
-            self.jobs.create("pdf1", "someone")
-            return xml
-
-        register_corrected_pdf_handler(VARIANT, "test", start_job)
-        self.assertEqual(self.apply().status_code, 409)
-        self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
-
-    def test_replace_value_error_is_409(self):
-        with patch.object(self.repo, "replace_pdf_content", side_effect=ValueError("The content of PDF pdf1 is unchanged")):
-            with self.assertLogs("fastapi_app.routers.ocr", level="WARNING"):
-                response = self.apply()
-        self.assertEqual(response.status_code, 409)
 
     def test_active_ocr_job_conflicts(self):
         self.jobs.create("pdf1", "someone")
@@ -323,7 +287,7 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         assert pdf is not None
         self.assertEqual(pdf.id, self.pdf_hash)
         self.assertNotIn("text_corrections", pdf.file_metadata)
-        self.assertIsNone(self.repo.get_file_by_stable_id("tei2").pdf_stable_id)  # type: ignore[union-attr]
+        self.assertEqual([p.stable_id for p in self.repo.get_document_pdfs("doc1")], ["pdf1"])
 
     def test_handler_service_error_is_502(self):
         self.handler_error = RuntimeError("GROBID is not reachable")
@@ -344,14 +308,14 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         response = self.apply()
         self.assertEqual(response.status_code, 200, response.text)
         result = response.json()
-        pdf = self.repo.get_file_by_stable_id("pdf1")
+        pdf = self.repo.get_file_by_stable_id(result["pdf_stable_id"])
         assert pdf is not None
         version = self.repo.get_file_by_stable_id(result["tei_stable_id"])
         assert version is not None
-        # a new version based on the corrected (current) PDF, made from the edited TEI
+        # a new version attached to the corrected PDF, made from the edited TEI
         self.assertNotIn(version.stable_id, ("tei1", "tei2"))
         self.assertEqual((version.file_type, version.doc_id, version.variant, version.version), ("tei", "doc1", VARIANT, 3))
-        self.assertIsNone(version.pdf_stable_id)
+        self.assertEqual(version.pdf_stable_id, pdf.stable_id)
         self.assertEqual(version.parent_stable_id, "tei1")
         self.assertEqual(version.created_by, "rev")
         self.assertEqual(version.doc_collections, ["c1"])
@@ -362,14 +326,12 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         # locked for the session that wrote the corrections
         self.assertTrue(check_lock(version.stable_id, "other-session", self.tmp, ocr_router.logger)["is_locked"])
         self.assertFalse(check_lock(version.stable_id, SESSION, self.tmp, ocr_router.logger)["is_locked"])
-        # the edited TEI is linked to the archived PDF
+        # the edited TEI stays attached to its PDF; both versions can be corrected further
         tei = self.repo.get_file_by_stable_id("tei1")
         assert tei is not None
-        self.assertEqual(tei.pdf_stable_id, result["archived_stable_id"])
-        # the new version can be corrected further, the edited one not
-        self.assertNotEqual(self.preview(stable_id=version.stable_id)["reason"], ocr_router.ARCHIVED_VERSION_MESSAGE)
-        response = self.apply()
-        self.assertEqual((response.status_code, response.json()["detail"]), (409, ocr_router.ARCHIVED_VERSION_MESSAGE))
+        self.assertEqual(tei.pdf_stable_id, "pdf1")
+        self.assertNotEqual(self.preview(stable_id=version.stable_id)["reason"], ocr_router.LOCKED_MESSAGE)
+        self.assertIsNone(self.preview()["reason"])
 
     def test_unchanged_pdf_is_refused(self):
         with patch.object(ocr_router, "_patch_pdf", lambda source, target, corrections: shutil.copyfile(source, target)):

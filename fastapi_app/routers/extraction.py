@@ -394,7 +394,8 @@ def _save_pdf_extraction_result(
             is_gold_standard=False,  # Extractions are not gold standard
             label=label,
             file_metadata={'extractor': options.get('extractor', 'unknown')},
-            created_by=current_user.get('username') if current_user else None
+            created_by=current_user.get('username') if current_user else None,
+            pdf_stable_id=pdf_metadata.stable_id,  # the PDF it was extracted from (#944)
         )
 
         # Insert into database
@@ -520,26 +521,17 @@ def _save_xml_extraction_result(
 
 
 def _find_pdf_stable_id(repo: FileRepository, doc_id: str) -> Optional[str]:
-    """Return the stable_id of the PDF file with the given doc_id, or None."""
-    try:
-        siblings = repo.get_files_by_doc_id(doc_id)
-        for f in siblings:
-            if f.file_type == 'pdf':
-                return f.stable_id
-    except Exception:
-        pass
-    return None
+    """Return the stable_id of the canonical PDF of the document, or None."""
+    pdf = repo.get_pdf_for_document(doc_id)
+    return pdf.stable_id if pdf else None
 
 
 def _find_pdf_path(repo: FileRepository, storage_root: Path, doc_id: Optional[str]) -> Optional[str]:
     """Return the storage path of the PDF file with the given doc_id, or None."""
     if not doc_id:
         return None
-    try:
-        for f in repo.get_files_by_doc_id(doc_id):
-            if f.file_type == 'pdf':
-                path = get_storage_path(storage_root, f.id, 'pdf')
-                return str(path) if path.exists() else None
-    except Exception:
-        pass
-    return None
+    pdf = repo.get_pdf_for_document(doc_id)
+    if pdf is None:
+        return None
+    path = get_storage_path(storage_root, pdf.id, 'pdf')
+    return str(path) if path.exists() else None

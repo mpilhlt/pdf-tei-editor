@@ -32,7 +32,6 @@ from ..lib.core.locking import check_lock
 from ..lib.core.sessions import SessionManager
 from ..lib.models import FileMetadata, FileUpdate
 from ..lib.models.models_ocr import (
-    AffectedFile,
     OcrEngineInfo,
     OcrJob,
     OcrLlmCorrection,
@@ -130,8 +129,6 @@ def _get_pdf(repo: FileRepository, stable_id: str, user: dict[str, Any], operati
         raise HTTPException(status_code=404, detail=f"PDF not found: {stable_id}")
     if not check_file_access(file, user, operation):
         raise HTTPException(status_code=403, detail="Access denied")
-    if operation == "edit" and file.superseded_by:
-        raise HTTPException(status_code=400, detail=f"PDF {stable_id} is the archived original of {file.superseded_by} and cannot be changed")
     return file
 
 
@@ -546,8 +543,8 @@ async def _correct_stored_pdf(
     is_cancelled: Callable[[], bool] | None = None,
 ) -> OcrResponse:
     """
-    Correct the OCR errors of the text layer of a stored PDF with an LLM and store the PDF if
-    anything was corrected. The caller holds the run slot.
+    Correct the OCR errors of the text layer of a stored PDF with an LLM and store the result as a
+    new PDF of the document if anything was corrected (#944). The caller holds the run slot.
 
     Without `languages`, those of the last OCR run of the PDF are used.
 
@@ -568,16 +565,14 @@ async def _correct_stored_pdf(
         with progress_reporter(report_to, is_cancelled) as progress:
             run = await _correct_with_llm(work_path, llm, languages)
             progress.check_cancelled()
-        changed = False
-        archived_stable_id: str | None = None
+        result_pdf = file
         if run.corrections:
             applied_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
             record = _correction_record(run, llm, applied_at, str(user.get("username") or ""), "llm-correction")
             previous = file.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
             file_metadata = {**file.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, record]}
-            new_hash, archived_stable_id = _store_pdf(repo, storage, file, file.id, work_path.read_bytes(), file_metadata)
-            changed = new_hash != file.id
-            logger.info(f"Corrected {len(run.corrections)} OCR error(s) of {file.stable_id} with {llm.provider_id}/{llm.model_id}: {file.id[:8]} -> {new_hash[:8]}")
+            result_pdf = _store_pdf(repo, storage, file, work_path.read_bytes(), file_metadata, user)
+            logger.info(f"Corrected {len(run.corrections)} OCR error(s) of {file.stable_id} with {llm.provider_id}/{llm.model_id}: {file.id[:8]} -> {result_pdf.stable_id} ({result_pdf.id[:8]})")
         # the result is stored: cancelling no longer applies
         with progress_reporter(report_to) as progress:
             progress.report("Checking the new text layer")
@@ -585,9 +580,9 @@ async def _correct_stored_pdf(
     if isinstance(ocr_record, dict):
         quality.ocr_applied = ocr_record
     return OcrResponse(
-        stable_id=file.stable_id,
-        changed=changed,
-        archived_stable_id=archived_stable_id,
+        stable_id=result_pdf.stable_id,
+        source_stable_id=file.stable_id,
+        changed=result_pdf.stable_id != file.stable_id,
         message=_llm_correction_message(run, llm.model_id),
         method=None,
         fallback_reason=None,
@@ -646,13 +641,14 @@ async def _recognize(
     is_cancelled: Callable[[], bool] | None = None,
 ) -> OcrResponse:
     """
-    Apply OCR to a PDF and replace the stored PDF with the result. The caller holds the run slot.
+    Apply OCR to a PDF and store the result as a new PDF of the document (#944); the versions
+    attached to the PDF stay attached to it. The caller holds the run slot.
 
     Progress reported by the engine (see `fastapi_app.lib.ocr.progress`) is passed to on_progress.
 
     The OCR result is stored before the LLM correction pass (`llm`) starts, so that it is kept if
-    the pass fails or is cancelled; the pass corrects the stored text layer and stores the PDF again
-    if it corrected anything.
+    the pass fails or is cancelled; the pass corrects the stored text layer and stores the result as
+    a further PDF if it corrected anything.
 
     If `is_cancelled` returns True, OCR stops at the next progress report of the engine, or at the
     latest before its result is stored, and `OcrCancelled` is raised. Once the OCR result is stored,
@@ -698,9 +694,8 @@ async def _recognize(
         if result.fallback_reason:
             record["fallback_reason"] = result.fallback_reason
         file_metadata = {**file.file_metadata, OCR_METADATA_KEY: record}
-        new_hash, archived_stable_id = _store_pdf(repo, storage, file, file.id, output_path.read_bytes(), file_metadata)
-        changed = new_hash != file.id
-        logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {new_hash[:8]}" + (f", original archived as {archived_stable_id}" if archived_stable_id else ""))
+        result_pdf = _store_pdf(repo, storage, file, output_path.read_bytes(), file_metadata, user)
+        logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {result_pdf.stable_id} ({result_pdf.id[:8]})")
 
         message = result.message
         run: llm_correction.CorrectionRun | None = None
@@ -718,8 +713,7 @@ async def _recognize(
                     correction_record = _correction_record(run, llm, applied_at, applied_by, "llm-after-ocr")
                     previous = file.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
                     file_metadata = {**file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, correction_record]}
-                    corrected_hash, _ = _store_pdf(repo, storage, file, new_hash, output_path.read_bytes(), file_metadata)
-                    changed = changed or corrected_hash != file.id
+                    result_pdf = _store_pdf(repo, storage, result_pdf, output_path.read_bytes(), file_metadata, user)
                 note = _llm_correction_message(run, llm.model_id)
             message = f"{message} {note}" if message else note
 
@@ -730,9 +724,9 @@ async def _recognize(
 
     quality.ocr_applied = record
     return OcrResponse(
-        stable_id=file.stable_id,
-        changed=changed,
-        archived_stable_id=archived_stable_id,
+        stable_id=result_pdf.stable_id,
+        source_stable_id=file.stable_id,
+        changed=result_pdf.stable_id != file.stable_id,
         message=message,
         method=result.method,
         fallback_reason=result.fallback_reason,
@@ -743,40 +737,36 @@ async def _recognize(
     )
 
 
-def _store_pdf(repo: FileRepository, storage: FileStorage, file: FileMetadata, current_hash: str, content: bytes, file_metadata: dict[str, Any]) -> tuple[str, str | None]:
+def _store_pdf(repo: FileRepository, storage: FileStorage, source: FileMetadata, content: bytes, file_metadata: dict[str, Any], user: dict[str, Any]) -> FileMetadata:
     """
-    Store new content and file metadata of a PDF.
+    Store the result of changing the text layer of a PDF. PDFs are not changed (#944): new
+    content becomes a new PDF of the document; if the content is the same, only the file metadata
+    of the PDF is updated.
 
     Args:
         repo: File repository
         storage: File storage
-        file: The PDF as it was before the OCR run
-        current_hash: Content hash the PDF has now (changes when the run stores it twice)
+        source: The PDF the result was made from
         content: The new content
-        file_metadata: The new file metadata
+        file_metadata: The file metadata of the result
+        user: The user who made it
 
     Returns:
-        The content hash of the new content, and the stable_id of the archived previous content if
-        versions were made from it (#924), else None
+        The PDF that holds the result: a new one, or the source if the content is unchanged
     """
     new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
-    if new_hash == current_hash:
-        repo.update_file(current_hash, FileUpdate(file_metadata=file_metadata), stable_id=file.stable_id)
-        return new_hash, None
-    # Moves the storage reference to the new content; the old content is kept as an archived PDF
-    # if versions were made from it
-    _, archived = repo.replace_pdf_content(file.stable_id, new_hash, len(content), file_metadata)
-    return new_hash, archived.stable_id if archived else None
+    if new_hash == source.id:
+        updated = repo.update_file(source.id, FileUpdate(file_metadata=file_metadata), stable_id=source.stable_id)
+        return updated
+    return repo.create_pdf_version(source.stable_id, new_hash, len(content), file_metadata, created_by=str(user.get("username") or "") or None)
 
 
 # --- Text corrections (#931) ------------------------------------------------------------------
 
-ARCHIVED_VERSION_MESSAGE = "This version was made from an earlier PDF of the document. Open a version based on the current PDF."
 UNSUPPORTED_DOCUMENT_MESSAGE = "Text corrections cannot be written for this kind of document."
 OCR_RUNNING_MESSAGE = "Text recognition is running for the PDF of this document. Please wait until it is finished."
 NO_CORRECTIONS_MESSAGE = "The document has no text corrections to write."
 LOCKED_MESSAGE = "This document is being edited in another session. Text corrections can only be written by the session that edits it."
-PDF_CHANGED_MESSAGE = "The PDF was changed while the corrections were written. Please try again."
 UNWRITABLE_MESSAGE = "Some differences between the document and the text layer cannot be written. Skip them to write the other corrections."
 
 
@@ -857,8 +847,6 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
             Whether there are corrections at all is left to the caller.
     """
     tei = _get_tei(repo, stable_id, user)
-    if tei.pdf_stable_id:
-        raise HTTPException(status_code=409, detail=ARCHIVED_VERSION_MESSAGE)
     if check_lock(tei.stable_id, session_id, get_settings().db_dir, logger)["is_locked"]:
         raise HTTPException(status_code=423, detail=LOCKED_MESSAGE)
     content = storage.read_file(tei.id, "tei")
@@ -872,10 +860,11 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
     handler = get_corrected_pdf_handler(tei.variant)
     if handler is None or tei.variant is None:
         raise HTTPException(status_code=409, detail=UNSUPPORTED_DOCUMENT_MESSAGE)
-    current_pdf = repo.get_pdf_for_document(tei.doc_id)
-    if current_pdf is None:
+    # the corrections are derived from the PDF the version is attached to (#944)
+    own_pdf = repo.get_pdf_for_file(tei)
+    if own_pdf is None:
         raise HTTPException(status_code=404, detail=f"No PDF found for document {tei.doc_id}")
-    pdf = _get_pdf(repo, current_pdf.stable_id, user, "edit")
+    pdf = _get_pdf(repo, own_pdf.stable_id, user, "edit")
     if jobs.find_active(pdf.stable_id) is not None:
         raise HTTPException(status_code=409, detail=OCR_RUNNING_MESSAGE)
     pdf_path = _pdf_path(storage, pdf)
@@ -888,17 +877,6 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
     except pikepdf.PdfError as e:
         raise HTTPException(status_code=422, detail=f"The PDF cannot be read: {e}")
     return _CorrectionContext(tei, xml, pdf, pdf_path, handler, plan)
-
-
-def _file_label(file: FileMetadata) -> str:
-    """The label of a TEI file as the file list shows it, with fallbacks."""
-    if file.label and file.label.lower() not in ("untitled", "unknown title"):
-        return file.label
-    if file.is_gold_standard:
-        return f"Gold ({file.variant})" if file.variant else "Gold"
-    if file.version:
-        return f"Version {file.version}"
-    return file.stable_id
 
 
 def _patch_pdf(source: Path, target: Path, corrections: list[WordCorrection]) -> None:
@@ -948,12 +926,11 @@ async def preview_text_corrections(
 ) -> TextCorrectionsPreview:
     """
     Show what writing the text corrections of a TEI document into the OCR text layer of its PDF
-    would do: the words that would be corrected, the differences that cannot be written, and the
-    other versions of the document that would stay linked to the old PDF.
+    would do: the words that would be corrected and the differences that cannot be written.
 
     If the corrections cannot be written, `reason` says why and the lists are empty, except when
-    there are no corrections: then `unwritable` and `affected_files` are filled, since the
-    unwritable differences explain why. This includes a lock of the TEI held by another session.
+    there are no corrections: then `unwritable` is filled, since the unwritable differences explain
+    why. This includes a lock of the TEI held by another session.
     A missing TEI file or missing access is reported with 404/403 as usual.
 
     If `progress_id` is given, the steps are shown in that progress widget of the client.
@@ -965,11 +942,9 @@ async def preview_text_corrections(
         if e.status_code not in (409, 423):
             raise
         return TextCorrectionsPreview(reason=str(e.detail))
-    affected = [f for f in repo.get_current_pdf_teis(context.tei.doc_id) if f.stable_id != context.tei.stable_id]
     return TextCorrectionsPreview(
         corrections=[TextCorrectionItem(page=c.page, line=c.line, old=c.old, new=c.new) for c in context.plan.corrections],
         unwritable=[UnwritableItem(page=u.page, line=u.line, layer_text=u.layer_text, tei_text=u.tei_text, reason=u.reason) for u in context.plan.unwritable],
-        affected_files=[AffectedFile(stable_id=f.stable_id, label=_file_label(f)) for f in affected],
         # the unwritable differences explain why there is nothing to write
         reason=None if context.plan.corrections else NO_CORRECTIONS_MESSAGE,
     )
@@ -988,14 +963,14 @@ async def apply_text_corrections(
     session_manager: SessionManager = Depends(get_session_manager),
 ) -> TextCorrectionsResult:
     """
-    Write the text corrections of a TEI document into the OCR text layer of its PDF; the stored
-    PDF is replaced with the corrected one.
+    Write the text corrections of a TEI document into the OCR text layer of a copy of its PDF,
+    which becomes a new PDF of the document (`pdf_stable_id`, #944). The PDF the version is
+    attached to is not changed, nor are the other versions.
 
     The extractor plugin of the document's variant then regenerates its data for the corrected
     PDF and returns the TEI updated for it. It is saved as a new version of the document
-    (`tei_stable_id`; its content is returned as `xml`), which is based on the corrected PDF, made
-    from the given version and locked for the session. The TEI files based on the old PDF,
-    including the one given, are linked to the archived old PDF.
+    (`tei_stable_id`; its content is returned as `xml`), which is attached to the corrected PDF,
+    made from the given version and locked for the session.
 
     Refused with 409 if the corrections cannot be written (see the preview's `reason`) or if some
     differences cannot be written and `skip_unwritable` is false, and with 423 if another session
@@ -1056,20 +1031,12 @@ async def apply_text_corrections(
     }
     previous = pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
     file_metadata = {**pdf.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, record]}
-    # the handler can take a while: do not overwrite a replacement of the PDF made meanwhile
-    current = repo.get_file_by_stable_id(pdf.stable_id)
-    if current is None or current.id != pdf.id or jobs.find_active(pdf.stable_id) is not None:
-        raise HTTPException(status_code=409, detail=PDF_CHANGED_MESSAGE)
-    try:
-        _, archived = repo.replace_pdf_content(pdf.stable_id, new_hash, len(content), file_metadata)
-    except ValueError as e:
-        logger.warning(f"Cannot replace {pdf.stable_id} with the corrected PDF: {e}")
-        raise HTTPException(status_code=409, detail=PDF_CHANGED_MESSAGE)
-    archived_stable_id = archived.stable_id if archived else None
+    # the corrected PDF is a new PDF of the document; the version given stays attached to its PDF
+    corrected_pdf = repo.create_pdf_version(pdf.stable_id, new_hash, len(content), file_metadata, created_by=str(current_user.get("username") or "") or None)
     progress.step("Saving the new version of the document")
 
-    # The new version is based on the corrected PDF (pdf_stable_id None). It is created before the
-    # response is sent, so that a lost response leaves a consistent state
+    # The new version is attached to the corrected PDF. It is created before the response is sent,
+    # so that a lost response leaves a consistent state
     try:
         version = await create_tei_version(
             xml_string=version_xml,
@@ -1079,7 +1046,7 @@ async def apply_text_corrections(
             status=version_metadata["status"],
             last_revision=version_metadata["last_revision"],
             parent_stable_id=tei.stable_id,
-            pdf_stable_id=None,
+            pdf_stable_id=corrected_pdf.stable_id,
             user=current_user,
             session_id=session_id,
             base_url=f"{http_request.url.scheme}://{http_request.url.netloc}",
@@ -1094,12 +1061,12 @@ async def apply_text_corrections(
         logger.exception(f"Wrote the text corrections of {tei.stable_id} into {pdf.stable_id}, but could not create the new version: {e}")
         reason = e.detail if isinstance(e, HTTPException) else str(e)
         raise HTTPException(status_code=500, detail=f"The corrections were written to the PDF, but the new version of the document could not be created: {reason}")
-    logger.info(f"Wrote {len(plan.corrections)} text correction(s) of {tei.stable_id} into {pdf.stable_id}: {pdf.id[:8]} -> {new_hash[:8]}, new version {version.file.stable_id}" + (f", original archived as {archived_stable_id}" if archived_stable_id else ""))
+    logger.info(f"Wrote {len(plan.corrections)} text correction(s) of {tei.stable_id} into a copy of {pdf.stable_id}: new PDF {corrected_pdf.stable_id} ({pdf.id[:8]} -> {new_hash[:8]}), new version {version.file.stable_id}")
     return TextCorrectionsResult(
         xml=version_xml,
         tei_stable_id=version.file.stable_id,
-        pdf_stable_id=pdf.stable_id,
-        archived_stable_id=archived_stable_id,
+        pdf_stable_id=corrected_pdf.stable_id,
+        source_pdf_stable_id=pdf.stable_id,
         corrections=len(plan.corrections),
     )
 

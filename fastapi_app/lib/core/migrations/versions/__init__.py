@@ -21,6 +21,7 @@ from .m011_document_rules_section_overrides import Migration011DocumentRulesSect
 from .m012_sessions_token_columns import Migration012SessionsTokenColumns
 from .m013_sessions_launch_tokens import Migration013SessionsLaunchTokens
 from .m014_add_archived_pdf_columns import Migration014AddArchivedPdfColumns
+from .m015_pdf_per_version import Migration015PdfPerVersion
 
 # Migrations by target database
 LOCKS_MIGRATIONS = [
@@ -39,6 +40,7 @@ METADATA_MIGRATIONS = [
     Migration010AddParentStableIdColumn,
     Migration011DocumentRulesSectionOverrides,
     Migration014AddArchivedPdfColumns,
+    Migration015PdfPerVersion,
 ]
 
 SESSIONS_MIGRATIONS = [
@@ -70,6 +72,7 @@ ALL_MIGRATIONS = [
     Migration012SessionsTokenColumns,
     Migration013SessionsLaunchTokens,
     Migration014AddArchivedPdfColumns,
+    Migration015PdfPerVersion,
 ]
 
 __all__ = [

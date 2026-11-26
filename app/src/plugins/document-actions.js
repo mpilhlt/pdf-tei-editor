@@ -14,7 +14,7 @@
 import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import { testLog } from '../modules/test-log.js'
-import { getFileDataById } from '../modules/file-data-utils.js'
+import { getFileDataById, documentHasPdf } from '../modules/file-data-utils.js'
 import { registerTemplate, createSingleFromTemplate } from '../ui.js'
 import { notify } from '../modules/sl-utils.js'
 import * as tei_utils from '../modules/tei-utils.js'
@@ -119,7 +119,7 @@ class DocumentActionsPlugin extends Plugin {
     const isReviewer = userHasRole(state.user, ["admin", "reviewer"])
     const isAnnotator = userHasRole(state.user, ["admin", "reviewer", "annotator"])
     const userData = this.getDependency('authentication').getUser()
-    const pdfData = state.fileData?.find(/** @param {any} f */ f => f.source?.id === state.pdf)
+    const pdfData = state.fileData?.find(/** @param {any} f */ f => documentHasPdf(f, state.pdf))
     const isPdfOwner = Boolean(userData?.username && pdfData?.source?.created_by === userData.username)
 
     if (isAnnotator || isReviewer || isPdfOwner) {
@@ -252,8 +252,7 @@ class DocumentActionsPlugin extends Plugin {
     const state = this.state
     if (!state?.fileData) throw new Error("No file data")
 
-    const currentSource = state.pdf
-    const selectedFile = state.fileData.find(file => file.source?.id === currentSource)
+    const selectedFile = state.fileData.find(file => documentHasPdf(file, state.pdf))
 
     if (!selectedFile || !selectedFile.artifacts) return
 
@@ -325,7 +324,7 @@ class DocumentActionsPlugin extends Plugin {
   async deleteAll() {
     const state = this.state
     const userData = this.getDependency('authentication').getUser()
-    const pdfData = state.fileData?.find(/** @param {any} f */ f => f.source?.id === state.pdf)
+    const pdfData = state.fileData?.find(/** @param {any} f */ f => documentHasPdf(f, state.pdf))
     const isOwner = Boolean(userData?.username && pdfData?.source?.created_by === userData.username)
     const isReviewer = userHasRole(state.user, ["admin", "reviewer"])
 
@@ -336,8 +335,10 @@ class DocumentActionsPlugin extends Plugin {
 
     const fileSelection = this.getDependency('file-selection')
 
+    // all PDFs of the document (#944) and its versions
+    const pdfIds = pdfData ? (pdfData.pdfs?.length ? pdfData.pdfs.map(/** @param {any} p */ p => p.id) : [pdfData.source.id]) : [state.pdf]
     const filePathsToDelete = Array.from(new Set(
-      [state.pdf]
+      pdfIds
         .concat(fileSelection.getOptionValues('xml').map(o => o.value))
     )).filter(Boolean)
 

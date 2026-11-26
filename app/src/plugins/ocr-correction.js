@@ -130,8 +130,8 @@ class OcrCorrectionPlugin extends Plugin {
       finishedMessage: 'The correction of the OCR errors is finished.',
       confirm: message => this.getDependency('dialog').confirm(message, 'Finished'),
       refreshFileList: () => this.getDependency('file-selection').reload({ refresh: true }),
-      // the corrected PDF keeps its stable_id: load it again, with the document that was open
-      load: () => this.getDependency('services').load({ pdf: stableId, xml: started.pdf === stableId ? started.xml : null })
+      // the corrected PDF is a new PDF of the document, which no version is attached to yet (#944)
+      load: () => this.getDependency('services').load({ pdf: result.stable_id, xml: null })
     })
   }
 

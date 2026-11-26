@@ -425,7 +425,7 @@ async def save_file(
                 status=tei_status,
                 last_revision=last_revision,
                 parent_stable_id=source_file.stable_id if source_file and source_file.doc_id == doc_id else None,
-                # A copy keeps the text of its source, so it stays with the source's (archived) PDF
+                # A copy keeps the text of its source, so it stays attached to the source's PDF
                 pdf_stable_id=source_file.pdf_stable_id if source_file and source_file.doc_id == doc_id else None,
                 user=user,
                 session_id=session_id,

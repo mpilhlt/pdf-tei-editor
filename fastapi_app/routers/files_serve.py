@@ -107,12 +107,8 @@ def serve_file_by_id(
         logger.warning(f"File not in database: {document_id}")
         raise HTTPException(status_code=404, detail=f"File not found: {document_id}")
 
-    # Check read access. An archived PDF (replaced by text recognition) is readable by whoever can
-    # read the document's current PDF; its own document fields are a snapshot of the time it was archived
-    access_target = file_metadata
-    if file_metadata.superseded_by:
-        access_target = repo.get_file_by_stable_id(file_metadata.superseded_by) or file_metadata
-    if not check_file_access(access_target, current_user, 'read'):
+    # Check read access (the PDFs of a document share its document fields, see #944)
+    if not check_file_access(file_metadata, current_user, 'read'):
         logger.warning(
             f"Access denied for user {current_user.get('username') if current_user else 'anonymous'} "
             f"to file {document_id}"

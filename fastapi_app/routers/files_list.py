@@ -98,7 +98,8 @@ def list_files(
                     collections=pdf_file.doc_collections or [],
                     doc_metadata=pdf_file.doc_metadata or {},
                     source=source_item,
-                    artifacts=[]
+                    artifacts=[],
+                    pdfs=[_build_file_item(pdf) for pdf in repo.get_document_pdfs(doc_id)],
                 )
             else:
                 # Standalone file case (e.g., RNG schema) - file is its own source

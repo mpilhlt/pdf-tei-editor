@@ -225,29 +225,34 @@ test.describe('Correct OCR errors in PDF without review (LLM)', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
     try {
       let polls = 0;
+      // the corrected PDF is a new PDF of the document (#944); the mock returns the open PDF
+      /** @type {string|null} */
+      let openPdf = null;
       await page.route('**/api/v1/ocr/jobs/job-1', route => {
         polls++;
         return route.fulfill({
           json: polls < 2
             ? job('running', { progress: { phase: 'Correcting OCR errors', done: 1, total: 2, unit: 'window', eta_seconds: 5 } })
-            : job('done', { result: { stable_id: 'abc', changed: true, quality: { status: 'good', summary: 'ok', reasons: [] }, llm_corrections: [{ page: 1, old: '1O', new: '10', rationale: 'footnote number' }], message: 'Corrected 1 OCR error with mock-model.' } })
+            : job('done', { result: { stable_id: openPdf, source_stable_id: openPdf, changed: true, quality: { status: 'good', summary: 'ok', reasons: [] }, llm_corrections: [{ page: 1, old: '1O', new: '10', rationale: 'footnote number' }], message: 'Corrected 1 OCR error with mock-model.' } })
         });
       });
-      const { pdf, xml, requests } = await startCorrection(page);
+      const { pdf, requests } = await startCorrection(page);
+      openPdf = pdf;
       await expect(page.locator(CORRECTION_WIDGET)).toContainText('Correcting OCR errors', { timeout: 15000 });
 
       const completed = await waitForTestMessage(consoleLogs, 'OCR_CORRECTION_COMPLETED', 20000);
       expect(completed.value).toEqual({ stableId: pdf, changed: true, corrections: 1 });
       expect(requests).toEqual([{ stable_id: pdf, provider_id: 'mock-provider', model_id: 'mock-model' }]);
       await expect(page.locator('sl-alert', { hasText: '“1O” → “10”' })).toBeVisible();
-      // the same documents are open: the corrected PDF is loaded without asking
+      // the same documents are open: the corrected PDF is loaded without asking, without a version
+      // (none is attached to it yet)
       const finished = await waitForTestMessage(consoleLogs, 'BACKGROUND_PROCESS_FINISHED', 10000);
       expect(finished.value.unchanged).toBe(true);
       await expect(page.locator(CORRECTION_WIDGET)).toHaveCount(0);
       await expect.poll(() => page.evaluate(() => {
         const state = /** @type {any} */(window).app.getCurrentState();
         return { pdf: state.pdf, xml: state.xml };
-      })).toEqual({ pdf, xml });
+      })).toEqual({ pdf, xml: null });
     } finally {
       stopErrorMonitoring();
       await releaseAllLocks(page);

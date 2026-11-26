@@ -166,9 +166,6 @@ class TextCorrectionsPlugin extends Plugin {
     dlg.unwritableSection.skipUnwritable.checked = false
     dlg.unwritableSection.skipUnwritable.disabled = false
     dlg.unwritableSection.skipUnwritable.style.display = summary.needsSkip ? '' : 'none'
-    fillList(dlg.affectedSection.affectedFiles, preview.affected_files.map(f => f.label || f.stable_id))
-    // which versions stay with the old PDF only matters if the corrections can be written
-    dlg.affectedSection.style.display = summary.canApply && preview.affected_files.length ? '' : 'none'
     dlg.write.style.display = summary.canApply ? '' : 'none'
     dlg.write.disabled = summary.needsSkip
     dlg.write.loading = false
