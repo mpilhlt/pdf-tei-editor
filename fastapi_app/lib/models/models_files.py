@@ -44,7 +44,7 @@ class ArtifactModel(FileItemModel):
     created_by: Optional[str] = None           # Username of user who created this file
     parent_id: Optional[str] = None            # Stable ID of the version this file was copied from
     is_frozen: bool = False                    # True if a version was copied from this file (read-only history)
-    pdf_id: Optional[str] = None               # Stable ID of the archived PDF the version was made from (null: the document's current PDF)
+    pdf_id: Optional[str] = None               # Stable ID of the PDF the file is attached to (#944)
 
 
 class DocumentGroupModel(BaseModel):
@@ -54,8 +54,9 @@ class DocumentGroupModel(BaseModel):
     doc_id: str
     collections: List[str]                     # All collections
     doc_metadata: Dict[str, Any]               # Metadata from TEI header
-    source: FileItemModel                      # Source file (PDF or primary XML)
+    source: FileItemModel                      # Source file: the canonical PDF (#944), or the primary XML
     artifacts: List[ArtifactModel]             # All artifact files (flattened)
+    pdfs: List[FileItemModel] = []             # All PDFs of the document, oldest first (#944)
 
 
 class FileListResponseModel(BaseModel):

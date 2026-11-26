@@ -11,7 +11,7 @@
  */
 
 import { SlOption, SlDivider } from '../ui.js'
-import { groupVersionsByLineage } from './file-data-utils.js'
+import { groupVersionsByLineage, documentHasPdf } from './file-data-utils.js'
 import { getArchivedCollectionIds } from './collection-utils.js'
 
 /**
@@ -64,8 +64,8 @@ export function getFileIdentifier(file) {
 }
 
 /**
- * Whether the file is the document selected in the state: its source is the selected PDF, or a
- * non-PDF source that is the selected XML.
+ * Whether the file is the document selected in the state: one of its PDFs is the selected PDF, or
+ * a non-PDF source that is the selected XML.
  * @param {DocumentItem} file
  * @param {ApplicationState} state
  * @returns {boolean}
@@ -73,7 +73,7 @@ export function getFileIdentifier(file) {
 export function isSelectedFile(file, state) {
   const fileIdentifier = getFileIdentifier(file);
   if (!fileIdentifier) return false;
-  return (fileIdentifier === state.pdf) ||
+  return documentHasPdf(file, state.pdf) ||
     Boolean(file.source && file.source.file_type !== 'pdf' && fileIdentifier === state.xml);
 }
 

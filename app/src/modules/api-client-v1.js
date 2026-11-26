@@ -84,7 +84,7 @@
  * @property {Object<string, any>=} access_control
  * @property {string=} parent_id - Stable ID of the version this file was copied from
  * @property {boolean=} is_frozen - True if a version was copied from this file (read-only history)
- * @property {string|null=} pdf_id - Stable ID of the archived original PDF the version was made from, before text recognition replaced it (null: the document's current PDF)
+ * @property {string|null=} pdf_id - Stable ID of the PDF the file is attached to (#944)
  */
 
 /**
@@ -371,8 +371,9 @@
  * @property {string} doc_id
  * @property {Array<string>} collections
  * @property {Object<string, any>} doc_metadata
- * @property {FileItemModel} source
+ * @property {FileItemModel} source - The canonical PDF of the document (#944), or the primary XML
  * @property {Array<ArtifactModel>} artifacts
+ * @property {Array<FileItemModel>=} pdfs - All PDFs of the document, oldest first (#944)
  */
 
 /**
@@ -493,9 +494,9 @@
 
 /**
  * @typedef {Object} OcrResponse
- * @property {string} stable_id - stable_id of the PDF (unchanged)
- * @property {boolean} changed - Whether the PDF content changed
- * @property {string|null=} archived_stable_id - stable_id of the archived original PDF, if versions were made from it (they stay linked to it)
+ * @property {string} stable_id - stable_id of the PDF that holds the result: a new PDF of the document if the content changed (#944), else the source
+ * @property {string} source_stable_id - stable_id of the PDF the run started from; it is not changed
+ * @property {boolean} changed - Whether a new PDF was created
  * @property {string|null=} message - Message of the engine, if any
  * @property {OcrMethod|null=} method - How the text layer was created, if the engine reports it
  * @property {string|null=} fallback_reason - Why the engine fell back from the preferred method
@@ -606,28 +607,20 @@
  */
 
 /**
- * Another TEI file of the document that stays linked to the old PDF
- * @typedef {Object} AffectedFile
- * @property {string} stable_id - stable_id of the TEI file
- * @property {string} label - Label of the file
- */
-
-/**
  * What writing the text corrections would do, or why it is not possible
  * @typedef {Object} TextCorrectionsPreview
  * @property {Array<TextCorrectionItem>} corrections - Corrections that would be written
  * @property {Array<UnwritableItem>} unwritable - Differences that cannot be written
- * @property {Array<AffectedFile>} affected_files - Other TEI files of the document that would stay linked to the old PDF
- * @property {string|null=} reason - Why the corrections cannot be written; set means the action is not possible. The lists are then empty, except when there are no corrections: `unwritable` and `affected_files` explain why
+ * @property {string|null=} reason - Why the corrections cannot be written; set means the action is not possible. The lists are then empty, except when there are no corrections: `unwritable` explains why
  */
 
 /**
  * Result of writing the text corrections into the PDF
  * @typedef {Object} TextCorrectionsResult
  * @property {string} xml - The TEI document updated for the corrected PDF, as stored in the new version
- * @property {string} tei_stable_id - stable_id of the new version of the document, which is based on the corrected PDF
- * @property {string} pdf_stable_id - stable_id of the PDF (unchanged)
- * @property {string|null=} archived_stable_id - stable_id of the archived old PDF, if versions were made from it
+ * @property {string} tei_stable_id - stable_id of the new version of the document, which is attached to the corrected PDF
+ * @property {string} pdf_stable_id - stable_id of the corrected PDF, a new PDF of the document (#944)
+ * @property {string} source_pdf_stable_id - stable_id of the PDF the corrections were derived from; it is not changed
  * @property {number} corrections - Number of corrections written
  */
 

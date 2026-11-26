@@ -6,7 +6,6 @@
  * @property {HTMLElement} summary
  * @property {HTMLDivElement & correctionsSectionPart} correctionsSection
  * @property {HTMLDivElement & unwritableSectionPart} unwritableSection
- * @property {HTMLDivElement & affectedSectionPart} affectedSection
  * @property {import('../ui.js').SlButton} close
  * @property {import('../ui.js').SlButton} write
  */
@@ -20,11 +19,6 @@
  * @typedef {object} unwritableSectionPart
  * @property {HTMLElement} unwritable
  * @property {import('../ui.js').SlCheckbox} skipUnwritable
- */
-
-/**
- * @typedef {object} affectedSectionPart
- * @property {HTMLElement} affectedFiles
  */
 
 export {}

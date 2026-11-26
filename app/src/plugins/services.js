@@ -11,7 +11,7 @@ import { Plugin } from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
 import ui from '../ui.js'
 import { SsePlugin } from '../plugin-registry.js'
-import { getFileDataById } from '../modules/file-data-utils.js'
+import { getFileDataById, getPdfOfArtifact } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { resolveDeduplicated } from '../modules/codemirror/codemirror-utils.js'
 import { ApiError } from '../modules/utils.js'
@@ -180,21 +180,20 @@ class ServicesPlugin extends Plugin {
       const promises = []
       let file_is_locked = false
 
-      // PDF. `state.pdf` is always the document's current PDF, but a version made before text
-      // recognition replaced the PDF is shown with the original PDF it was made from (#924)
-      const archivedPdf = xml ? this.#archivedPdfOf(currentState, xml) : null
-      const viewerPdf = archivedPdf ?? pdf ?? (xml && this.#shownPdf !== currentState.pdf ? currentState.pdf : null)
+      // PDF. A version is shown with the PDF it is attached to, which becomes `state.pdf` (#944)
+      const ownPdf = xml ? getPdfOfArtifact(currentState.fileData, xml) : null
+      if (ownPdf) pdf = (pdf || ownPdf !== currentState.pdf) ? ownPdf : null
+      const viewerPdf = pdf ?? (xml && this.#shownPdf !== currentState.pdf ? currentState.pdf : null)
       if (pdf) {
         await this.dispatchStateChange({ pdf: null, xml: null, diff: null })
       }
       if (pdf || (viewerPdf && viewerPdf !== this.#shownPdf)) {
-        this.#logger.info("Loading PDF: " + viewerPdf + (archivedPdf ? " (original before text recognition)" : ""))
+        this.#logger.info("Loading PDF: " + viewerPdf)
         // Convert document identifier to static file URL
         const pdfUrl = `/api/files/${viewerPdf}` // TODO unhardcode this!
         this.#shownPdf = viewerPdf
         promises.push(this.#pdfViewer.load(pdfUrl))
-        this.#pdfViewer.setArchivedPdfIndicator(Boolean(archivedPdf))
-        testLog('PDF_SHOWN', { pdf: viewerPdf, archived: Boolean(archivedPdf) })
+        testLog('PDF_SHOWN', { pdf: viewerPdf })
       }
 
       // XML
@@ -343,21 +342,6 @@ class ServicesPlugin extends Plugin {
       // Clear loading state
       await this.context.invokePluginEndpoint(ep.filedata.loading, false)
     }
-  }
-
-  /**
-   * Returns the stable_id of the archived original PDF that a version was made from, if text
-   * recognition has replaced the document's PDF since (#924).
-   * @param {ApplicationState} currentState
-   * @param {string} xml - stable_id of the version
-   * @returns {string|null} The archived PDF, or null if the version uses the current PDF
-   */
-  #archivedPdfOf(currentState, xml) {
-    for (const file of currentState.fileData || []) {
-      const artifact = file.artifacts?.find(artifact => artifact.id === xml)
-      if (artifact) return artifact.pdf_id ?? null
-    }
-    return null
   }
 
   /**

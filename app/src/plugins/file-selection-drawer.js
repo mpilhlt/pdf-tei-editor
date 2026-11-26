@@ -29,7 +29,8 @@ import {
   groupFilesByCollection,
   findMatchingGold,
   findFileBySourceId,
-  getCollectionName
+  getCollectionName,
+  documentHasPdf
 } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import Plugin from '../modules/plugin-base.js'
@@ -551,7 +552,7 @@ class FileSelectionDrawerPlugin extends Plugin {
       const files = groupedFiles[collectionName];
       if (!files) return false;
       return files.some(file => {
-        if (state.pdf && file.source?.id === state.pdf) return true;
+        if (documentHasPdf(file, state.pdf)) return true;
         if (state.xml) {
           return file.artifacts?.some(artifact => artifact.id === state.xml);
         }
@@ -562,7 +563,7 @@ class FileSelectionDrawerPlugin extends Plugin {
     /** @type { (file:DocumentItem) => boolean} */
     const shouldExpandPdf = (file) => {
       if (!state.pdf && !state.xml) return false;
-      if (state.pdf && file.source?.id === state.pdf) return true;
+      if (documentHasPdf(file, state.pdf)) return true;
       if (state.xml) {
         return file.artifacts?.some(artifact => artifact.id === state.xml);
       }
@@ -662,7 +663,9 @@ class FileSelectionDrawerPlugin extends Plugin {
     if (state.xml) {
       itemToSelect = fileTree.querySelector(`[data-type="gold"][data-hash="${state.xml}"], [data-type="version"][data-hash="${state.xml}"], [data-type="xml-only"][data-hash="${state.xml}"]`);
     } else if (state.pdf) {
-      itemToSelect = fileTree.querySelector(`[data-type="pdf"][data-hash="${state.pdf}"]`);
+      // documents are listed by their canonical PDF (#944)
+      const sourceId = (state.fileData && findFileBySourceId(state.fileData, state.pdf)?.source.id) || state.pdf;
+      itemToSelect = fileTree.querySelector(`[data-type="pdf"][data-hash="${sourceId}"]`);
     }
 
     if (itemToSelect) {

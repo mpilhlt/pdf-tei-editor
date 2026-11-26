@@ -55,8 +55,9 @@
  * @property {string} doc_id - Document identifier
  * @property {string[]} collections - All collections for this document
  * @property {DocumentMetadata } doc_metadata - Document metadata from TEI header
- * @property {FileItem} source - Source file (PDF or primary XML)
- * @property {Artifact[]} artifacts - All artifact files (TEI, etc.)
+ * @property {FileItem} source - Source file: the canonical PDF of the document (#944), or the primary XML
+ * @property {Artifact[]} artifacts - All artifact files (TEI, etc.); `pdf_id` is the PDF an artifact is attached to
+ * @property {FileItem[]} [pdfs] - All PDFs of the document, oldest first (#944)
  */
 
 /**
@@ -82,6 +83,10 @@ export function createIdLookupIndex(fileData) {
   const index = new Map();
 
   fileData.forEach((file) => {
+    // Index all PDFs of the document, so that a document is found by any of its PDFs (#944)
+    for (const pdf of file.pdfs || []) {
+      index.set(pdf.id, { type: 'source', item: pdf, file: file, label: pdf.label })
+    }
     // Index source file ID
     if (file.source && file.source.id) {
       index.set(file.source.id, {
@@ -331,13 +336,38 @@ export function findCollectionByHash(fileData, hash) {
 }
 
 /**
- * Finds a file object by source ID
+ * Finds a file object by source ID, or by the ID of any PDF of the document (#944)
  * @param {DocumentItem[]} fileData - The file data array
- * @param {string} sourceId - Stable ID of the source file
+ * @param {string} sourceId - Stable ID of the source file or of a PDF of the document
  * @returns {DocumentItem|null} File object or null if not found
  */
 export function findFileBySourceId(fileData, sourceId) {
-  return fileData.find(file => file.source.id === sourceId) || null;
+  return fileData.find(file => file.source.id === sourceId || (file.pdfs || []).some(pdf => pdf.id === sourceId)) || null;
+}
+
+/**
+ * Whether a PDF is one of the PDFs of a document: its canonical PDF (the source) or another (#944)
+ * @param {DocumentItem} file - The document
+ * @param {string|null|undefined} pdfId - Stable ID of the PDF
+ * @returns {boolean}
+ */
+export function documentHasPdf(file, pdfId) {
+  if (!pdfId) return false
+  return file.source?.id === pdfId || (file.pdfs || []).some(pdf => pdf.id === pdfId)
+}
+
+/**
+ * Returns the PDF a version is attached to (#944)
+ * @param {DocumentItem[]} fileData - The file data array
+ * @param {string} xmlId - Stable ID of the version
+ * @returns {string|null} Stable ID of its PDF, or null if the version is not in the file data or has none
+ */
+export function getPdfOfArtifact(fileData, xmlId) {
+  for (const file of fileData || []) {
+    const artifact = file.artifacts?.find(a => a.id === xmlId)
+    if (artifact) return artifact.pdf_id ?? null
+  }
+  return null
 }
 
 /**

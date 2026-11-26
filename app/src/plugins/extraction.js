@@ -348,14 +348,16 @@ class ExtractionPlugin extends Plugin {
         notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
       }
       if (controller.signal.aborted) {
-        // only the LLM correction pass was cancelled: the OCR result is stored, nothing is extracted
+        // only the LLM correction pass was cancelled: the OCR result is stored as a new PDF of the
+        // document (#944), which no version is attached to yet; nothing is extracted
         await this.#loadWhenFinished(started, 'Text recognition is finished (the correction was cancelled).',
-          () => this.#services.load({ pdf: fileId, xml: started.pdf === fileId ? started.xml : null }))
+          () => this.#services.load({ pdf: ocrResult.stable_id, xml: null }))
         return
       }
-      // extraction cannot be cancelled: the server creates the document anyway
+      // extraction cannot be cancelled: the server creates the document anyway. It extracts from
+      // the PDF that text recognition created, which the new version is attached to
       progress.show(progressId, { label: `Extracting with ${extractorName}`, value: null, cancellable: false })
-      result = /** @type {ExtractionResult} */ (await this.getDependency('api-keys').withKeyPrompt(() => this.#client.extract(fileId, options)))
+      result = /** @type {ExtractionResult} */ (await this.getDependency('api-keys').withKeyPrompt(() => this.#client.extract(ocrResult.stable_id, options)))
     } catch (error) {
       if (error instanceof OcrCancelledError) {
         notify('Text recognition was cancelled. The PDF is unchanged.', 'primary', 'info-circle')
