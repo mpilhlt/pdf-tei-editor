@@ -7,6 +7,7 @@
  *
  * @testCovers app/src/plugins/services.js
  * @testCovers app/src/modules/file-data-utils.js
+ * @testCovers app/src/plugins/file-selection-drawer.js
  * @testCovers fastapi_app/routers/ocr.py
  * @testCovers fastapi_app/lib/repository/file_repository.py
  */
@@ -120,6 +121,26 @@ test.describe('PDFs of a document after OCR', () => {
       consoleLogs.length = 0;
       await page.evaluate((id) => /** @type {any} */(window).app.getDependency('services').load({ pdf: id }), ocrPdfId);
       expect((await waitForTestMessage(consoleLogs, 'PDF_SHOWN', 15000)).value).toEqual({ pdf: ocrPdfId });
+
+      // The file selection drawer lists the PDFs of the document, newest first
+      await page.locator('sl-button[name="fileDrawerTrigger"]').click();
+      const drawer = page.locator('sl-drawer[name="fileDrawer"]');
+      await expect(drawer).toHaveAttribute('open', '');
+      const ocrPdfItem = drawer.locator(`.pdf-file-item[data-hash="${ocrPdfId}"]`);
+      const originalPdfItem = drawer.locator(`.pdf-file-item[data-hash="${pdfId}"]`);
+      await expect(ocrPdfItem).toHaveCount(1);
+      await expect(ocrPdfItem).toContainText('main · no version');
+      await expect(originalPdfItem).toContainText('2 versions');
+      // selecting a PDF opens it without a version
+      await page.evaluate(() => document.querySelectorAll('sl-drawer[name="fileDrawer"] .pdfs-section').forEach(
+        section => { /** @type {any} */ (section).expanded = true; }));
+      consoleLogs.length = 0;
+      await originalPdfItem.click();
+      expect((await waitForTestMessage(consoleLogs, 'PDF_SHOWN', 15000)).value).toEqual({ pdf: pdfId });
+      await expect.poll(() => page.evaluate(() => {
+        const state = /** @type {any} */(window).app.getCurrentState();
+        return { pdf: state.pdf, xml: state.xml };
+      })).toEqual({ pdf: pdfId, xml: null });
     } finally {
       stopErrorMonitoring();
       await releaseAllLocks(page);

@@ -12,7 +12,9 @@ import {
   createIdLookupIndex,
   documentHasPdf,
   findFileBySourceId,
-  getPdfOfArtifact
+  getPdfOfArtifact,
+  getDocumentPdfs,
+  formatDocumentPdfLabel
 } from '../../../app/src/modules/file-data-utils.js';
 
 /** @param {string} id */
@@ -62,5 +64,21 @@ describe('PDFs of a document', () => {
     assert.strictEqual(index.get('p1')?.file.doc_id, 'doc1');
     assert.strictEqual(index.get('p1')?.type, 'source');
     assert.strictEqual(index.get('p2')?.item.id, 'p2');
+  });
+
+  it('lists the PDFs of a document newest first, with the versions attached to each', () => {
+    assert.deepStrictEqual(getDocumentPdfs(fileData[0]).map(p => [p.id, p.isMain, p.versionCount]), [
+      ['p2', true, 1],
+      ['p1', false, 1]
+    ]);
+    assert.deepStrictEqual(getDocumentPdfs(fileData[1]), []);
+  });
+
+  it('labels a PDF with its date, whether it is the main PDF and its versions', () => {
+    const label = formatDocumentPdfLabel({ id: 'p1', created_at: '2026-11-27 10:15:00', isMain: true, versionCount: 2 }, 'en-GB');
+    assert.match(label, /^27\/11\/2026, \d\d:\d\d · main · 2 versions$/);
+    assert.match(formatDocumentPdfLabel({ id: 'p1', created_at: '2026-11-27T10:15:00Z', isMain: false, versionCount: 1 }, 'en-GB'), / · 1 version$/);
+    assert.match(formatDocumentPdfLabel({ id: 'p1', created_at: '2026-11-27T10:15:00', isMain: false, versionCount: 0 }, 'en-GB'), / · no version$/);
+    assert.strictEqual(formatDocumentPdfLabel({ id: 'p1', created_at: 'unknown', isMain: false, versionCount: 0 }), 'unknown · no version');
   });
 });

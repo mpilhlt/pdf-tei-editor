@@ -357,6 +357,47 @@ export function documentHasPdf(file, pdfId) {
 }
 
 /**
+ * A PDF of a document, as listed in the file selection
+ * @typedef {object} DocumentPdfInfo
+ * @property {string} id - Stable ID of the PDF
+ * @property {string} created_at - ISO timestamp of its creation
+ * @property {boolean} isMain - Whether it is the canonical PDF of the document (the source)
+ * @property {number} versionCount - Number of versions of the document attached to it
+ */
+
+/**
+ * Returns the PDFs of a document, newest first, with the number of versions attached to each (#944)
+ * @param {DocumentItem} file - The document
+ * @returns {DocumentPdfInfo[]}
+ */
+export function getDocumentPdfs(file) {
+  return (file.pdfs || [])
+    .map(pdf => ({
+      id: pdf.id,
+      created_at: pdf.created_at,
+      isMain: pdf.id === file.source?.id,
+      versionCount: (file.artifacts || []).filter(a => a.pdf_id === pdf.id).length
+    }))
+    .reverse()
+}
+
+/**
+ * Returns the label of a PDF of a document, e.g. "27/11/2026, 10:15 · main · 2 versions"
+ * @param {DocumentPdfInfo} info
+ * @param {string} [locale] - Locale of the date, default: the browser's
+ * @returns {string}
+ */
+export function formatDocumentPdfLabel(info, locale) {
+  // the server sends UTC timestamps without an offset
+  const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(info.created_at) ? info.created_at : `${info.created_at.replace(' ', 'T')}Z`
+  const date = new Date(iso)
+  const parts = [isNaN(date.getTime()) ? info.created_at : date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })]
+  if (info.isMain) parts.push('main')
+  parts.push(info.versionCount === 0 ? 'no version' : `${info.versionCount} version${info.versionCount === 1 ? '' : 's'}`)
+  return parts.join(' · ')
+}
+
+/**
  * Returns the PDF a version is attached to (#944)
  * @param {DocumentItem[]} fileData - The file data array
  * @param {string} xmlId - Stable ID of the version
