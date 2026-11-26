@@ -33,7 +33,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 def is_initial_request(range_header: str | None) -> bool:
     """
-    Returns whether a request fetches a file from its beginning, i.e. has no `Range` header or a range that starts at byte 0. PDF.js loads a PDF in many range requests (chunks of 64 KiB by default), which are logged at debug level only.
+    Returns whether a request fetches a file from its beginning, i.e. has no `Range` header or a range that starts at byte 0. PDF.js loads a PDF in range requests (chunks of `rangeChunkSize`, see `app/src/modules/pdfviewer.js`), of which only the first is logged at info level.
 
     Args:
         range_header: Value of the `Range` request header, if any
