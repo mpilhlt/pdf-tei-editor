@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 import pikepdf
@@ -37,6 +38,7 @@ from ..lib.models.models_ocr import (
     OcrLlmCorrection,
     OcrOptionInfo,
     OcrProgress,
+    OcrLlmCorrectionRequest,
     OcrRequest,
     OcrResponse,
     OcrReviewFinding,
@@ -55,12 +57,12 @@ from ..lib.llm import LLMProvider, LLMProviderRegistry
 from ..lib.llm.http_errors import llm_http_error
 from ..lib.llm.model_access import check_model_access
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
-from ..lib.ocr.jobs import OcrJobConflict, OcrJobStore
+from ..lib.ocr.jobs import ACTIVE_STATUSES, OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr import llm_correction
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
 from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window
-from ..lib.ocr.progress import ProgressCallback, progress_reporter
+from ..lib.ocr.progress import OcrCancelled, ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
 from ..lib.ocr.text_layer import WordPatch, patch_text_layer, read_text_layer
@@ -340,6 +342,42 @@ async def apply_ocr(
     return job
 
 
+@router.post("/llm-correction", response_model=OcrJob, status_code=202)
+async def correct_ocr_errors(
+    request: OcrLlmCorrectionRequest,
+    repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
+    jobs: OcrJobStore = Depends(get_ocr_job_store),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> OcrJob:
+    """
+    Start correcting the OCR errors of the text layer of a stored PDF with an LLM, e.g. after the
+    correction pass of an OCR run was cancelled. This is the correction pass of `POST /api/v1/ocr`
+    without the text recognition: the same pages are reviewed and the corrections are written into
+    the text layer and recorded under "text_corrections".
+
+    The run is a job like an OCR run: poll `GET /api/v1/ocr/jobs/{job_id}`, cancel it with
+    `POST /api/v1/ocr/jobs/{job_id}/cancel` (the PDF then stays unchanged), and only one run happens
+    at a time on the server. A PDF with a queued or running job is rejected with 409. The provider
+    and the model are checked first: 404 for an unknown provider, 428 if the provider needs a secret
+    of the user, 403 if the user may not use the model. A failure of the pass is reported in
+    `llm_correction_error` of the result.
+    """
+    file = _get_pdf(repo, request.stable_id, current_user, "edit")
+    _pdf_path(storage, file)
+    provider = _llm_provider(request.provider_id, current_user)
+    _check_llm_model(provider, request.provider_id, request.model_id, current_user)
+    llm = _LlmCorrection(provider, request.provider_id, request.model_id)
+    try:
+        job = jobs.create(file.stable_id, str(current_user.get("username") or ""))
+    except OcrJobConflict as e:
+        raise HTTPException(status_code=409, detail=f"{e}. Please wait until it is finished.")
+    task = asyncio.create_task(_run_correction_job(job, jobs, request.languages, repo, storage, current_user, llm))
+    _running_jobs.add(task)
+    task.add_done_callback(_running_jobs.discard)
+    return job
+
+
 @router.get("/jobs/{job_id}", response_model=OcrJob)
 def get_ocr_job(
     job_id: str,
@@ -355,6 +393,29 @@ def get_ocr_job(
     job = jobs.get(job_id)
     if job is None or job.username != str(current_user.get("username") or ""):
         raise HTTPException(status_code=404, detail=f"OCR job not found: {job_id}")
+    return job
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=OcrJob)
+def cancel_ocr_job(
+    job_id: str,
+    jobs: OcrJobStore = Depends(get_ocr_job_store),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> OcrJob:
+    """
+    Cancel an OCR run started with `POST /api/v1/ocr`. The stored PDF stays unchanged.
+
+    A queued job stops at once. A running job stops at the next progress report of the engine or
+    of the LLM correction pass, or, if the engine does not report progress, when the engine is
+    finished; its result is then discarded. Until then, the job keeps its status: poll
+    `GET /api/v1/ocr/jobs/{job_id}` until it is 'cancelled'. A finished job is returned as it is.
+    """
+    job = jobs.get(job_id)
+    if job is None or job.username != str(current_user.get("username") or ""):
+        raise HTTPException(status_code=404, detail=f"OCR job not found: {job_id}")
+    if job.status in ACTIVE_STATUSES:
+        logger.info(f"Cancelling OCR job {job.job_id} for {job.stable_id}")
+        jobs.request_cancel(job)
     return job
 
 
@@ -422,9 +483,13 @@ async def _run_job(
     llm: _LlmCorrection | None = None,
 ) -> None:
     """Wait until no other OCR run happens on the server, run OCR and record the outcome in the job."""
+    is_cancelled = lambda: jobs.is_cancel_requested(job.job_id)  # noqa: E731
     try:
         async with jobs.run_slot(job) as job:
-            result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user, _progress_writer(jobs, job), llm)
+            result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user, _progress_writer(jobs, job), llm, is_cancelled)
+    except OcrCancelled:
+        logger.info(f"OCR job {job.job_id} for {job.stable_id} was cancelled")
+        jobs.cancel(job)
     except HTTPException as e:
         jobs.fail(job, str(e.detail), e.status_code)
     except asyncio.CancelledError:
@@ -435,6 +500,110 @@ async def _run_job(
         jobs.fail(job, f"Text recognition failed: {e}", 500)
     else:
         jobs.finish(job, result)
+
+
+async def _run_correction_job(
+    job: OcrJob,
+    jobs: OcrJobStore,
+    languages: list[str],
+    repo: FileRepository,
+    storage: FileStorage,
+    user: dict[str, Any],
+    llm: _LlmCorrection,
+) -> None:
+    """Wait until no other OCR run happens on the server, run the LLM correction and record the outcome in the job."""
+    is_cancelled = lambda: jobs.is_cancel_requested(job.job_id)  # noqa: E731
+    try:
+        async with jobs.run_slot(job) as job:
+            result = await _correct_stored_pdf(job.stable_id, languages, repo, storage, user, llm, _progress_writer(jobs, job), is_cancelled)
+    except OcrCancelled:
+        logger.info(f"LLM correction job {job.job_id} for {job.stable_id} was cancelled")
+        jobs.cancel(job)
+    except HTTPException as e:
+        jobs.fail(job, str(e.detail), e.status_code)
+    except asyncio.CancelledError:
+        jobs.fail(job, "The correction was interrupted because the server is restarting. Please try again.", 503)
+        raise
+    except Exception as e:
+        logger.exception(f"LLM correction job {job.job_id} for {job.stable_id} failed")
+        jobs.fail(job, f"The correction failed: {e}", 500)
+    else:
+        jobs.finish(job, result)
+
+
+async def _correct_stored_pdf(
+    stable_id: str,
+    languages: list[str],
+    repo: FileRepository,
+    storage: FileStorage,
+    user: dict[str, Any],
+    llm: _LlmCorrection,
+    on_progress: ProgressCallback | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
+) -> OcrResponse:
+    """
+    Correct the OCR errors of the text layer of a stored PDF with an LLM and store the PDF if
+    anything was corrected. The caller holds the run slot.
+
+    Without `languages`, those of the last OCR run of the PDF are used.
+
+    Raises:
+        HTTPException: if the PDF is gone
+        OcrCancelled: if the run was cancelled; the PDF is unchanged
+    """
+    report_to = on_progress or (lambda _progress: None)
+    file = _get_pdf(repo, stable_id, user, "edit")
+    input_path = _pdf_path(storage, file)
+    ocr_record = file.file_metadata.get(OCR_METADATA_KEY)
+    if not languages and isinstance(ocr_record, dict):
+        recorded = ocr_record.get("languages")
+        languages = [str(lang) for lang in recorded] if isinstance(recorded, list) else []
+    with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
+        work_path = Path(tmp) / "corrected.pdf"
+        work_path.write_bytes(input_path.read_bytes())
+        with progress_reporter(report_to, is_cancelled) as progress:
+            run = await _correct_with_llm(work_path, llm, languages)
+            progress.check_cancelled()
+        changed = False
+        archived_stable_id: str | None = None
+        if run.corrections:
+            applied_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            record = _correction_record(run, llm, applied_at, str(user.get("username") or ""), "llm-correction")
+            previous = file.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
+            file_metadata = {**file.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, record]}
+            new_hash, archived_stable_id = _store_pdf(repo, storage, file, file.id, work_path.read_bytes(), file_metadata)
+            changed = new_hash != file.id
+            logger.info(f"Corrected {len(run.corrections)} OCR error(s) of {file.stable_id} with {llm.provider_id}/{llm.model_id}: {file.id[:8]} -> {new_hash[:8]}")
+        # the result is stored: cancelling no longer applies
+        with progress_reporter(report_to) as progress:
+            progress.report("Checking the new text layer")
+            quality = await asyncio.to_thread(analyze_text_layer, work_path)
+    if isinstance(ocr_record, dict):
+        quality.ocr_applied = ocr_record
+    return OcrResponse(
+        stable_id=file.stable_id,
+        changed=changed,
+        archived_stable_id=archived_stable_id,
+        message=_llm_correction_message(run, llm.model_id),
+        method=None,
+        fallback_reason=None,
+        quality=quality,
+        llm_corrections=[OcrLlmCorrection(page=c.page, old=c.old, new=c.new, rationale=c.rationale) for c in run.corrections],
+        llm_correction_error=run.error,
+        llm_correction_cancelled=False,
+    )
+
+
+def _correction_record(run: llm_correction.CorrectionRun, llm: _LlmCorrection, applied_at: str, applied_by: str, source: str) -> dict[str, str | list[dict[str, str | int]]]:
+    """The record of the corrections of an LLM correction pass in the file metadata ("text_corrections")."""
+    return {
+        "applied_at": applied_at,
+        "applied_by": applied_by,
+        "source": source,
+        "provider_id": llm.provider_id,
+        "model_id": llm.model_id,
+        "corrections": [{"page": c.page, "old": c.old, "new": c.new} for c in run.corrections],
+    }
 
 
 def _progress_writer(jobs: OcrJobStore, job: OcrJob) -> ProgressCallback:
@@ -470,76 +639,91 @@ async def _recognize(
     user: dict[str, Any],
     on_progress: ProgressCallback | None = None,
     llm: _LlmCorrection | None = None,
+    is_cancelled: Callable[[], bool] | None = None,
 ) -> OcrResponse:
     """
     Apply OCR to a PDF and replace the stored PDF with the result. The caller holds the run slot.
 
     Progress reported by the engine (see `fastapi_app.lib.ocr.progress`) is passed to on_progress.
-    With `llm`, the LLM correction pass corrects the new text layer in place before it is stored.
+
+    The OCR result is stored before the LLM correction pass (`llm`) starts, so that it is kept if
+    the pass fails or is cancelled; the pass corrects the stored text layer and stores the PDF again
+    if it corrected anything.
+
+    If `is_cancelled` returns True, OCR stops at the next progress report of the engine, or at the
+    latest before its result is stored, and `OcrCancelled` is raised. Once the OCR result is stored,
+    cancelling stops only the LLM correction pass (`llm_correction_cancelled` in the response).
 
     Raises:
         HTTPException: if the PDF is gone, the options are invalid or the engine fails
+        OcrCancelled: if the run was cancelled before the OCR result was stored
     """
+    report_to = on_progress or (lambda _progress: None)
     # look the PDF up again, since it may have changed while the job was queued
     file = _get_pdf(repo, stable_id, user, "edit")
     input_path = _pdf_path(storage, file)
-    with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp, progress_reporter(on_progress or (lambda _progress: None)) as progress:
+    with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
         output_path = Path(tmp) / "output.pdf"
-        try:
-            # to_thread passes the progress reporter on to the worker thread
-            outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, rebuild)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
-            logger.error(f"OCR with {engine.id} failed for {file.stable_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"Text recognition failed: {e}")
+        with progress_reporter(report_to, is_cancelled) as progress:
+            try:
+                # to_thread passes the progress reporter on to the worker thread
+                outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, rebuild)
+            except ValueError as e:
+                # an engine may turn the cancellation raised in its progress report into its own error
+                progress.check_cancelled()
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception as e:
+                progress.check_cancelled()
+                logger.error(f"OCR with {engine.id} failed for {file.stable_id}: {e}")
+                raise HTTPException(status_code=500, detail=f"Text recognition failed: {e}")
+            progress.check_cancelled()
         if not output_path.exists():
             raise HTTPException(status_code=500, detail="Text recognition produced no output")
-        run = await _correct_with_llm(output_path, llm, languages) if llm is not None else None
-        content = output_path.read_bytes()
-        progress.report("Checking the new text layer")
-        quality = await asyncio.to_thread(analyze_text_layer, output_path)
 
-    result = outcome if isinstance(outcome, OcrResult) else OcrResult(message=outcome)
-    applied_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    applied_by = str(user.get("username") or "")
-    record: dict[str, str | list[str]] = {
-        "engine": engine.id,
-        "languages": languages,
-        "applied_at": applied_at,
-        "applied_by": applied_by,
-    }
-    if result.method:
-        record["method"] = result.method
-    if result.fallback_reason:
-        record["fallback_reason"] = result.fallback_reason
-    new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
-    changed = new_hash != file.id
-    file_metadata = {**file.file_metadata, OCR_METADATA_KEY: record}
-    message = result.message
-    if llm is not None and run is not None:
-        if run.corrections:
-            correction_record: dict[str, str | list[dict[str, str | int]]] = {
-                "applied_at": applied_at,
-                "applied_by": applied_by,
-                "source": "llm-after-ocr",
-                "provider_id": llm.provider_id,
-                "model_id": llm.model_id,
-                "corrections": [{"page": c.page, "old": c.old, "new": c.new} for c in run.corrections],
-            }
-            previous = file.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
-            file_metadata[TEXT_CORRECTIONS_METADATA_KEY] = [*previous, correction_record]
-        note = _llm_correction_message(run, llm.model_id)
-        message = f"{message} {note}" if message else note
-    archived_stable_id: str | None = None
-    if changed:
-        # Moves the storage reference to the new content; the old content is kept as an archived
-        # PDF if versions were made from it (#924)
-        _, archived = repo.replace_pdf_content(file.stable_id, new_hash, len(content), file_metadata)
-        archived_stable_id = archived.stable_id if archived else None
-    else:
-        repo.update_file(file.id, FileUpdate(file_metadata=file_metadata), stable_id=file.stable_id)
-    logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {new_hash[:8]}" + (f", original archived as {archived_stable_id}" if archived_stable_id else ""))
+        result = outcome if isinstance(outcome, OcrResult) else OcrResult(message=outcome)
+        applied_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        applied_by = str(user.get("username") or "")
+        record: dict[str, str | list[str]] = {
+            "engine": engine.id,
+            "languages": languages,
+            "applied_at": applied_at,
+            "applied_by": applied_by,
+        }
+        if result.method:
+            record["method"] = result.method
+        if result.fallback_reason:
+            record["fallback_reason"] = result.fallback_reason
+        file_metadata = {**file.file_metadata, OCR_METADATA_KEY: record}
+        new_hash, archived_stable_id = _store_pdf(repo, storage, file, file.id, output_path.read_bytes(), file_metadata)
+        changed = new_hash != file.id
+        logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {new_hash[:8]}" + (f", original archived as {archived_stable_id}" if archived_stable_id else ""))
+
+        message = result.message
+        run: llm_correction.CorrectionRun | None = None
+        correction_cancelled = False
+        if llm is not None:
+            try:
+                with progress_reporter(report_to, is_cancelled):
+                    run = await _correct_with_llm(output_path, llm, languages)
+            except OcrCancelled:
+                logger.info(f"LLM correction of {file.stable_id} was cancelled; the OCR result is kept")
+                correction_cancelled = True
+                note = f"The correction with {llm.model_id} was cancelled."
+            else:
+                if run.corrections:
+                    correction_record = _correction_record(run, llm, applied_at, applied_by, "llm-after-ocr")
+                    previous = file.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
+                    file_metadata = {**file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, correction_record]}
+                    corrected_hash, _ = _store_pdf(repo, storage, file, new_hash, output_path.read_bytes(), file_metadata)
+                    changed = changed or corrected_hash != file.id
+                note = _llm_correction_message(run, llm.model_id)
+            message = f"{message} {note}" if message else note
+
+        # the result is stored: cancelling no longer applies
+        with progress_reporter(report_to) as progress:
+            progress.report("Checking the new text layer")
+            quality = await asyncio.to_thread(analyze_text_layer, output_path)
+
     quality.ocr_applied = record
     return OcrResponse(
         stable_id=file.stable_id,
@@ -551,7 +735,34 @@ async def _recognize(
         quality=quality,
         llm_corrections=[OcrLlmCorrection(page=c.page, old=c.old, new=c.new, rationale=c.rationale) for c in run.corrections] if run else [],
         llm_correction_error=run.error if run else None,
+        llm_correction_cancelled=correction_cancelled,
     )
+
+
+def _store_pdf(repo: FileRepository, storage: FileStorage, file: FileMetadata, current_hash: str, content: bytes, file_metadata: dict[str, Any]) -> tuple[str, str | None]:
+    """
+    Store new content and file metadata of a PDF.
+
+    Args:
+        repo: File repository
+        storage: File storage
+        file: The PDF as it was before the OCR run
+        current_hash: Content hash the PDF has now (changes when the run stores it twice)
+        content: The new content
+        file_metadata: The new file metadata
+
+    Returns:
+        The content hash of the new content, and the stable_id of the archived previous content if
+        versions were made from it (#924), else None
+    """
+    new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
+    if new_hash == current_hash:
+        repo.update_file(current_hash, FileUpdate(file_metadata=file_metadata), stable_id=file.stable_id)
+        return new_hash, None
+    # Moves the storage reference to the new content; the old content is kept as an archived PDF
+    # if versions were made from it
+    _, archived = repo.replace_pdf_content(file.stable_id, new_hash, len(content), file_metadata)
+    return new_hash, archived.stable_id if archived else None
 
 
 # --- Text corrections (#931) ------------------------------------------------------------------

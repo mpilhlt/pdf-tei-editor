@@ -30,6 +30,15 @@ class OcrEngineInfo(BaseModel):
     options: dict[str, OcrOptionInfo] = Field(default_factory=dict, description="Parameters apart from the languages")
 
 
+class OcrLlmCorrectionRequest(BaseModel):
+    """Request to correct the OCR errors of the text layer of a stored PDF with an LLM."""
+
+    stable_id: str = Field(..., min_length=1, description="stable_id of the PDF")
+    provider_id: str = Field(..., min_length=1, description="Id of the LLM provider")
+    model_id: str = Field(..., min_length=1, description="Id of the model")
+    languages: list[str] = Field(default_factory=list, description="Languages of the document as BCP 47 codes; if empty, those of the last OCR run of the PDF")
+
+
 class OcrRequest(BaseModel):
     """Request to apply OCR to a PDF."""
 
@@ -71,6 +80,7 @@ class OcrResponse(BaseModel):
     quality: "TextQualityReport" = Field(..., description="Text layer quality after OCR")
     llm_corrections: list[OcrLlmCorrection] = Field(default_factory=list, description="Corrections made by the LLM correction pass, if it was requested")
     llm_correction_error: Optional[str] = Field(None, description="Why the LLM correction pass stopped or failed; the OCR result is kept")
+    llm_correction_cancelled: bool = Field(False, description="Whether the user cancelled the LLM correction pass; the OCR result was stored before it started and is kept")
 
 
 class TextCorrectionsRequest(BaseModel):
@@ -151,7 +161,7 @@ class TextQualityReport(BaseModel):
     ocr_applied: Optional[dict[str, str | list[str]]] = Field(default=None, description="Record of a previous OCR run by this application")
 
 
-OcrJobStatus = Literal["queued", "running", "done", "failed"]
+OcrJobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 
 
 class OcrProgress(BaseModel):
@@ -168,13 +178,13 @@ class OcrJob(BaseModel):
     """
     An OCR run in the background. OCR of a long document can take longer than a reverse proxy
     waits for a response, so `POST /api/v1/ocr` returns the job at once and the client polls
-    `GET /api/v1/ocr/jobs/{job_id}` until the status is 'done' or 'failed'. Only one OCR run
-    happens at a time on the server; other jobs wait with the status 'queued'.
+    `GET /api/v1/ocr/jobs/{job_id}` until the status is 'done', 'failed' or 'cancelled'. Only one
+    OCR run happens at a time on the server; other jobs wait with the status 'queued'.
     """
 
     job_id: str = Field(..., description="Id of the job")
     stable_id: str = Field(..., description="stable_id of the PDF")
-    status: OcrJobStatus = Field(..., description="'queued' (waiting for another run to finish), 'running', 'done' (see 'result') or 'failed' (see 'error')")
+    status: OcrJobStatus = Field(..., description="'queued' (waiting for another run to finish), 'running', 'done' (see 'result'), 'failed' (see 'error') or 'cancelled' (stopped by the user, see `POST /api/v1/ocr/jobs/{job_id}/cancel`)")
     progress: Optional[OcrProgress] = Field(None, description="Progress of the run if the status is 'running' and the engine reports it")
     result: Optional[OcrResponse] = Field(None, description="Result of the run if the status is 'done'")
     error: Optional[str] = Field(None, description="Error message if the status is 'failed'")

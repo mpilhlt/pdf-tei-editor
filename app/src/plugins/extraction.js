@@ -8,7 +8,8 @@
  * @import { extractionActionsPart } from '../templates/extraction-buttons.types.js'
  * @import { extractionOptionsPart } from '../templates/extraction-dialog.types.js'
  * @import { OcrRunOptions, OcrSettings } from './ocr.js'
- * @import { OcrEngineInfo, TextQualityReport, LanguageConflict } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, OcrJob, TextQualityReport, LanguageConflict } from '../modules/api-client-v1.js'
+ * @import { ShownDocuments } from '../modules/background-result.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -23,6 +24,19 @@ import { getDocumentMetadata } from '../modules/tei-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { languageName } from '../modules/language-chooser.js'
+import { OcrCancelledError } from './ocr.js'
+import { loadWhenFinished } from '../modules/background-result.js'
+
+/**
+ * Percentage of the current phase of an OCR job that is done, or null if the phase is not counted
+ * @param {OcrJob} job
+ * @returns {number|null}
+ */
+function progressPercent(job) {
+  const progress = job.progress
+  if (!progress?.total) return null
+  return Math.min(100, Math.round(((progress.done ?? 0) / progress.total) * 100))
+}
 
 /**
  * Extractor configuration object
@@ -100,7 +114,7 @@ await registerTemplate('extraction-dialog', 'extraction-dialog.html')
 class ExtractionPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'extraction', deps: ['services', 'file-selection', 'logger', 'dialog', 'api-keys', 'ocr'] })
+    super(context, { name: 'extraction', deps: ['services', 'file-selection', 'logger', 'dialog', 'api-keys', 'ocr', 'progress'] })
   }
 
   static extensionPoints = [ep.toolbar.contentItems];
@@ -233,6 +247,8 @@ class ExtractionPlugin extends Plugin {
 
       testLog('EXTRACTION_OPTIONS_DIALOG_STARTING', { enhancedOptions })
       const { ocr, ...options } = await this.#promptForExtractionOptions(enhancedOptions)
+      // the documents shown when the extraction started, to tell whether the user opened others meanwhile
+      const started = { pdf: state.pdf, xml: state.xml }
 
       const spinnerMessage = 'Extracting, please wait'
       ui.spinner.show(spinnerMessage)
@@ -255,22 +271,10 @@ class ExtractionPlugin extends Plugin {
         }
 
         if (ocr && !extractsFromXml) {
-          // Text recognition can take minutes, so first make sure that the extractor can run
-          // (e.g. that the service it uses is reachable)
-          const extractorName = selectedExtractor?.name ?? options.extractor
-          ui.spinner.show(`Checking that ${extractorName} is ready`)
-          const check = await this.#client.apiClient.extractCheck({ extractor: options.extractor, options })
-          testLog('EXTRACTOR_CHECKED', { extractor: options.extractor, ready: check.ready, message: check.message ?? null })
-          if (!check.ready) {
-            throw new Error(`${extractorName} cannot be used at the moment, so text recognition was not started: ${check.message}`)
-          }
-          const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr, (_status, message) => {
-            ui.spinner.show(message)
-          }, { before: () => ui.spinner.hide(), after: () => ui.spinner.show('Applying text recognition') })
-          if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
-            notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
-          }
-          ui.spinner.show(spinnerMessage)
+          // text recognition can take minutes: it runs in the background with a progress widget
+          ui.spinner.hide()
+          await this.#extractWithOcr(file_id, ocr, options, selectedExtractor?.name ?? options.extractor, started)
+          return
         }
 
         result = await this.getDependency('api-keys').withKeyPrompt(
@@ -278,21 +282,7 @@ class ExtractionPlugin extends Plugin {
           // the blocker would cover the key dialog
           { before: () => ui.spinner.hide(), after: () => ui.spinner.show(spinnerMessage) }
         )
-
-        await this.getDependency('file-selection').reload({ refresh: true })
-
-        if (options && options.variant_id) {
-          await this.dispatchStateChange({ variant: options.variant_id })
-        }
-
-        /** @type {ExtractionResult} */
-        const typedResult = /** @type {ExtractionResult} */(result)
-        if (typedResult && typedResult.pdf === null) {
-          await this.dispatchStateChange({ pdf: null })
-        }
-        await this.#services.load(result)
-
-        testLog('EXTRACTION_COMPLETED', { resultHash: typedResult.xml, sourceFileId: file_id })
+        await this.#loadExtractionResult(/** @type {ExtractionResult} */ (result), options, file_id)
       } finally {
         ui.spinner.hide()
       }
@@ -306,6 +296,121 @@ class ExtractionPlugin extends Plugin {
       }
       this.getDependency('dialog').error(String(error))
     }
+  }
+
+  /**
+   * Applies text recognition to a PDF and then extracts from it, in the background: a progress
+   * widget shows the progress and lets the user cancel the text recognition (including its LLM
+   * correction pass), while the user can go on working. Cancelling before the OCR result is stored
+   * leaves the PDF unchanged; cancelling during the LLM correction pass keeps the OCR result. In both
+   * cases nothing is extracted.
+   *
+   * When it is finished, the result is loaded if the user still has the documents open that were
+   * shown when it started; otherwise the user is asked whether to load it (see {@link #loadWhenFinished}).
+   * @param {string} fileId - stable_id of the PDF
+   * @param {OcrRunOptions} ocr - The OCR run chosen in the extraction dialog
+   * @param {ExtractionOptions} options - Extraction options without `ocr`
+   * @param {string} extractorName - Name of the extractor, for the user
+   * @param {ShownDocuments} started - The documents shown when the extraction started
+   * @returns {Promise<void>}
+   * @throws {Error} If the extractor is not ready, or text recognition or extraction fails
+   */
+  async #extractWithOcr(fileId, ocr, options, extractorName, started) {
+    const progress = this.getDependency('progress')
+    const progressId = `ocr-extraction-${fileId}`
+    const controller = new AbortController()
+    progress.show(progressId, {
+      label: `Checking that ${extractorName} is ready`,
+      value: null,
+      cancellable: true,
+      onCancel: () => controller.abort()
+    })
+    /** @type {ExtractionResult|null} */
+    let result = null
+    try {
+      // Text recognition can take minutes, so first make sure that the extractor can run
+      // (e.g. that the service it uses is reachable)
+      const check = await this.#client.apiClient.extractCheck({ extractor: options.extractor, options })
+      testLog('EXTRACTOR_CHECKED', { extractor: options.extractor, ready: check.ready, message: check.message ?? null })
+      if (!check.ready) {
+        throw new Error(`${extractorName} cannot be used at the moment, so text recognition was not started: ${check.message}`)
+      }
+      if (controller.signal.aborted) throw new OcrCancelledError()
+      const ocrResult = await this.getDependency('ocr').recognize(fileId, ocr, {
+        signal: controller.signal,
+        onStatus: (_status, message, job) => {
+          progress.setLabel(progressId, message)
+          progress.setValue(progressId, progressPercent(job))
+        }
+      })
+      if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
+        notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
+      }
+      if (controller.signal.aborted) {
+        // only the LLM correction pass was cancelled: the OCR result is stored, nothing is extracted
+        await this.#loadWhenFinished(started, 'Text recognition is finished (the correction was cancelled).',
+          () => this.#services.load({ pdf: fileId, xml: started.pdf === fileId ? started.xml : null }))
+        return
+      }
+      // extraction cannot be cancelled: the server creates the document anyway
+      progress.show(progressId, { label: `Extracting with ${extractorName}`, value: null, cancellable: false })
+      result = /** @type {ExtractionResult} */ (await this.getDependency('api-keys').withKeyPrompt(() => this.#client.extract(fileId, options)))
+    } catch (error) {
+      if (error instanceof OcrCancelledError) {
+        notify('Text recognition was cancelled. The PDF is unchanged.', 'primary', 'info-circle')
+        return
+      }
+      throw error
+    } finally {
+      progress.hide(progressId)
+    }
+    const extracted = result
+    const loaded = await this.#loadWhenFinished(started, 'Text recognition and extraction are finished.',
+      () => this.#loadExtractionResult(extracted, options, fileId))
+    if (loaded && extracted.language_conflict) {
+      await this.#resolveLanguageConflict(extracted.language_conflict)
+    }
+  }
+
+  /**
+   * Loads the result of a process that ran in the background, see {@link loadWhenFinished}.
+   * @param {ShownDocuments} started - The documents shown when the process started
+   * @param {string} finishedMessage - Says which process is finished
+   * @param {() => Promise<void>} load - Loads the result
+   * @returns {Promise<boolean>} Whether the result was loaded
+   */
+  async #loadWhenFinished(started, finishedMessage, load) {
+    return loadWhenFinished({
+      started,
+      current: { pdf: this.state.pdf, xml: this.state.xml },
+      finishedMessage,
+      confirm: message => this.getDependency('dialog').confirm(message, 'Finished'),
+      refreshFileList: () => this.getDependency('file-selection').reload({ refresh: true }),
+      load
+    })
+  }
+
+  /**
+   * Shows the result of an extraction: updates the file list, switches to the extracted variant and
+   * loads the new document
+   * @param {ExtractionResult} result
+   * @param {ExtractionOptions} options - The extraction options
+   * @param {string} fileId - stable_id of the source file
+   * @returns {Promise<void>}
+   */
+  async #loadExtractionResult(result, options, fileId) {
+    await this.getDependency('file-selection').reload({ refresh: true })
+
+    if (options && options.variant_id) {
+      await this.dispatchStateChange({ variant: options.variant_id })
+    }
+
+    if (result && result.pdf === null) {
+      await this.dispatchStateChange({ pdf: null })
+    }
+    await this.#services.load(result)
+
+    testLog('EXTRACTION_COMPLETED', { resultHash: result.xml, sourceFileId: fileId })
   }
 
   /**

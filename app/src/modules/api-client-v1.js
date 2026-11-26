@@ -427,6 +427,15 @@
  */
 
 /**
+ * Request to correct the OCR errors of the text layer of a stored PDF with an LLM
+ * @typedef {Object} OcrLlmCorrectionRequest
+ * @property {string} stable_id - stable_id of the PDF
+ * @property {string} provider_id - Id of the LLM provider
+ * @property {string} model_id - Id of the model
+ * @property {string[]=} languages - Languages of the document as BCP 47 codes; if empty, those of the last OCR run of the PDF
+ */
+
+/**
  * @typedef {Object} OcrRequest
  * @property {string} stable_id - stable_id of the PDF
  * @property {string} engine - Id of the OCR engine
@@ -493,10 +502,11 @@
  * @property {TextQualityReport} quality - Text layer quality after OCR
  * @property {Array<OcrLlmCorrection>=} llm_corrections - Corrections made by the LLM correction pass, if it was requested
  * @property {string|null=} llm_correction_error - Why the LLM correction pass stopped or failed; the OCR result is kept
+ * @property {boolean=} llm_correction_cancelled - Whether the user cancelled the LLM correction pass; the OCR result was stored before it started and is kept
  */
 
 /**
- * @typedef {'queued'|'running'|'done'|'failed'} OcrJobStatus
+ * @typedef {'queued'|'running'|'done'|'failed'|'cancelled'} OcrJobStatus
  */
 
 /**
@@ -514,7 +524,7 @@
  * @typedef {Object} OcrJob
  * @property {string} job_id - Id of the job
  * @property {string} stable_id - stable_id of the PDF
- * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`) or 'failed' (see `error`)
+ * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`), 'failed' (see `error`) or 'cancelled' (stopped by the user, see {@link ApiClientV1#ocrCancelJob})
  * @property {OcrProgress|null=} progress - Progress of the run if the status is 'running' and the engine reports it
  * @property {OcrResponse|null=} result - Result of the run if the status is 'done'
  * @property {string|null=} error - Error message if the status is 'failed'
@@ -2504,6 +2514,20 @@ export class ApiClientV1 {
   }
 
   /**
+   * Start correcting the OCR errors of the text layer of a stored PDF with an LLM, e.g. after the
+   * correction pass of an OCR run was cancelled. The run is a job like an OCR run: poll
+   * {@link ApiClientV1#ocrJob} for the result, cancel it with {@link ApiClientV1#ocrCancelJob}.
+   * Rejected with 409 if a job for the PDF is already queued or running.
+   *
+   * @param {OcrLlmCorrectionRequest} requestBody
+   * @returns {Promise<OcrJob>}
+   */
+  async ocrLlmCorrection(requestBody) {
+    const endpoint = `/ocr/llm-correction`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * Return the status of an OCR run started with {@link ApiClientV1#ocr}, and its result when it is done.
    *
    * @param {string} jobId - Id of the job
@@ -2512,6 +2536,20 @@ export class ApiClientV1 {
   async ocrJob(jobId) {
     const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}`
     return this.callApi(endpoint);
+  }
+
+  /**
+   * Cancel an OCR run started with {@link ApiClientV1#ocr}; the stored PDF stays unchanged. A queued
+   * job stops at once, a running one at the next progress report of the engine or of the LLM
+   * correction pass. Poll {@link ApiClientV1#ocrJob} until the status is 'cancelled', or 'done' if
+   * only the correction pass was stopped. A finished job is returned as it is.
+   *
+   * @param {string} jobId - Id of the job
+   * @returns {Promise<OcrJob>}
+   */
+  async ocrCancelJob(jobId) {
+    const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}/cancel`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**
