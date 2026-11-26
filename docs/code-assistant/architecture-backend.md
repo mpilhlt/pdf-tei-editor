@@ -109,14 +109,27 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `manager.py` | Extractor management |
 | `http_utils.py` | HTTP utilities |
 
+### `llm/` — LLM providers and review helpers
+
+Shared by the OCR review and the `annotation-review` plugin (plugin API 1.9.0; `annotation-review` requires `^1.9`).
+
+| File | Purpose |
+| --- | --- |
+| `json_response.py` | `extract_json_list()`: tolerant parsing of a JSON list from a model response (code fences, unescaped quotes, truncated lists); raises `UnusableResponseError` |
+| `review_call.py` | `complete_with_retry()`: one LLM call, with a single feedback retry when every result was dropped |
+| `http_errors.py` | `llm_http_error()`: maps LLM and provider errors to `HTTPException` (403 model access, 429 rate limit, 502 provider failure or unusable response) or `None` |
+
 ### `ocr/` — OCR text layer
 
 | File | Purpose |
 | --- | --- |
 | `text_layer.py` | Reads the words of the invisible OCR text layer of a PDF (`read_text_layer`) and patches words in place (`patch_text_layer`). The width of a patched word is kept with `Tz` and `TJ` kerning; characters missing from the font are added to its `ToUnicode` CMap, `/W` and `CIDToGIDMap`. Refuses visible text, pages whose font objects are shared with visible text, and fonts other than Type0/Identity-H. Without corrections the layer is unchanged: corrections are not written by synthesizing hOCR and rendering again. |
 | `text_corrections.py` | Derives word corrections by diffing the words of the TEI pages with the words of the text layer. Tokenization shifts and moved blocks are ignored; word-count changes, unrelated multi-word blocks, unpatchable pages and pages without a layer page are reported as unwritable. |
+| `llm_review.py` | LLM review of OCR errors per page window of a zone document (#931 Part A). The prompt shows the plain text of the lines with their ids and asks for line corrections. `parse_corrections()` drops implausible ones: unknown lines, `old` not in the line, and a `difflib` ratio of the case-folded letters of `old` and `new` below `ocr.llm-review.min-letter-similarity` (default 0.5; not applied when a side has fewer than 3 letters, so footnote number fixes pass). `findings_from_corrections()` maps them to findings `{id, old, new, rationale}` with `old` an exact, unique substring of the TEI XML; corrections across markup are dropped. Page windows come from `zone_lines.page_windows()`, `window_lines()` and `window_range()`. |
 
 The routes `POST /api/v1/ocr/text-corrections/preview` and `/apply` (`fastapi_app/routers/ocr.py`) use these modules. `apply` writes the corrected PDF, calls the corrected PDF handler registered by the extractor plugin of the document's variant (plugin API 1.8.0) to regenerate its data and update the TEI, then replaces the stored PDF with `replace_pdf_content()` (which links the edited TEI to the archived PDF) and saves the updated TEI as a new version based on the corrected PDF with `create_tei_version()` (`fastapi_app/lib/services/tei_versions.py`, shared with `POST /api/v1/files/save`). Both routes refuse a TEI locked by another session. The applied corrections are recorded under `text_corrections` in the PDF's file metadata. Frontend: `app/src/plugins/text-corrections.js`.
+
+The routes `POST /api/v1/ocr/llm-review/plan` (number of page windows, no LLM call) and `POST /api/v1/ocr/llm-review` (one window, selected by `window_index`; optional `scope` limits it to the pages of a node) use `llm_review.py`; the client requests the windows in turn. Provider errors are mapped with `llm_http_error()`. Frontend: `app/src/plugins/ocr-review.js` (menu "Tools > OCR > Find OCR errors (LLM)" and the focus action "LLM OCR review").
 
 ### `messages/` — Messages for reviews and comments
 

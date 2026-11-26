@@ -62,6 +62,20 @@ Tesseract, which the OCRmyPDF engine uses, reads small superscript footnote mark
 
 Text recognition replaces the stored PDF with the result. The PDF keeps its identifier, and the improved text layer is used by new extractions and by the PDF viewer, for example by Autosearch. If the document already has TEI versions, the original PDF is kept: these versions were made from its text layer, so they are shown with the original PDF, and the footer of the PDF viewer says "Original PDF (before text recognition)". New versions copied from them keep the original PDF as well. The original PDF is not listed as a document of its own; garbage collection removes it once no version made from it is left. Text recognition can take a minute or more for long documents.
 
+#### Finding OCR errors with a language model
+
+Text recognition leaves errors that the footnote correction does not cover: misread letters, wrong characters, garbled footnote numbers. For a segmentation document with line coordinates (such as `grobid.training.segmentation`), a language model can look for them. Choose "Tools > OCR > Find OCR errors (LLM)", then the provider and model. The document is reviewed page by page, with some lines of the neighbouring pages as context. Alternatively, focus a node in the XML editor and click "LLM OCR review" to review only the pages of that node.
+
+The model suggests corrections for lines. They are shown as diagnostics in the XML editor and in the diagnostics panel, with the old and the new text and a rationale. Use "Propose fix" or "Apply" to take over a suggestion. A suggestion is dropped if
+
+- its text cannot be found exactly once in the document,
+- it would change markup (text that spans a tag, comment or line break), or
+- the letters of the old and the new text are too different. Corrections of footnote numbers, such as `?!?)` to `312)`, are kept, since only letters are compared.
+
+The model is told to check the numbering of footnotes. A footnote marker that only fits the numbering is corrected, but the model can be wrong, so check each suggestion. The suggestions of a document are kept for the browser session and shown again when you reopen the document.
+
+Applying a suggestion changes the TEI document only. To correct the text layer of the PDF, save the document and then use "Write text corrections to PDF" (next section).
+
 #### Writing text corrections to the PDF
 
 If you corrected words in the TEI document that the text recognition got wrong, you can write these corrections back into the text layer of the PDF, so that Autosearch, the PDF viewer's text selection and new extractions use the corrected text. This is available to reviewers and administrators, in the menu "Tools > OCR > Write text corrections to PDF".

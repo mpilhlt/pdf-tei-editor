@@ -16,6 +16,10 @@ For comprehensive architecture details, see [development/architecture.md](../dev
 - **Templates**: `app/src/templates/` - HTML templates for UI components
 - **Build output**: `app/web/` - Compiled/bundled frontend assets
 
+## LLM Findings Display
+
+`app/src/modules/llm-findings.js` is the editor-side display of LLM findings `{id, old, new, rationale}`, shared by the `annotation-review` plugin extension and `app/src/plugins/ocr-review.js`. `FindingsDisplay` shows the findings as CodeMirror diagnostics via `lint-utils` (with "Propose fix"/Apply actions), caches them per document in the session (`FindingsCache`) and restores them when a document is reopened. `locateFinding()` finds the exact, unique place of `old` in the document text; `buildModifiedText()` applies a finding. Pass the source name, `getXmleditor`, `getLintUtils`, a `proposeFix` callback and `getDocId` to the constructor.
+
 ## Plugin System
 
 The application uses two independent plugin systems - one for frontend (JavaScript) and one for backend (Python). See [../development/plugin-system.md](../development/plugin-system.md) for overview.
