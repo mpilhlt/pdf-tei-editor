@@ -8,7 +8,7 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlSelect, SlInput, SlCheckbox } from '../ui.js'
  * @import { ocrOptionsDialogPart } from '../templates/ocr-dialog.types.js'
- * @import { OcrEngineInfo, OcrJob, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, OcrLlmCorrection, OcrJob, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -16,6 +16,7 @@ import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system
 import { SlSelect as SlSelectClass, SlOption, SlInput as SlInputClass, SlCheckbox as SlCheckboxClass } from '../ui.js'
 import { setLanguageOptions, getSelectedLanguages, matchLanguages } from '../modules/language-chooser.js'
 import { testLog } from '../modules/test-log.js'
+import { notify } from '../modules/sl-utils.js'
 
 await registerTemplate('ocr-dialog', 'ocr-dialog.html')
 
@@ -27,6 +28,7 @@ const OCR_POLL_INTERVAL_MS = 2000
  * @typedef {object} OcrSettings
  * @property {string[]} languages - Normalized language codes
  * @property {Record<string, OcrOptionValue>} options - Engine parameters
+ * @property {boolean} [llmCorrection] - Correct OCR errors with the default language model after recognition
  */
 
 /**
@@ -34,13 +36,14 @@ const OCR_POLL_INTERVAL_MS = 2000
  * @property {string} engine - Id of the OCR engine
  * @property {string[]} languages - Normalized language codes
  * @property {Record<string, OcrOptionValue>} options - Engine parameters
+ * @property {boolean} [llmCorrection] - Correct OCR errors with the default language model after recognition; ignored if no default model is selected
  * @property {boolean} [rebuild] - The user explicitly asked to recreate the text layer, so a digital text layer is replaced even if it looks fine
  */
 
 class OcrPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'ocr', deps: ['client', 'logger'] })
+    super(context, { name: 'ocr', deps: ['client', 'logger', 'inference-settings'] })
   }
 
   get #client() { return this.getDependency('client') }
@@ -160,7 +163,7 @@ class OcrPlugin extends Plugin {
     let languages = matchLanguages(suggestedLanguages, engine.languages).slice(0, 1)
     if (!languages.length) languages = matchLanguages(saved?.languages ?? [], engine.languages)
     if (!languages.length) languages = [...engine.default_languages]
-    return { languages, options }
+    return { languages, options, llmCorrection: this.uiStorage.get('llmCorrection', false) === true }
   }
 
   /**
@@ -188,6 +191,19 @@ class OcrPlugin extends Plugin {
     dialogUi.label = `Text recognition options: ${engine.name}`
     dialogUi.engineDescription.textContent = engine.description
     setLanguageOptions(dialogUi.languages, engine.languages, settings.languages)
+
+    const inference = this.getDependency('inference-settings')
+    const model = inference.getDefaultModel()
+    const llm = dialogUi.llmCorrection
+    llm.disabled = !model
+    llm.checked = Boolean(model) && settings.llmCorrection === true
+    if (model) {
+      llm.title = ''
+      llm.setAttribute('help-text', `Uses ${inference.getModelLabel(model.providerId, model.modelId)} to correct misread words, mainly footnote numbers, on pages that look poor. Changes the text without review; every correction is listed afterwards. Costs about one LLM call per two such pages.`)
+    } else {
+      llm.title = 'Select a default model in Tools > Inference first.'
+      llm.setAttribute('help-text', 'Select a default model in Tools > Inference first.')
+    }
 
     const optionsContainer = dialogUi.engineOptions
     optionsContainer.innerHTML = ''
@@ -227,7 +243,9 @@ class OcrPlugin extends Plugin {
         for (const { key, info, element } of fields) {
           options[key] = readOptionField(info, element)
         }
-        const result = { languages, options }
+        const llmCorrection = !llm.disabled && llm.checked
+        if (!llm.disabled) this.uiStorage.set('llmCorrection', llmCorrection)
+        const result = { languages, options, llmCorrection }
         this.saveSettings(engine.id, result)
         testLog('OCR_OPTIONS_SAVED', { engine: engine.id, ...result })
         return result
@@ -256,12 +274,14 @@ class OcrPlugin extends Plugin {
     const logger = this.getDependency('logger')
     logger.info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
+    const model = run.llmCorrection ? this.getDependency('inference-settings').getDefaultModel() : null
     let job = await client.apiClient.ocr({
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
       options: run.options,
-      rebuild: Boolean(run.rebuild)
+      rebuild: Boolean(run.rebuild),
+      ...(model ? { llm_correction: true, provider_id: model.providerId, model_id: model.modelId } : {})
     })
     /** @type {OcrJobStatus|null} */
     let reported = null
@@ -287,8 +307,32 @@ class OcrPlugin extends Plugin {
     }
     const result = job.result
     testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
+    const corrections = result.llm_corrections ?? []
+    const error = result.llm_correction_error ?? null
+    testLog('OCR_LLM_CORRECTION', { requested: Boolean(model), corrections: corrections.length, error })
+    if (corrections.length) {
+      notify(describeLlmCorrections(corrections), 'primary', 'info-circle', 15000)
+    }
+    if (error) {
+      notify(`The correction with a language model did not finish: ${error}`, 'warning', 'exclamation-triangle', 10000)
+    }
     return result
   }
+}
+
+/** Maximum number of corrections listed in the OCR result */
+const MAX_LISTED_CORRECTIONS = 5
+
+/**
+ * Describe the corrections made by the LLM correction pass for the user.
+ * @param {OcrLlmCorrection[]} corrections
+ * @returns {string} E.g. "The language model made 7 corrections: “l” → “1”, … and 2 more"
+ */
+export function describeLlmCorrections(corrections) {
+  const listed = corrections.slice(0, MAX_LISTED_CORRECTIONS).map(c => `“${c.old}” → “${c.new}”`).join(', ')
+  const more = corrections.length > MAX_LISTED_CORRECTIONS ? ` and ${corrections.length - MAX_LISTED_CORRECTIONS} more` : ''
+  const count = corrections.length
+  return `The language model made ${count} correction${count === 1 ? '' : 's'}: ${listed}${more}`
 }
 
 /**
