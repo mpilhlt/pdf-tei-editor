@@ -1,69 +1,100 @@
+<style>
+  .progress-stack {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .progress-stack:empty {
+    display: none;
+  }
+  .progress-stack-maximized {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    flex-direction: column;
+    max-height: 90vh;
+    overflow-y: auto;
+    /* room for the box shadow, which overflow would clip */
+    padding: 48px;
+  }
+  .progress-stack-minimized {
+    bottom: 50px;
+    left: 50px;
+    flex-direction: column-reverse;
+    gap: 6px;
+  }
+  .progress-widget {
+    pointer-events: auto;
+    background: var(--sl-color-neutral-0);
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+  }
+  .progress-widget.maximized {
+    min-width: 300px;
+    max-width: min(600px, 80vw);
+  }
+  .progress-widget.minimized {
+    min-width: 120px;
+    width: 10vw;
+    padding: 6px 8px 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+  .progress-widget .title-row,
+  .progress-widget .label-row {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .progress-widget .title-row:empty {
+    display: none;
+  }
+  .progress-widget .title-row {
+    margin-bottom: 8px;
+    font-size: 0.875rem;
+    font-weight: var(--sl-font-weight-semibold);
+    color: var(--sl-color-neutral-900);
+  }
+  .progress-widget.minimized .title-row {
+    margin-bottom: 3px;
+    font-size: 0.6875rem;
+    font-weight: var(--sl-font-weight-normal);
+    color: var(--sl-color-neutral-700);
+  }
+  .progress-widget .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .progress-widget .progress-row sl-progress-bar {
+    flex-grow: 1;
+  }
+  .progress-widget.minimized .progress-row sl-progress-bar {
+    --height: 6px;
+  }
+  .progress-widget .progress-row sl-icon-button {
+    font-size: 1.25rem;
+  }
+  .progress-widget.minimized .progress-row sl-icon-button {
+    font-size: 0.875rem;
+  }
+  .progress-widget .label-row {
+    margin-top: 8px;
+    color: var(--sl-color-neutral-700);
+    font-size: 0.875rem;
+  }
+  .progress-widget.minimized .label-row {
+    display: none;
+  }
+</style>
+<div class="progress-stack progress-stack-maximized"></div>
+<div class="progress-stack progress-stack-minimized"></div>
 <template id="progress-widget-template">
   <div class="progress-widget" data-progress-id="">
-    <style>
-      .progress-widget {
-        position: fixed;
-        z-index: 10000;
-        background: var(--sl-color-neutral-0);
-        border-radius: 8px;
-        padding: 16px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        min-width: 300px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-      }
-      .progress-widget.maximized {
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-      }
-      .progress-widget.minimized {
-        bottom: 50px;
-        left: 50px;
-        transform: none;
-        min-width: 80px;
-        width: 10vw;
-        padding: 8px;
-      }
-      /* Stacking for multiple minimized widgets */
-      .progress-widget.minimized[data-stack-index="1"] { bottom: 110px; }
-      .progress-widget.minimized[data-stack-index="2"] { bottom: 170px; }
-      .progress-widget.minimized[data-stack-index="3"] { bottom: 230px; }
-      .progress-widget.minimized[data-stack-index="4"] { bottom: 290px; }
-      /* Stacking for multiple maximized widgets */
-      .progress-widget.maximized[data-stack-index="1"] { top: calc(50% + 80px); }
-      .progress-widget.maximized[data-stack-index="2"] { top: calc(50% + 160px); }
-      .progress-widget.maximized[data-stack-index="3"] { top: calc(50% + 240px); }
-      .progress-widget.maximized[data-stack-index="4"] { top: calc(50% + 320px); }
-      .progress-widget .progress-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .progress-widget .progress-row sl-progress-bar {
-        flex-grow: 1;
-      }
-      .progress-widget.minimized .progress-row sl-progress-bar {
-        --height: 6px;
-      }
-      .progress-widget .progress-row sl-icon-button {
-        font-size: 1.25rem;
-      }
-      .progress-widget.minimized .progress-row sl-icon-button {
-        font-size: 0.875rem;
-      }
-      .progress-widget .label-row {
-        margin-top: 8px;
-        color: var(--sl-color-neutral-700);
-        font-size: 0.875rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .progress-widget.minimized .label-row {
-        display: none;
-      }
-    </style>
+    <div name="titleRow" class="title-row"></div>
     <div class="progress-row">
       <sl-progress-bar name="progressBar" value="0"></sl-progress-bar>
       <sl-icon-button data-name="cancelBtn" name="x-circle" library="default" title="Cancel"></sl-icon-button>

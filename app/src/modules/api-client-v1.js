@@ -3649,13 +3649,14 @@ export class ApiClientV1 {
 
   /**
    * Test endpoint that simulates a progress bar workflow.
-   * Sends progressShow, progressValue, progressLabel, and progressHide events
+   * Sends progressShow, progressValue, progressLabel, progressTitle and progressHide events
    * to test the frontend progress widget.
    * Args:
    * body: Optional dictionary with:
    * - steps: Number of progress steps (default: 5)
    * - delay_ms: Delay between steps in ms (default: 500)
    * - label_prefix: Prefix for step labels (default: "Processing step")
+   * - title: Widget title (default: "Progress test")
    * Returns:
    * dict: Summary with status and progress_id
    * Note:

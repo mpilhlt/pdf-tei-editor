@@ -320,6 +320,7 @@ class ExtractionPlugin extends Plugin {
     const progressId = `ocr-extraction-${fileId}`
     const controller = new AbortController()
     progress.show(progressId, {
+      title: `Text recognition and extraction with ${extractorName}`,
       label: `Checking that ${extractorName} is ready`,
       value: null,
       cancellable: true,

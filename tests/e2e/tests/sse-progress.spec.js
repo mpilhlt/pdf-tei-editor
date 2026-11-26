@@ -57,7 +57,7 @@ test.describe('SSE Progress Widget', () => {
         const sse = /** @type {any} */(window).sse;
 
         // Add listeners for all progress event types
-        ['progressShow', 'progressValue', 'progressLabel', 'progressHide'].forEach(eventType => {
+        ['progressShow', 'progressValue', 'progressLabel', 'progressTitle', 'progressHide'].forEach(eventType => {
           sse.addEventListener(eventType, (/** @type {MessageEvent} */ evt) => {
             events.push({ type: eventType, data: JSON.parse(evt.data) });
           });
@@ -105,6 +105,7 @@ test.describe('SSE Progress Widget', () => {
       expect(widgetState.progressId).toBe(progressId);
       expect(widgetState.hasProgressBar).toBe(true);
       expect(widgetState.hasCancelBtn).toBe(true);
+      await expect(page.locator(`.progress-widget[data-progress-id="${progressId}"] [name="titleRow"]`)).toHaveText(/Progress test/);
 
       // Wait for progress to complete (widget should be hidden)
       await page.waitForSelector('.progress-widget', { state: 'detached', timeout: 5000 });
@@ -125,6 +126,7 @@ test.describe('SSE Progress Widget', () => {
       expect(eventTypes).toContain('progressShow');
       expect(eventTypes).toContain('progressValue');
       expect(eventTypes).toContain('progressLabel');
+      expect(eventTypes).toContain('progressTitle');
       expect(eventTypes).toContain('progressHide');
 
       // Verify all events have correct progress_id
@@ -288,6 +290,75 @@ test.describe('SSE Progress Widget', () => {
       expect(apiTest.widgetState.label).toBe('Updated Label');
       expect(apiTest.stillVisible).toBe(false);
 
+    } finally {
+      stopErrorMonitoring();
+    }
+  });
+
+  test('should show titles and stack many widgets in two containers without overlap', async ({ page }) => {
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+
+    try {
+      await navigateAndLogin(page, 'testuser', 'testpass');
+      await page.waitForTimeout(1000);
+
+      const result = await page.evaluate(() => {
+        const progressApi = /** @type {any} */(window).progress;
+        const ids = ['stack-0', 'stack-1', 'stack-2', 'stack-3', 'stack-4', 'stack-5', 'stack-6'];
+        // first three maximized, the rest minimized
+        ids.forEach((id, index) => progressApi.show(id, {
+          title: `Title ${index} with a long name that is cropped when the widget is minimized`,
+          label: `Label ${index}`,
+          value: index * 10,
+          minimized: index >= 3
+        }));
+        progressApi.show('stack-untitled', { label: 'No title', minimized: true });
+        progressApi.setTitle('stack-1', 'Changed title');
+
+        /** @param {string} id */
+        const widgetOf = (id) => /** @type {HTMLElement} */ (document.querySelector(`.progress-widget[data-progress-id="${id}"]`));
+        /** @param {HTMLElement} el */
+        const box = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right } };
+        /** @param {string} id */
+        const titleRow = (id) => /** @type {HTMLElement} */ (widgetOf(id).querySelector('[name="titleRow"]'));
+
+        const state = {
+          maximizedParent: ids.slice(0, 3).map(id => widgetOf(id).parentElement?.classList.contains('progress-stack-maximized')),
+          minimizedParent: ids.slice(3).map(id => widgetOf(id).parentElement?.classList.contains('progress-stack-minimized')),
+          boxes: [...ids, 'stack-untitled'].map(id => box(widgetOf(id))),
+          changedTitle: titleRow('stack-1').textContent,
+          minimizedTitleVisible: titleRow('stack-4').offsetHeight > 0,
+          minimizedTitleCropped: titleRow('stack-4').scrollWidth > titleRow('stack-4').clientWidth,
+          untitledTitleHidden: titleRow('stack-untitled').offsetHeight === 0
+        };
+
+        // toggling moves a widget to the other container, in creation order
+        widgetOf('stack-1').click();
+        const minimizedOrder = Array.from(/** @type {HTMLElement} */ (widgetOf('stack-1').parentElement).children)
+          .map(el => /** @type {HTMLElement} */ (el).dataset.progressId);
+
+        [...ids, 'stack-untitled'].forEach(id => progressApi.hide(id));
+        return { ...state, minimizedOrder };
+      });
+
+      expect(result.maximizedParent).toEqual([true, true, true]);
+      expect(result.minimizedParent).toEqual([true, true, true, true]);
+      expect(result.changedTitle).toBe('Changed title');
+      expect(result.minimizedTitleVisible).toBe(true);
+      expect(result.minimizedTitleCropped).toBe(true);
+      expect(result.untitledTitleHidden).toBe(true);
+      expect(result.minimizedOrder).toEqual(['stack-1', 'stack-3', 'stack-4', 'stack-5', 'stack-6', 'stack-untitled']);
+
+      // no two widgets overlap
+      const boxes = result.boxes;
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i], b = boxes[j];
+          const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+          expect(overlap, `widgets ${i} and ${j} overlap`).toBe(false);
+        }
+      }
     } finally {
       stopErrorMonitoring();
     }

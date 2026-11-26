@@ -425,8 +425,8 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
       assert.ok(data.progress_id, 'Should return progress_id');
 
       // Wait for all progress events to be received
-      // Expected: 1 show + 3 value + 3 label + 1 hide = 8 events
-      const expectedMinEvents = 8;
+      // Expected: 1 show + 3 value + 3 label + 1 title + 1 hide = 9 events
+      const expectedMinEvents = 9;
       const waitStart = Date.now();
       while (progressEvents.length < expectedMinEvents && Date.now() - waitStart < 5000) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -448,6 +448,10 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
         `Should receive progressLabel events. Got: ${eventTypes.join(', ')}`
       );
       assert.ok(
+        eventTypes.includes('progressTitle'),
+        `Should receive progressTitle event. Got: ${eventTypes.join(', ')}`
+      );
+      assert.ok(
         eventTypes.includes('progressHide'),
         `Should receive progressHide event. Got: ${eventTypes.join(', ')}`
       );
@@ -467,6 +471,7 @@ describe('SSE API Integration Tests', { concurrency: 1 }, () => {
       assert.ok(showEvent, 'Should have progressShow event');
       assert.strictEqual(showEvent.data.cancellable, true, 'Should be cancellable');
       assert.ok(showEvent.data.label, 'Should have initial label');
+      assert.strictEqual(showEvent.data.title, 'Progress test', 'Should have default title');
       assert.strictEqual(showEvent.data.value, 0, 'Should start at 0');
 
       // Verify final progressValue is 100

@@ -217,7 +217,7 @@ class OcrReviewPlugin extends Plugin {
     let total = 0
     let count = 0
     this.#busy = true
-    progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
+    progress.show(progressId, { title: 'Finding OCR errors', label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
     try {
       try {
         ({ window_count: total } = await this.#client.apiClient.ocrLlmReviewPlan({ stable_id: stableId, xml, ...scoped }))
