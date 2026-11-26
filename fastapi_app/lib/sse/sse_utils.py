@@ -54,7 +54,8 @@ class ProgressBar:
     Sends the following SSE event types to the frontend:
     - progressShow: Shows the widget (with progress_id and optional initial settings)
     - progressValue: Sets progress value (0-100) or indeterminate (None)
-    - progressLabel: Sets the text label
+    - progressLabel: Sets the text label (current status)
+    - progressTitle: Sets the title (names the process)
     - progressHide: Hides the widget
 
     Example usage:
@@ -71,7 +72,7 @@ class ProgressBar:
             progress = ProgressBar(sse_service, session_id)
             # progress.progress_id is auto-generated or can be provided
 
-            progress.show(label="Starting...", cancellable=True)
+            progress.show(title="Processing files", label="Starting...", cancellable=True)
 
             for i, file in enumerate(files):
                 progress.set_label(f"Processing {file.name}")
@@ -111,7 +112,8 @@ class ProgressBar:
         label: Optional[str] = None,
         value: Optional[int] = None,
         cancellable: bool = True,
-        cancel_url: Optional[str] = None
+        cancel_url: Optional[str] = None,
+        title: Optional[str] = None
     ) -> bool:
         """
         Show the progress widget.
@@ -121,6 +123,7 @@ class ProgressBar:
             value: Initial progress value (0-100), None for indeterminate
             cancellable: Whether to show the cancel button
             cancel_url: URL to POST to when cancel button is clicked
+            title: Title naming the process, shown above the bar (also when minimized)
 
         Returns:
             True if message was queued successfully
@@ -129,6 +132,8 @@ class ProgressBar:
             "progress_id": self._progress_id,
             "cancellable": cancellable
         }
+        if title is not None:
+            data["title"] = title
         if label is not None:
             data["label"] = label
         if value is not None:
@@ -186,6 +191,23 @@ class ProgressBar:
         return self._sse_service.send_message(
             client_id=self._session_id,
             event_type="progressLabel",
+            data=json.dumps(data)
+        )
+
+    def set_title(self, title: str) -> bool:
+        """
+        Set the title.
+
+        Args:
+            title: Title text naming the process
+
+        Returns:
+            True if message was queued successfully
+        """
+        data: dict[str, Any] = {"progress_id": self._progress_id, "title": title}
+        return self._sse_service.send_message(
+            client_id=self._session_id,
+            event_type="progressTitle",
             data=json.dumps(data)
         )
 

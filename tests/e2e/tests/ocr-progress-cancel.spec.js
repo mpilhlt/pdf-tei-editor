@@ -188,7 +188,7 @@ const CORRECTION_WIDGET = '.progress-widget[data-progress-id^="ocr-correction-"]
 
 /**
  * Mock a default model, log in, open the first documents and start "Correct OCR errors in PDF
- * (LLM)", confirming the dialog.
+ * without review (LLM)", confirming the dialog.
  * @param {Page} page
  * @returns {Promise<{pdf: string, xml: string, requests: object[]}>} The open documents and the
  *   bodies of the requests that started the correction
@@ -218,7 +218,7 @@ async function startCorrection(page) {
   return { ...shown, requests };
 }
 
-test.describe('Correct OCR errors in PDF (LLM)', () => {
+test.describe('Correct OCR errors in PDF without review (LLM)', () => {
   test('corrects the open PDF in the background and loads it again', async ({ page }) => {
     test.setTimeout(90000);
     const consoleLogs = setupTestConsoleCapture(page);

@@ -5,7 +5,7 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
- * @import { UIPart, SlDrawer } from '../ui.js'
+ * @import { UIPart, SlDrawer, SlTooltip } from '../ui.js'
  * @import { diagnosticsDrawerPart, diagnosticsButtonPart } from '../templates/diagnostics-drawer.types.js'
  */
 
@@ -72,7 +72,7 @@ class PdfViewerPlugin extends Plugin {
   #statusMessageWidget = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   #statusMessageTimer = null;
-  /** @type {StatusText|null} Shown while the viewer shows an archived original PDF */
+  /** @type {SlTooltip|null} Clock icon shown while the viewer shows an archived original PDF */
   #archivedPdfWidget = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   #pageChangedTimer = null;
@@ -134,20 +134,26 @@ class PdfViewerPlugin extends Plugin {
   }
 
   /**
-   * Shows or hides the statusbar notice that the viewer shows the original PDF of the document,
+   * Shows or hides the statusbar clock icon telling that the viewer shows the original PDF of the document,
    * as it was before text recognition replaced it: the loaded version was made from it (#924).
    * @param {boolean} shown
    */
   setArchivedPdfIndicator(shown) {
     const statusBar = ui.pdfViewer.statusbar;
     if (shown && !this.#archivedPdfWidget) {
-      this.#archivedPdfWidget = PanelUtils.createText({
-        name: 'archivedPdfIndicator',
-        text: 'Original PDF (before text recognition)',
-        icon: 'clock-history',
-        variant: 'warning'
-      });
-      this.#archivedPdfWidget.title = 'This version was made from the PDF as it was before text recognition. Newer versions use the current PDF.';
+      const icon = /** @type {HTMLElement & {name: string, label: string}} */ (document.createElement('sl-icon'));
+      icon.name = 'clock-history';
+      icon.label = 'Original PDF before text recognition';
+      icon.style.color = 'var(--sl-color-warning-600)';
+      icon.style.fontSize = '12px';
+      icon.style.padding = '0 4px';
+      const tooltip = /** @type {SlTooltip} */ (document.createElement('sl-tooltip'));
+      tooltip.content = 'This PDF has a text layer which has been replaced in later versions';
+      tooltip.dataset.name = 'archivedPdfIndicator';
+      tooltip.style.display = 'inline-flex';
+      tooltip.style.alignItems = 'center';
+      tooltip.appendChild(icon);
+      this.#archivedPdfWidget = tooltip;
       statusBar.add(this.#archivedPdfWidget, 'left', 8);
     } else if (!shown && this.#archivedPdfWidget) {
       statusBar.removeById(this.#archivedPdfWidget.id);

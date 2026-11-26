@@ -23,7 +23,10 @@ import * as lintUtils from '../modules/lint-utils.js'
 /** Diagnostic source tag identifying this plugin's diagnostics */
 const SOURCE = 'ocr-review'
 
-/** Shown as tooltip of the menu item when the document has no layout */
+/** Tooltip of the menu item */
+const TOOLTIP = 'The language model suggests corrections in the TEI document, which you review one by one. The PDF is not changed: use "Write text corrections to PDF" afterwards.'
+
+/** Added to the tooltip when the document has no layout */
 const NO_DOCUMENT_MESSAGE = 'Requires an open TEI document with a line layout.'
 
 /**
@@ -132,7 +135,7 @@ class OcrReviewPlugin extends Plugin {
     if (!this.#menuItem) return
     const enabled = Boolean(this.state?.xml) && this.#layoutOk
     this.#menuItem.disabled = !enabled
-    this.#menuItem.title = enabled ? '' : (this.#layoutMissing ?? NO_DOCUMENT_MESSAGE)
+    this.#menuItem.title = enabled ? TOOLTIP : `${TOOLTIP} ${this.#layoutMissing ?? NO_DOCUMENT_MESSAGE}`
     try {
       this.getDependency('xmleditor').setFocusAction(SOURCE, enabled ? this.#focusAction : null)
     } catch {
@@ -214,7 +217,7 @@ class OcrReviewPlugin extends Plugin {
     let total = 0
     let count = 0
     this.#busy = true
-    progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
+    progress.show(progressId, { title: 'Finding OCR errors', label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
     try {
       try {
         ({ window_count: total } = await this.#client.apiClient.ocrLlmReviewPlan({ stable_id: stableId, xml, ...scoped }))

@@ -3,6 +3,7 @@
 
 /**
  * @typedef {object} progressPart
+ * @property {HTMLDivElement} titleRow
  * @property {import('../ui.js').SlProgressBar} progressBar
  * @property {import('../ui.js').SlIconButton} cancelBtn
  * @property {HTMLDivElement} labelRow
