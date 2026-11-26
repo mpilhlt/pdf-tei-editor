@@ -25,7 +25,7 @@ await registerTemplate('ocr-dialog', 'ocr-dialog.html')
 const OCR_POLL_INTERVAL_MS = 2000
 
 /** Where the user finds the standalone correction (see ocr-correction.js) */
-export const CORRECTION_MENU_PATH = 'Tools > OCR > Correct OCR errors in PDF (LLM)'
+export const CORRECTION_MENU_PATH = 'Tools > OCR > Correct OCR errors in PDF without review (LLM)'
 
 /**
  * Parameters of an OCR run
