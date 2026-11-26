@@ -17,29 +17,34 @@ Pure module: no FastAPI imports.
 
 from __future__ import annotations
 
-import difflib
 import logging
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TypedDict
 from xml.sax.saxutils import escape
 
 from lxml import etree
 
 from fastapi_app.lib.llm.base import LLMProvider
-from fastapi_app.lib.llm.json_response import extract_json_list
-from fastapi_app.lib.llm.review_call import complete_with_retry
+from fastapi_app.lib.ocr.line_review import (  # noqa: F401  (re-exported)
+    LOG_PREFIX,
+    LineCorrection,
+    ReviewLines,
+    build_retry_note,
+    build_system_prompt,
+    letters_similar,
+    review_lines_window,
+)
+from fastapi_app.lib.ocr.line_review import build_user_prompt as _build_user_prompt
+from fastapi_app.lib.ocr.line_review import parse_corrections as _parse_corrections
 from fastapi_app.lib.tei.layout import MISSING_LAYOUT_MESSAGE, get_line_layout, get_zone_labels
 from fastapi_app.lib.tei.zone_lines import (
     CHAR,
-    DEFAULT_CONTEXT_LINES,
     SPACE,
     Line,
     Page,
     ZoneDocument,
-    line_id,
-    line_id_width,
     page_windows,
     pages_of,
     read_zone_document,
@@ -49,15 +54,10 @@ from fastapi_app.lib.utils.tei_utils import get_document_language
 
 logger = logging.getLogger(__name__)
 
-LOG_PREFIX = "ocr-review"
-
 MIN_LETTER_SIMILARITY_KEY = "ocr.llm-review.min-letter-similarity"
 """Config key of the minimal `difflib` ratio of the letters of `old` and `new`."""
 
 DEFAULT_MIN_LETTER_SIMILARITY = 0.5
-
-MIN_LETTERS = 3
-"""Corrections where `old` or `new` has fewer letters are not checked for letter similarity."""
 
 WINDOW_PAGES = 2
 
@@ -88,16 +88,15 @@ class OcrReviewSource:
     doc: ZoneDocument
     windows: list[list[Page]]
     languages: list[str]
+    lines: ReviewLines = field(init=False)
+    """The text-only view of the document's lines, windowed like `windows`."""
 
-
-@dataclass(frozen=True)
-class LineCorrection:
-    """A plausible correction of a line (0-based index): `old` occurs exactly once in the line's text."""
-
-    line: int
-    old: str
-    new: str
-    rationale: str
+    def __post_init__(self) -> None:
+        self.lines = ReviewLines(
+            [_line_text(self.doc, line) for line in self.doc.lines],
+            [window_lines(window) for window in self.windows],
+            self.languages,
+        )
 
 
 # ── Source ───────────────────────────────────────────────────────────
@@ -180,140 +179,19 @@ def _line_text(doc: ZoneDocument, line: Line) -> str:
     return "".join(char for char, _ in _line_chars(doc, line))
 
 
-# ── Prompts ──────────────────────────────────────────────────────────
-
-
-def build_system_prompt() -> str:
-    """Instructions for finding the OCR errors of a page window."""
-    return (
-        "You are proofreading the text of a scanned document that was recognized by OCR. You will be given the "
-        "document's languages and the lines of one or two of its pages, each as `<id> | <text>`. Lines under a "
-        "\"Context\" heading are only shown for orientation: do not correct them.\n\n"
-        "Rules:\n"
-        "- Correct only OCR misreadings, i.e. text that differs from what is printed on the page. Do not modernize spelling, fix the author's errors, normalize historical orthography, resolve hyphenation or change punctuation that is plausibly in the original.\n"
-        "- Check that footnote numbers are consecutive, both the markers in the body text and the numbers at the start of the footnotes, across the pages of the window. Footnote markers in the body are usually superscript and often misread as punctuation or merged with the preceding word; the numbers at the start of the footnotes are usually recognized reliably. Use the sequence on one side to correct gaps and misreadings on the other. Body markers appear in the order of the footnotes on the page.\n"
-        "- `old` must be the verbatim text of a whole word or run of words on that line; `new` the corrected form.\n"
-        "- When unsure, don't suggest.\n\n"
-        "Known OCR confusions: `rn`/`m`, `li`/`h`, `é`/`ö`, digits read as `?!>\"'®™`.\n\n"
-        "Respond with ONLY a JSON array (no prose, no markdown fence) of corrections:\n"
-        '[{"line": "0412", "old": "…", "new": "…", "rationale": "…"}]\n\n'
-        "`line` is the id of the line, `old` must occur exactly once in that line, and `new` must have the same "
-        "number of words as `old`. If there are no OCR errors, respond with an empty JSON array: []"
-    )
+# ── Prompts and answers (text-only core in line_review) ──────────────
 
 
 def build_user_prompt(source: OcrReviewSource, window: Sequence[Page], position: tuple[int, int]) -> str:
-    """The document's languages and the window's lines, with up to 5 context lines before and after it."""
-    doc = source.doc
-    width = line_id_width(len(doc.lines))
-    lines = window_lines(window)
-
-    def rows(indices: range) -> str:
-        return "\n".join(f"{line_id(i, width)} | {_line_text(doc, doc.lines[i])}".rstrip() for i in indices)
-
-    before = range(max(0, lines.start - DEFAULT_CONTEXT_LINES), lines.start)
-    after = range(lines.stop, min(len(doc.lines), lines.stop + DEFAULT_CONTEXT_LINES))
-    languages = ", ".join(source.languages) if source.languages else "unknown"
-    index, total = position
-    part = f" (part {index} of {total} of the document)" if total > 1 else ""
-    sections = [f"## Languages\n\n{languages}"]
-    if before:
-        sections.append(f"## Context before (do not correct)\n\n{rows(before)}")
-    sections.append(f"## Lines to proofread{part}\n\n{rows(lines)}")
-    if after:
-        sections.append(f"## Context after (do not correct)\n\n{rows(after)}")
-    return "\n\n".join(sections)
-
-
-def build_retry_note(dropped: list[str]) -> str:
-    """Appended to the user prompt when every correction of a first attempt was dropped."""
-    listed = "\n".join(f"- {d}" for d in dropped[:20])
-    return (
-        "\n\n## Note on a previous attempt\n\n"
-        f"A previous review of these lines proposed corrections that were all dropped:\n\n{listed}\n\n"
-        "Review the lines again. Use only line ids of the lines to proofread (not of the context), copy `old` "
-        "exactly as it appears in the line (same spaces and quote characters), keep the number of words, and "
-        "correct only OCR misreadings."
-    )
-
-
-# ── Answers ──────────────────────────────────────────────────────────
-
-
-def _letters(text: str) -> str:
-    return "".join(char for char in text.casefold() if char.isalpha())
-
-
-def letters_similar(old: str, new: str, min_letter_similarity: float) -> bool:
-    """
-    Whether a correction is plausible as an OCR fix: the case-folded letters of `old` and `new`
-    have a `difflib` ratio of at least `min_letter_similarity`, or one side has fewer than 3 letters.
-    """
-    a, b = _letters(old), _letters(new)
-    if len(a) < MIN_LETTERS or len(b) < MIN_LETTERS:
-        return True
-    return difflib.SequenceMatcher(None, a, b).ratio() >= min_letter_similarity
-
-
-def _line_index(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value - 1
-    if isinstance(value, str) and value.strip().isdigit():
-        return int(value.strip()) - 1
-    return None
+    """The document's languages and the window's lines, with context lines (see line_review.build_user_prompt)."""
+    return _build_user_prompt(source.lines, window_lines(window), position)
 
 
 def parse_corrections(
     raw: str, source: OcrReviewSource, window: Sequence[Page], min_letter_similarity: float
 ) -> tuple[list[LineCorrection], list[str]]:
-    """
-    The plausible corrections of an answer and a description of each dropped one: unreadable
-    entries, lines outside the window, `old` not occurring exactly once in the line, a different
-    number of words, and letters that differ too much. Corrections that change nothing (or only
-    whitespace) are ignored without a description.
-
-    Raises:
-        UnusableResponseError: the response contains no JSON list.
-    """
-    items = extract_json_list(raw, LOG_PREFIX)
-    doc = source.doc
-    width = line_id_width(len(doc.lines))
-    lines = window_lines(window)
-    kept: list[LineCorrection] = []
-    dropped: list[str] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        old, new, rationale = item.get("old"), item.get("new"), item.get("rationale")
-        index = _line_index(item.get("line"))
-        if index is None or not isinstance(old, str) or not isinstance(new, str):
-            dropped.append(f"unreadable: {item!r}"[:200])
-            continue
-        old, new = old.strip(), new.strip()
-        if old.split() == new.split():
-            continue
-        label = f'line {line_id(index, width) if index >= 0 else item.get("line")}: "{old}" -> "{new}"'
-        reason: str | None = None
-        if index not in lines:
-            reason = "line outside the lines to proofread"
-        elif not old:
-            reason = "empty old text"
-        else:
-            count = _line_text(doc, doc.lines[index]).count(old)
-            if count == 0:
-                reason = "old text does not occur in the line"
-            elif count > 1:
-                reason = "old text occurs more than once in the line"
-            elif len(old.split()) != len(new.split()):
-                reason = "different number of words"
-            elif not letters_similar(old, new, min_letter_similarity):
-                reason = "letters differ too much for an OCR misreading"
-        if reason is not None:
-            dropped.append(f"{label}: {reason}"[:300])
-            continue
-        kept.append(LineCorrection(index, old, new, rationale if isinstance(rationale, str) else ""))
+    """The plausible corrections of an answer (see line_review.parse_corrections)."""
+    kept, dropped = _parse_corrections(raw, source.lines, window_lines(window), min_letter_similarity)
     logger.info(f"{LOG_PREFIX}: kept {len(kept)} of {len(kept) + len(dropped)} corrections")
     return kept, dropped
 
@@ -425,19 +303,6 @@ async def review_window(
         UnusableResponseError: the model's answer contains no JSON list.
         IndexError: there is no window `index`.
     """
-    window = source.windows[index]
-
-    def parse(raw: str) -> tuple[list[LineCorrection], list[str]]:
-        return parse_corrections(raw, source, window, min_letter_similarity)
-
-    kept, dropped = await complete_with_retry(
-        provider,
-        model_id,
-        build_system_prompt(),
-        build_user_prompt(source, window, (index + 1, len(source.windows))),
-        parse,
-        build_retry_note,
-        LOG_PREFIX,
-    )
+    kept, count, dropped = await review_lines_window(source.lines, index, provider, model_id, min_letter_similarity)
     findings = findings_from_corrections(source, kept)
-    return findings, len(source.windows), len(dropped) + len(kept) - len(findings)
+    return findings, count, dropped + len(kept) - len(findings)
