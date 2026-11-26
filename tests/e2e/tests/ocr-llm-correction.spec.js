@@ -129,6 +129,53 @@ test.describe('OCR dialog: LLM correction', () => {
     }
   });
 
+  test('asks for a missing API key and reports why nothing was corrected', async ({ page }) => {
+    test.setTimeout(60000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    // the mocked 428 below is logged by the browser
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, [...ALLOWED_ERROR_PATTERNS, 'Failed to load resource.*428']);
+    const message = 'done No OCR errors found on 2 reviewed pages.';
+    try {
+      let posts = 0;
+      await page.route('**/api/v1/ocr', async route => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        posts += 1;
+        if (posts === 1) {
+          return route.fulfill({
+            status: 428,
+            json: { detail: { code: 'secret_required', message: 'Mock Provider needs your API key', service: 'mock-provider', label: 'Mock Provider', description: '', help_url: '' } }
+          });
+        }
+        await route.fulfill({ status: 202, json: { job_id: 'job-2', stable_id: 'abc', status: 'queued', username: 'x', pid: 1, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00' } });
+      });
+      await page.route('**/api/v1/ocr/jobs/*', route => route.fulfill({
+        json: {
+          job_id: 'job-2', stable_id: 'abc', status: 'done', username: 'x', pid: 1, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:01',
+          result: { stable_id: 'abc', changed: true, message, quality: { status: 'good', summary: 'ok', reasons: [] }, llm_corrections: [] }
+        }
+      }));
+      await setUp(page, true);
+
+      const prompted = await page.evaluate(async () => {
+        const app = /** @type {any} */(window).app;
+        /** @type {string[]} */
+        const services = [];
+        app.getDependency('api-keys').promptForKey = async (/** @type {any} */ detail) => { services.push(detail.service); return true; };
+        await app.getDependency('ocr').recognize('abc', { engine: 'mock-engine', languages: ['en'], options: {}, llmCorrection: true });
+        return services;
+      });
+
+      expect(prompted).toEqual(['mock-provider']);
+      expect(posts).toBe(2);
+      const logged = await waitForTestMessage(consoleLogs, 'OCR_LLM_CORRECTION', 10000);
+      expect(logged.value).toEqual({ requested: true, corrections: 0, error: null });
+      await expect(page.locator('sl-alert', { hasText: message })).toBeVisible();
+    } finally {
+      stopErrorMonitoring();
+      await performLogout(page);
+    }
+  });
+
   test('disables the option without a default model', async ({ page }) => {
     test.setTimeout(60000);
     const consoleLogs = setupTestConsoleCapture(page);

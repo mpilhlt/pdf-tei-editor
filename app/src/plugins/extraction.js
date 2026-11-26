@@ -266,7 +266,7 @@ class ExtractionPlugin extends Plugin {
           }
           const ocrResult = await this.getDependency('ocr').recognize(file_id, ocr, (_status, message) => {
             ui.spinner.show(message)
-          })
+          }, { before: () => ui.spinner.hide(), after: () => ui.spinner.show('Applying text recognition') })
           if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
             notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
           }

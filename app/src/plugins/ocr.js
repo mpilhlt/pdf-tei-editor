@@ -44,7 +44,7 @@ const OCR_POLL_INTERVAL_MS = 2000
 class OcrPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'ocr', deps: ['client', 'logger', 'inference-settings'] })
+    super(context, { name: 'ocr', deps: ['client', 'logger', 'inference-settings', 'api-keys'] })
   }
 
   get #client() { return this.getDependency('client') }
@@ -280,23 +280,26 @@ class OcrPlugin extends Plugin {
    * @param {(status: OcrJobStatus, message: string) => void} [onStatus] - Called with the initial status of
    *   the job ('queued' or 'running') and whenever the status or the progress changes while it is not
    *   finished, with a description for the user (see {@link describeOcrJob})
+   * @param {{before?: () => void, after?: () => void}} [blocker] - Called around the dialog that asks for the
+   *   API key of the language model's provider if the server needs it, e.g. to lift a spinner that would cover it
    * @returns {Promise<OcrResponse>}
    * @throws {Error} An ApiError (invalid request, or 409 if OCR is already running for this PDF) or
    *   ServerError (failure of the engine or the server) if the run fails
    */
-  async recognize(stableId, run, onStatus) {
+  async recognize(stableId, run, onStatus, blocker) {
     const logger = this.getDependency('logger')
     logger.info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
     const model = run.llmCorrection ? this.getDependency('inference-settings').getDefaultModel() : null
-    let job = await client.apiClient.ocr({
+    // 428 if the provider of the model needs an API key of the user: ask for it and start the run again
+    let job = await this.getDependency('api-keys').withKeyPrompt(() => client.apiClient.ocr({
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
       options: run.options,
       rebuild: Boolean(run.rebuild),
       ...(model ? { llm_correction: true, provider_id: model.providerId, model_id: model.modelId } : {})
-    })
+    }), blocker)
     /** @type {OcrJobStatus|null} */
     let reported = null
     let described = ''
@@ -329,6 +332,9 @@ class OcrPlugin extends Plugin {
     }
     if (error) {
       notify(`The correction with a language model did not finish: ${error}`, 'warning', 'exclamation-triangle', 10000)
+    } else if (model && !corrections.length && result.message) {
+      // Why nothing was corrected, e.g. "No OCR errors found on 3 reviewed pages."
+      notify(result.message, 'primary', 'info-circle', 10000)
     }
     return result
   }
