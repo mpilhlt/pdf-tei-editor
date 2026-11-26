@@ -596,6 +596,27 @@ def page_windows(
     return windows
 
 
+def window_lines(window: Sequence[Page]) -> range:
+    """The lines of a window (without its context)."""
+    return range(window[0].first_line, window[-1].end_line)
+
+
+def window_range(doc: ZoneDocument, xml: str, window: Sequence[Page]) -> tuple[int, int]:
+    """
+    Position of a window's text in the document, as (start, end) offsets in UTF-16 code units: from
+    its first text character (or `<lb/>`) to after its last.
+    """
+    lines = window_lines(window)
+    atoms = [a for a in doc.atoms if a.line in lines and a.kind in (CHAR, LB)]
+    if not atoms:
+        return (0, 0)
+
+    def utf16(offset: int) -> int:
+        return len(xml[:offset].encode("utf-16-le")) // 2
+
+    return utf16(atoms[0].start), utf16(atoms[-1].end)
+
+
 # ── Listing ──────────────────────────────────────────────────────────
 
 
