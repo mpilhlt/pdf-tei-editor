@@ -203,18 +203,19 @@ describe('FindingsDisplay', () => {
     assert.strictEqual(lintCalls.length, 1);
   });
 
-  it('append adds findings with ids after the current ones and skips duplicates of old', () => {
+  it('append adds findings with ids after the current ones and skips identical findings', () => {
     const { display, lintCalls } = build({ docText: 'x AAA BBB CCC y' });
     display.show([{ id: 0, old: 'AAA', new: 'a', rationale: 'first' }]);
     const added = display.append([
       { id: 0, old: 'BBB', new: 'b', rationale: 'second' },
-      { id: 1, old: 'AAA', new: 'x', rationale: 'duplicate' },
+      { id: 1, old: 'AAA', new: 'a', rationale: 'first' },
       { id: 2, old: 'CCC', new: 'c', rationale: 'third' },
-      { id: 3, old: 'CCC', new: 'y', rationale: 'duplicate in batch' },
+      { id: 3, old: 'CCC', new: 'c', rationale: 'third' },
+      { id: 4, old: 'AAA', new: 'x', rationale: 'another problem on the same text' },
     ], false);
-    assert.strictEqual(added, 2);
-    assert.deepStrictEqual(display.findings.map(f => [f.id, f.old]), [[0, 'AAA'], [1, 'BBB'], [2, 'CCC']]);
-    assert.deepStrictEqual(lintCalls.at(-1).own.map(d => d.message), ['first', 'second', 'third']);
+    assert.strictEqual(added, 3);
+    assert.deepStrictEqual(display.findings.map(f => [f.id, f.old]), [[0, 'AAA'], [1, 'BBB'], [2, 'CCC'], [3, 'AAA']]);
+    assert.deepStrictEqual(lintCalls.at(-1).own.map(d => d.message), ['first', 'second', 'third', 'another problem on the same text']);
     assert.deepStrictEqual(lintCalls.at(-1).options, { openPanel: false });
   });
 

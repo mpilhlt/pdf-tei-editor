@@ -291,20 +291,23 @@ export class FindingsDisplay {
   /**
    * Add findings to the current ones (e.g. those of the next part of a running review) and display
    * them, keeping the findings the user has dismissed or applied in the meantime removed. The ids
-   * of the added findings are renumbered after the current ones; findings whose `old` equals that
-   * of a current (or earlier added) finding are skipped.
+   * of the added findings are renumbered after the current ones; findings identical to a current
+   * (or earlier added) finding in `old`, `new` and `rationale` are skipped, so two different
+   * findings on the same text are both kept.
    * @param {Finding[]} findings
    * @param {boolean} [openPanel] Expand the diagnostics drawer
    * @returns {number} The number of findings added
    */
   append(findings, openPanel = true) {
-    const olds = new Set(this._findings.map(f => f.old));
+    /** @param {Finding} f */
+    const key = f => JSON.stringify([f.old, f.new, f.rationale]);
+    const known = new Set(this._findings.map(key));
     let nextId = this._findings.reduce((max, f) => Math.max(max, f.id), -1) + 1;
     /** @type {Finding[]} */
     const added = [];
     for (const finding of findings) {
-      if (olds.has(finding.old)) continue;
-      olds.add(finding.old);
+      if (known.has(key(finding))) continue;
+      known.add(key(finding));
       added.push({ ...finding, id: nextId++ });
     }
     if (!added.length) return 0;
