@@ -28,6 +28,39 @@ from fastapi_app.lib.models.models import (
 )
 
 
+# PDFs of a document (#944): each TEI file is attached to the PDF it was made from
+# (`pdf_stable_id`); a PDF never changes, a new text layer is a new PDF row. The canonical PDF of
+# a document stands for the document where no version is involved (file list, document fields).
+
+def canonical_pdf_sql(doc_id_sql: str) -> str:
+    """
+    SQL expression for the stable_id of the canonical PDF of a document: the PDF of its most
+    recently changed gold version, else its most recently created PDF (non-deleted ones first).
+
+    Args:
+        doc_id_sql: SQL expression for the doc_id, e.g. a column of the outer query
+    """
+    return f"""COALESCE(
+        (SELECT g.pdf_stable_id FROM files g
+         WHERE g.doc_id = {doc_id_sql} AND g.file_type = 'tei' AND g.is_gold_standard = 1
+           AND g.deleted = 0 AND g.pdf_stable_id IS NOT NULL
+         ORDER BY g.updated_at DESC, g.rowid DESC LIMIT 1),
+        (SELECT p.stable_id FROM files p
+         WHERE p.doc_id = {doc_id_sql} AND p.file_type = 'pdf'
+         ORDER BY p.deleted ASC, p.created_at DESC, p.rowid DESC LIMIT 1))"""
+
+
+def listed_file_sql(alias: str = "files") -> str:
+    """
+    SQL condition that is false only for the PDFs of a document that are not its canonical PDF,
+    so that lists of files contain one PDF per document.
+
+    Args:
+        alias: Name or alias of the files table in the outer query
+    """
+    return f"({alias}.file_type != 'pdf' OR {alias}.stable_id = {canonical_pdf_sql(f'{alias}.doc_id')})"
+
+
 class FileRepository:
     """
     Repository for file metadata operations using Pydantic models.
@@ -183,6 +216,8 @@ class FileRepository:
         - local_modified_at = CURRENT_TIMESTAMP
         - sync_status = 'modified'
         - created_at, updated_at = CURRENT_TIMESTAMP
+        - pdf_stable_id of a TEI file without one: the canonical PDF of its document (#944)
+        - pdf_stable_id of the TEI files of the document that have none, when a PDF is inserted
 
         Args:
             file_data: FileCreate model with required fields
@@ -203,6 +238,10 @@ class FileRepository:
             existing_ids = self._get_all_stable_ids()
             data['stable_id'] = generate_stable_id(existing_ids)
 
+        if data['file_type'] == 'tei' and not data.get('pdf_stable_id'):
+            pdf = self.get_pdf_for_document(data['doc_id'])
+            data['pdf_stable_id'] = pdf.stable_id if pdf else None
+
         data['doc_collections'] = json.dumps(data['doc_collections'])
         data['doc_metadata'] = json.dumps(data['doc_metadata'])
         data['file_metadata'] = json.dumps(data['file_metadata'])
@@ -220,6 +259,12 @@ class FileRepository:
         with self.db.transaction() as conn:
             cursor = conn.cursor()
             cursor.execute(query, tuple(data.values()))
+            if data['file_type'] == 'pdf':
+                # TEI files imported before their PDF
+                cursor.execute(
+                    "UPDATE files SET pdf_stable_id = ? WHERE doc_id = ? AND file_type = 'tei' AND pdf_stable_id IS NULL",
+                    (data['stable_id'], data['doc_id']),
+                )
 
             if self.logger:
                 self.logger.debug(f"Inserted file: {file_data.id}")
@@ -296,6 +341,9 @@ class FileRepository:
             cursor = conn.cursor()
             params = tuple(update_data.values()) + (file_id,) + ((stable_id,) if stable_id else ())
             cursor.execute(query, params)
+            doc_fields = {k: v for k, v in update_data.items() if k in ('doc_collections', 'doc_metadata')}
+            if doc_fields and cursor.rowcount:
+                self._share_document_fields(conn, file_id, stable_id, doc_fields)
 
             if cursor.rowcount == 0:
                 raise ValueError(f"File not found or already deleted: {file_id}")
@@ -429,7 +477,7 @@ class FileRepository:
             SELECT * FROM files
             WHERE id = ?
               AND doc_id = ?
-              AND superseded_by IS NULL
+              AND {listed_file_sql()}
               {variant_filter}
               {deleted_filter}
         """
@@ -611,7 +659,7 @@ class FileRepository:
         variant: Optional[str] = None,
         file_type: Optional[str] = None,
         include_deleted: bool = False,
-        include_superseded: bool = False
+        include_all_pdfs: bool = False
     ) -> List[FileMetadata]:
         """
         List files with optional filters.
@@ -621,7 +669,7 @@ class FileRepository:
             variant: Filter by variant
             file_type: Filter by file type
             include_deleted: If True, include soft-deleted files
-            include_superseded: If True, include archived PDFs (replaced by text recognition)
+            include_all_pdfs: If True, include the PDFs of a document that are not its canonical PDF
 
         Returns:
             List of FileMetadata models
@@ -632,8 +680,8 @@ class FileRepository:
         if not include_deleted:
             conditions.append("deleted = 0")
 
-        if not include_superseded:
-            conditions.append("superseded_by IS NULL")
+        if not include_all_pdfs:
+            conditions.append(listed_file_sql())
 
         if file_type:
             conditions.append("file_type = ?")
@@ -684,7 +732,7 @@ class FileRepository:
     # Document-Centric Queries
 
     def get_files_by_doc_id(
-        self, doc_id: str, include_deleted: bool = False, include_superseded: bool = False
+        self, doc_id: str, include_deleted: bool = False, include_all_pdfs: bool = False
     ) -> List[FileMetadata]:
         """
         Get all files for a document.
@@ -692,14 +740,14 @@ class FileRepository:
         Args:
             doc_id: Document identifier
             include_deleted: If True, include soft-deleted files
-            include_superseded: If True, include archived PDFs (replaced by text recognition)
+            include_all_pdfs: If True, include the PDFs of a document that are not its canonical PDF
 
         Returns:
             List of FileMetadata models
         """
         deleted_filter = "" if include_deleted else "AND deleted = 0"
-        superseded_filter = "" if include_superseded else "AND superseded_by IS NULL"
-        query = f"SELECT * FROM files WHERE doc_id = ? {deleted_filter} {superseded_filter} ORDER BY created_at"
+        pdf_filter = "" if include_all_pdfs else f"AND {listed_file_sql()}"
+        query = f"SELECT * FROM files WHERE doc_id = ? {deleted_filter} {pdf_filter} ORDER BY created_at"
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -729,38 +777,26 @@ class FileRepository:
 
     def get_pdf_for_document(self, doc_id: str) -> Optional[FileMetadata]:
         """
-        Get the current PDF file of a document (not an archived one, see `get_pdf_for_file`).
+        Get the canonical PDF of a document (#944): the PDF of its most recently changed gold
+        version, else its most recently created PDF. For the PDF of a version, use
+        `get_pdf_for_file`.
 
         Args:
             doc_id: Document identifier
 
         Returns:
-            FileMetadata model or None if not found
+            FileMetadata model or None if the document has no (non-deleted) PDF
         """
-        query = """
-            SELECT * FROM files
-            WHERE doc_id = ?
-              AND file_type = 'pdf'
-              AND deleted = 0
-              AND superseded_by IS NULL
-        """
+        query = f"SELECT * FROM files WHERE stable_id = {canonical_pdf_sql('?')} AND deleted = 0"
 
         with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, (doc_id,))
-            row = cursor.fetchone()
-
-            if row:
-                return self._row_to_model(row)
-            return None
-
-    # Archived PDFs (#924): text recognition replaces the PDF of a document; the original is kept as
-    # an archived PDF row (superseded_by = current PDF) for the versions made from it (pdf_stable_id)
+            row = conn.execute(query, (doc_id, doc_id)).fetchone()
+        return self._row_to_model(row) if row else None
 
     def get_pdf_for_file(self, file: FileMetadata) -> Optional[FileMetadata]:
         """
-        Get the PDF a version was made from: its archived PDF if it has one, else the document's
-        current PDF.
+        Get the PDF a TEI file is attached to (`pdf_stable_id`), or the canonical PDF of the
+        document if it has none.
 
         Args:
             file: The (TEI) file
@@ -769,140 +805,119 @@ class FileRepository:
             FileMetadata of the PDF, or None if there is none
         """
         if file.pdf_stable_id:
-            archived = self.get_file_by_stable_id(file.pdf_stable_id)
-            if archived is not None:
-                return archived
+            pdf = self.get_file_by_stable_id(file.pdf_stable_id)
+            if pdf is not None:
+                return pdf
         return self.get_pdf_for_document(file.doc_id)
 
-    def replace_pdf_content(
+    def get_document_pdfs(self, doc_id: str, include_deleted: bool = False) -> List[FileMetadata]:
+        """
+        Get all PDFs of a document, oldest first.
+
+        Args:
+            doc_id: Document identifier
+            include_deleted: If True, include soft-deleted PDFs
+
+        Returns:
+            List of FileMetadata models
+        """
+        deleted_filter = "" if include_deleted else "AND deleted = 0"
+        with self.db.get_connection() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM files WHERE doc_id = ? AND file_type = 'pdf' {deleted_filter} ORDER BY created_at, rowid",
+                (doc_id,),
+            ).fetchall()
+        return [self._row_to_model(row) for row in rows]
+
+    def create_pdf_version(
         self,
         stable_id: str,
         new_file_id: str,
         file_size: int,
         file_metadata: dict,
-    ) -> tuple[FileMetadata, Optional[FileMetadata]]:
+        created_by: Optional[str] = None,
+    ) -> FileMetadata:
         """
-        Replace the content of a current PDF (e.g. after text recognition). If versions of the
-        document are based on the current PDF (`pdf_stable_id IS NULL`, deleted ones included), the
-        old content is kept as an archived PDF row with a new stable_id, and these versions are
-        linked to it. The current PDF keeps its stable_id.
+        Create a new PDF of a document from an existing one with new content, e.g. after text
+        recognition changed its text layer (#944). PDFs are never changed: the new PDF gets a new
+        stable_id and the document fields of the source. The TEI files attached to the source stay
+        attached to it.
 
         Args:
-            stable_id: Stable ID of the current PDF
+            stable_id: Stable ID of the source PDF
             new_file_id: Content hash of the new content (already in storage)
             file_size: Size of the new content
-            file_metadata: File metadata of the current PDF after the replacement; the archived
-                row keeps the old file metadata
+            file_metadata: File metadata of the new PDF
+            created_by: Username of the user who created it (default: the creator of the source)
 
         Returns:
-            The updated current PDF and the archived PDF (None if nothing was archived)
+            The new PDF
 
         Raises:
-            ValueError: If the PDF is not found, is not a current PDF, or the content is unchanged
+            ValueError: If the source PDF is not found or the content is unchanged
         """
-        current = self.get_file_by_stable_id(stable_id)
-        if current is None or current.file_type != 'pdf':
+        source = self.get_file_by_stable_id(stable_id)
+        if source is None or source.file_type != 'pdf':
             raise ValueError(f"PDF not found: {stable_id}")
-        if current.superseded_by:
-            raise ValueError(f"PDF {stable_id} is an archived PDF and cannot be replaced")
-        if new_file_id == current.id:
+        if new_file_id == source.id:
             raise ValueError(f"The content of PDF {stable_id} is unchanged")
+        from fastapi_app.lib.utils.stable_id import generate_stable_id
+        new_stable_id = generate_stable_id(self._get_all_stable_ids())
+        self.insert_file(FileCreate(
+            id=new_file_id,
+            stable_id=new_stable_id,
+            filename=source.filename,
+            doc_id=source.doc_id,
+            file_type='pdf',
+            file_size=file_size,
+            label=source.label,
+            doc_collections=source.doc_collections,
+            doc_metadata=source.doc_metadata,
+            file_metadata=file_metadata,
+            created_by=created_by or source.created_by,
+        ))
+        created = self.get_file_by_stable_id(new_stable_id)
+        assert created is not None
+        if self.logger:
+            self.logger.info(f"Created PDF {new_stable_id} ({new_file_id[:8]}) of document {source.doc_id} from {stable_id} ({source.id[:8]})")
+        return created
 
-        with self.db.get_connection() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM files WHERE doc_id = ? AND file_type = 'tei' AND pdf_stable_id IS NULL",
-                (current.doc_id,),
-            ).fetchone()
-        has_versions = bool(row and row['n'])
-
-        archived: Optional[FileMetadata] = None
-        if has_versions:
-            from fastapi_app.lib.utils.stable_id import generate_stable_id
-            archived_stable_id = generate_stable_id(self._get_all_stable_ids())
-            # Inserting first holds a storage reference on the old content, so the update below
-            # does not delete it
-            self.insert_file(FileCreate(
-                id=current.id,
-                stable_id=archived_stable_id,
-                filename=current.filename,
-                doc_id=current.doc_id,
-                file_type='pdf',
-                file_size=current.file_size,
-                label=current.label,
-                doc_collections=current.doc_collections,
-                doc_metadata=current.doc_metadata,
-                file_metadata=current.file_metadata,
-                created_by=current.created_by,
-                superseded_by=current.stable_id,
-            ))
-            archived = self.get_file_by_stable_id(archived_stable_id)
-
-        updated = self.update_file(
-            current.id,
-            FileUpdate(id=new_file_id, file_size=file_size, file_metadata=file_metadata),
-            stable_id=current.stable_id,
-        )
-
-        if archived is not None:
-            with self.db.transaction() as conn:
-                cursor = conn.execute(
-                    """
-                    UPDATE files
-                    SET pdf_stable_id = ?,
-                        sync_status = CASE WHEN deleted = 0 THEN 'modified' ELSE sync_status END,
-                        local_modified_at = CURRENT_TIMESTAMP,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE doc_id = ? AND file_type = 'tei' AND pdf_stable_id IS NULL
-                    """,
-                    (archived.stable_id, current.doc_id),
-                )
-                if self.logger:
-                    self.logger.info(
-                        f"Archived PDF {current.stable_id} ({current.id[:8]}) as {archived.stable_id}; "
-                        f"linked {cursor.rowcount} version(s) to it"
-                    )
-        return updated, archived
-
-    def get_current_pdf_teis(self, doc_id: str) -> List[FileMetadata]:
+    def get_unreferenced_pdfs(self) -> List[FileMetadata]:
         """
-        Get the non-deleted TEI files of a document that are based on its current PDF
-        (`pdf_stable_id IS NULL`), i.e. those that `replace_pdf_content()` would link to the
-        archived PDF.
-
-        Args:
-            doc_id: Document identifier
-
-        Returns:
-            List of FileMetadata models ordered by creation time
-        """
-        with self.db.get_connection() as conn:
-            rows = conn.execute(
-                "SELECT * FROM files WHERE doc_id = ? AND file_type = 'tei' AND pdf_stable_id IS NULL AND deleted = 0 ORDER BY created_at",
-                (doc_id,),
-            ).fetchall()
-        return [self._row_to_model(row) for row in rows]
-
-    def get_unreferenced_archived_pdfs(self) -> List[FileMetadata]:
-        """
-        Get the non-deleted archived PDFs that no file record references through `pdf_stable_id`
-        (garbage-collection candidates). Soft-deleted versions still count: they can be restored,
-        so their archived PDF goes only once they are purged.
+        Get the non-deleted PDFs that no file record references through `pdf_stable_id` and that
+        are not the canonical PDF of their document (garbage-collection candidates). Soft-deleted
+        versions still count: they can be restored, so their PDF goes only once they are purged.
 
         Returns:
             List of FileMetadata models
         """
-        query = """
+        query = f"""
             SELECT pdf.* FROM files pdf
             WHERE pdf.file_type = 'pdf'
-              AND pdf.superseded_by IS NOT NULL
               AND pdf.deleted = 0
+              AND pdf.stable_id != {canonical_pdf_sql('pdf.doc_id')}
               AND NOT EXISTS (SELECT 1 FROM files ref WHERE ref.pdf_stable_id = pdf.stable_id)
         """
         with self.db.get_connection() as conn:
             return [self._row_to_model(row) for row in conn.execute(query).fetchall()]
 
+    def _share_document_fields(self, conn: sqlite3.Connection, file_id: str, stable_id: Optional[str], fields: dict) -> None:
+        """
+        Copy changed document fields (already JSON-serialized) of a PDF to the other PDFs of its
+        document, so that they do not depend on which PDF is canonical.
+        """
+        where = "id = ? AND stable_id = ?" if stable_id else "id = ?"
+        params = (file_id, stable_id) if stable_id else (file_id,)
+        rows = conn.execute(f"SELECT DISTINCT doc_id FROM files WHERE {where} AND file_type = 'pdf'", params).fetchall()
+        set_clause = ', '.join(f"{col} = ?" for col in fields)
+        for row in rows:
+            conn.execute(
+                f"UPDATE files SET {set_clause} WHERE doc_id = ? AND file_type = 'pdf' AND id != ?",
+                tuple(fields.values()) + (row['doc_id'], file_id),
+            )
+
     def get_files_by_collection(
-        self, collection_id: str, include_deleted: bool = False, include_superseded: bool = False
+        self, collection_id: str, include_deleted: bool = False, include_all_pdfs: bool = False
     ) -> List[FileMetadata]:
         """
         Get all files that belong to a specific collection.
@@ -910,18 +925,18 @@ class FileRepository:
         Args:
             collection_id: Collection identifier
             include_deleted: If True, include soft-deleted files
-            include_superseded: If True, include archived PDFs (replaced by text recognition)
+            include_all_pdfs: If True, include the PDFs of a document that are not its canonical PDF
 
         Returns:
             List of FileMetadata models
         """
         deleted_filter = "" if include_deleted else "AND deleted = 0"
-        superseded_filter = "" if include_superseded else "AND superseded_by IS NULL"
+        pdf_filter = "" if include_all_pdfs else f"AND {listed_file_sql()}"
         query = f"""
             SELECT * FROM files
             WHERE json_extract(doc_collections, '$') LIKE ?
             {deleted_filter}
-            {superseded_filter}
+            {pdf_filter}
             ORDER BY created_at
         """
 
@@ -1119,13 +1134,13 @@ class FileRepository:
         Returns:
             FileWithDocMetadata model with inherited document metadata or None if not found
         """
-        query = """
+        query = f"""
             SELECT
                 tei.*,
                 pdf.doc_collections as inherited_doc_collections,
                 pdf.doc_metadata as inherited_doc_metadata
             FROM files tei
-            LEFT JOIN files pdf ON tei.doc_id = pdf.doc_id AND pdf.file_type = 'pdf' AND pdf.deleted = 0 AND pdf.superseded_by IS NULL
+            LEFT JOIN files pdf ON pdf.stable_id = {canonical_pdf_sql('tei.doc_id')} AND pdf.deleted = 0
             WHERE tei.id = ? AND tei.deleted = 0
         """
 
@@ -1322,13 +1337,13 @@ class FileRepository:
 
             return row['count'] if row else 0
 
-    def get_all_files(self, include_deleted: bool = False, include_superseded: bool = False) -> List[FileMetadata]:
+    def get_all_files(self, include_deleted: bool = False, include_all_pdfs: bool = False) -> List[FileMetadata]:
         """
         Get all files (for metadata comparison during sync).
 
         Args:
             include_deleted: If True, include soft-deleted files
-            include_superseded: If True, include archived PDFs (replaced by text recognition)
+            include_all_pdfs: If True, include the PDFs of a document that are not its canonical PDF
 
         Returns:
             List of all FileMetadata models
@@ -1336,8 +1351,8 @@ class FileRepository:
         conditions = []
         if not include_deleted:
             conditions.append("deleted = 0")
-        if not include_superseded:
-            conditions.append("superseded_by IS NULL")
+        if not include_all_pdfs:
+            conditions.append(listed_file_sql())
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         query = f"SELECT * FROM files {where_clause}"
 
@@ -1618,7 +1633,6 @@ class FileRepository:
             LEFT JOIN files pdf ON xml.doc_id = pdf.doc_id
                 AND pdf.file_type = 'pdf'
                 AND pdf.deleted = 0
-                AND pdf.superseded_by IS NULL
             WHERE xml.file_type = 'tei'
                 AND xml.deleted = 0
                 AND pdf.id IS NULL
@@ -1643,17 +1657,13 @@ class FileRepository:
         Returns:
             Number of TEI files updated
         """
-        query = """
+        query = f"""
             UPDATE files
             SET doc_collections = (
                 SELECT pdf.doc_collections
                 FROM files pdf
-                WHERE pdf.doc_id = files.doc_id
-                    AND pdf.file_type = 'pdf'
+                WHERE pdf.stable_id = {canonical_pdf_sql('files.doc_id')}
                     AND pdf.deleted = 0
-                    AND pdf.superseded_by IS NULL
-                ORDER BY pdf.created_at DESC
-                LIMIT 1
             )
             WHERE file_type = 'tei'
                 AND deleted = 0
@@ -1661,10 +1671,8 @@ class FileRepository:
                 AND doc_collections != '[]'
                 AND EXISTS (
                     SELECT 1 FROM files pdf
-                    WHERE pdf.doc_id = files.doc_id
-                        AND pdf.file_type = 'pdf'
+                    WHERE pdf.stable_id = {canonical_pdf_sql('files.doc_id')}
                         AND pdf.deleted = 0
-                        AND pdf.superseded_by IS NULL
                         AND pdf.doc_collections != files.doc_collections
                 )
         """
