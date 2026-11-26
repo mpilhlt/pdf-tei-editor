@@ -79,6 +79,13 @@ from fastapi_app.lib.plugins.plugin_tools import (
     get_plugin_config,
     load_plugin_html,
 )
+from fastapi_app.lib.ocr.text_corrections import (
+    CorrectedPdfHandler,
+    CorrectedPdfMismatch,
+    get_corrected_pdf_handler,
+    register_corrected_pdf_handler,
+    unregister_corrected_pdf_handler,
+)
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.services.service_registry import BaseService, get_service_registry
 from fastapi_app.lib.sse.event_bus import EventBus, get_event_bus
@@ -101,6 +108,8 @@ __all__ = [
     "PLUGIN_API_VERSION",
     "BaseExtractor",
     "BaseService",
+    "CorrectedPdfHandler",
+    "CorrectedPdfMismatch",
     "DocumentRulesProvider",
     "EventBus",
     "ExtractorRegistry",
@@ -122,6 +131,7 @@ __all__ = [
     "MISSING_LAYOUT_MESSAGE",
     "PAGES_UNIT_PATH",
     "get_completion_session",
+    "get_corrected_pdf_handler",
     "post_completion",
     "rate_limit_http_error",
     "ModelStatus",
@@ -149,6 +159,7 @@ __all__ = [
     "get_sse_service",
     "load_plugin_html",
     "register_bundled_schema",
+    "register_corrected_pdf_handler",
     "register_directory_gc_task",
     "register_document_rules_provider",
     "register_gc_handler",
@@ -161,6 +172,7 @@ __all__ = [
     "require_authenticated_user",
     "require_reviewer_or_admin",
     "unregister_bundled_schema",
+    "unregister_corrected_pdf_handler",
     "unregister_document_rules_provider",
     "unregister_gc_handler",
     "unregister_gc_task",

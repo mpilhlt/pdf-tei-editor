@@ -6,32 +6,61 @@ Endpoints:
 - GET  /api/v1/ocr/text-quality/{stable_id} - Assess the text layer of a PDF
 - POST /api/v1/ocr                          - Start applying OCR to a PDF, replacing its content
 - GET  /api/v1/ocr/jobs/{job_id}            - Status and result of an OCR run
+- POST /api/v1/ocr/text-corrections/preview - What writing a TEI's text corrections into the PDF would do
+- POST /api/v1/ocr/text-corrections/apply   - Write a TEI's text corrections into the PDF's OCR text layer
 """
 
 import asyncio
 import tempfile
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import pikepdf
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from lxml import etree
 from pypdf.errors import PdfReadError
 
 from ..config import get_settings
-from ..lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
+from ..lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_authenticated_user, require_reviewer_or_admin, require_session_id
+from ..lib.core.locking import check_lock
+from ..lib.core.sessions import SessionManager
 from ..lib.models import FileMetadata, FileUpdate
-from ..lib.models.models_ocr import OcrEngineInfo, OcrJob, OcrOptionInfo, OcrProgress, OcrRequest, OcrResponse, TextQualityReport
+from ..lib.models.models_ocr import (
+    AffectedFile,
+    OcrEngineInfo,
+    OcrJob,
+    OcrOptionInfo,
+    OcrProgress,
+    OcrRequest,
+    OcrResponse,
+    TextCorrectionItem,
+    TextCorrectionsPreview,
+    TextCorrectionsRequest,
+    TextCorrectionsResult,
+    TextQualityReport,
+    UnwritableItem,
+)
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
 from ..lib.ocr.jobs import OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
 from ..lib.ocr.progress import ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
+from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
+from ..lib.ocr.text_layer import WordPatch, patch_text_layer, read_text_layer
 from ..lib.ocr.text_quality import analyze_text_layer
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
+from ..lib.services.tei_versions import create_tei_version, version_collections
+from ..lib.sse.sse_service import SSEService
 from ..lib.storage.file_storage import FileStorage
+from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
+from ..lib.utils.revision_hash import stamp_revision_hashes
+from ..lib.utils.tei_utils import extract_tei_metadata, update_fileref_in_xml
+from ..lib.utils.xml_utils import apply_entity_encoding_from_config
 from ..lib.utils.logging_utils import get_logger
 
 logger = get_logger(__name__)
@@ -387,4 +416,300 @@ async def _recognize(
         method=result.method,
         fallback_reason=result.fallback_reason,
         quality=quality,
+    )
+
+
+# --- Text corrections (#931) ------------------------------------------------------------------
+
+TEXT_CORRECTIONS_METADATA_KEY = "text_corrections"
+"""Key in the PDF's file_metadata under which the text corrections written into it are recorded."""
+
+ARCHIVED_VERSION_MESSAGE = "This version was made from an earlier PDF of the document. Open a version based on the current PDF."
+UNSUPPORTED_DOCUMENT_MESSAGE = "Text corrections cannot be written for this kind of document."
+OCR_RUNNING_MESSAGE = "Text recognition is running for the PDF of this document. Please wait until it is finished."
+NO_CORRECTIONS_MESSAGE = "The document has no text corrections to write."
+LOCKED_MESSAGE = "This document is being edited in another session. Text corrections can only be written by the session that edits it."
+PDF_CHANGED_MESSAGE = "The PDF was changed while the corrections were written. Please try again."
+UNWRITABLE_MESSAGE = "Some differences between the document and the text layer cannot be written. Skip them to write the other corrections."
+
+
+@dataclass
+class _CorrectionContext:
+    """A TEI document whose text corrections can be written into its PDF, with the corrections."""
+
+    tei: FileMetadata
+    xml: str
+    pdf: FileMetadata
+    pdf_path: Path
+    handler: CorrectedPdfHandler
+    plan: CorrectionPlan
+
+
+def _get_tei(repo: FileRepository, stable_id: str, user: dict[str, Any]) -> FileMetadata:
+    """
+    Look up a TEI file by stable_id and check that the user can edit it.
+
+    Raises:
+        HTTPException: 404 if there is no such TEI file, 403 if access is denied
+    """
+    file = repo.get_file_by_stable_id(stable_id)
+    if file is None or file.file_type != "tei":
+        raise HTTPException(status_code=404, detail=f"TEI file not found: {stable_id}")
+    if not check_file_access(file, user, "edit"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return file
+
+
+def _derive_plan(xml: str, variant_id: str, layout: LineLayout, pdf_path: Path) -> CorrectionPlan:
+    """Compare the TEI's words with the PDF's text layer (blocking)."""
+    words = tei_words(xml, variant_id, layout)
+    with pikepdf.open(pdf_path) as pdf:
+        layer = read_text_layer(pdf)
+    return derive_corrections(words, layer)
+
+
+async def _correction_context(stable_id: str, repo: FileRepository, storage: FileStorage, jobs: OcrJobStore, user: dict[str, Any], session_id: str) -> _CorrectionContext:
+    """
+    Check the preconditions of writing a TEI's text corrections into its PDF and derive them.
+
+    Raises:
+        HTTPException: 404/403 if the TEI or its PDF is missing or not editable, 409 if the
+            corrections cannot be written (the detail says why), 423 if another session holds the
+            lock of the TEI, 422 if the PDF cannot be read.
+            Whether there are corrections at all is left to the caller.
+    """
+    tei = _get_tei(repo, stable_id, user)
+    if tei.pdf_stable_id:
+        raise HTTPException(status_code=409, detail=ARCHIVED_VERSION_MESSAGE)
+    if check_lock(tei.stable_id, session_id, get_settings().db_dir, logger)["is_locked"]:
+        raise HTTPException(status_code=423, detail=LOCKED_MESSAGE)
+    content = storage.read_file(tei.id, "tei")
+    if content is None:
+        raise HTTPException(status_code=404, detail=f"TEI content not found: {stable_id}")
+    xml = content.decode("utf-8")
+    layout = await asyncio.to_thread(get_line_layout, xml, tei.doc_id, tei.variant)
+    if layout is None:
+        raise HTTPException(status_code=409, detail=MISSING_LAYOUT_MESSAGE)
+    handler = get_corrected_pdf_handler(tei.variant)
+    if handler is None or tei.variant is None:
+        raise HTTPException(status_code=409, detail=UNSUPPORTED_DOCUMENT_MESSAGE)
+    current_pdf = repo.get_pdf_for_document(tei.doc_id)
+    if current_pdf is None:
+        raise HTTPException(status_code=404, detail=f"No PDF found for document {tei.doc_id}")
+    pdf = _get_pdf(repo, current_pdf.stable_id, user, "edit")
+    if jobs.find_active(pdf.stable_id) is not None:
+        raise HTTPException(status_code=409, detail=OCR_RUNNING_MESSAGE)
+    pdf_path = _pdf_path(storage, pdf)
+    try:
+        plan = await asyncio.to_thread(_derive_plan, xml, tei.variant, layout, pdf_path)
+    except ValueError as e:
+        # the variant has no zone labels
+        logger.debug(f"Cannot derive text corrections for {stable_id}: {e}")
+        raise HTTPException(status_code=409, detail=UNSUPPORTED_DOCUMENT_MESSAGE)
+    except pikepdf.PdfError as e:
+        raise HTTPException(status_code=422, detail=f"The PDF cannot be read: {e}")
+    return _CorrectionContext(tei, xml, pdf, pdf_path, handler, plan)
+
+
+def _file_label(file: FileMetadata) -> str:
+    """The label of a TEI file as the file list shows it, with fallbacks."""
+    if file.label and file.label.lower() not in ("untitled", "unknown title"):
+        return file.label
+    if file.is_gold_standard:
+        return f"Gold ({file.variant})" if file.variant else "Gold"
+    if file.version:
+        return f"Version {file.version}"
+    return file.stable_id
+
+
+def _patch_pdf(source: Path, target: Path, corrections: list[WordCorrection]) -> None:
+    """Write the corrections into the text layer of a copy of the PDF (blocking)."""
+    with pikepdf.open(source) as pdf:
+        patch_text_layer(pdf, [WordPatch(c.word, c.new) for c in corrections])
+        pdf.save(target)
+
+
+def _prepare_version_xml(xml: str, doc_id: str, reference_xml: str) -> tuple[str, dict[str, str | None]]:
+    """
+    Prepare the TEI returned by the corrected-PDF handler for storage as a new version, as the
+    save route does: document identifier, entity encoding and revision hashes.
+
+    Returns:
+        The XML and its label, status and last_revision
+
+    Raises:
+        ValueError: if the XML is not well-formed
+    """
+    try:
+        root = etree.fromstring(xml.encode("utf-8"))
+    except etree.XMLSyntaxError as e:
+        raise ValueError(f"The updated document is not well-formed XML: {e}") from e
+    metadata = extract_tei_metadata(root)
+    try:
+        xml = update_fileref_in_xml(xml, doc_id)
+    except ValueError as e:
+        logger.warning(f"Could not update fileref in XML: {e}")
+    xml = stamp_revision_hashes(apply_entity_encoding_from_config(xml), reference_xml)
+    return xml, {
+        "label": metadata.get("edition_title"),
+        "status": metadata.get("status"),
+        "last_revision": metadata.get("last_revision"),
+    }
+
+
+@router.post("/text-corrections/preview", response_model=TextCorrectionsPreview)
+async def preview_text_corrections(
+    request: TextCorrectionsRequest,
+    repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
+    jobs: OcrJobStore = Depends(get_ocr_job_store),
+    current_user: dict[str, Any] = Depends(require_reviewer_or_admin),
+    session_id: str = Depends(require_session_id),
+) -> TextCorrectionsPreview:
+    """
+    Show what writing the text corrections of a TEI document into the OCR text layer of its PDF
+    would do: the words that would be corrected, the differences that cannot be written, and the
+    other versions of the document that would stay linked to the old PDF.
+
+    If the corrections cannot be written, `reason` says why and the lists are empty, except when
+    there are no corrections: then `unwritable` and `affected_files` are filled, since the
+    unwritable differences explain why. This includes a lock of the TEI held by another session.
+    A missing TEI file or missing access is reported with 404/403 as usual.
+    """
+    try:
+        context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id)
+    except HTTPException as e:
+        if e.status_code not in (409, 423):
+            raise
+        return TextCorrectionsPreview(reason=str(e.detail))
+    affected = [f for f in repo.get_current_pdf_teis(context.tei.doc_id) if f.stable_id != context.tei.stable_id]
+    return TextCorrectionsPreview(
+        corrections=[TextCorrectionItem(page=c.page, line=c.line, old=c.old, new=c.new) for c in context.plan.corrections],
+        unwritable=[UnwritableItem(page=u.page, line=u.line, layer_text=u.layer_text, tei_text=u.tei_text, reason=u.reason) for u in context.plan.unwritable],
+        affected_files=[AffectedFile(stable_id=f.stable_id, label=_file_label(f)) for f in affected],
+        # the unwritable differences explain why there is nothing to write
+        reason=None if context.plan.corrections else NO_CORRECTIONS_MESSAGE,
+    )
+
+
+@router.post("/text-corrections/apply", response_model=TextCorrectionsResult)
+async def apply_text_corrections(
+    request: TextCorrectionsRequest,
+    http_request: Request,
+    repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
+    jobs: OcrJobStore = Depends(get_ocr_job_store),
+    current_user: dict[str, Any] = Depends(require_reviewer_or_admin),
+    session_id: str = Depends(require_session_id),
+    sse_service: SSEService = Depends(get_sse_service),
+    session_manager: SessionManager = Depends(get_session_manager),
+) -> TextCorrectionsResult:
+    """
+    Write the text corrections of a TEI document into the OCR text layer of its PDF; the stored
+    PDF is replaced with the corrected one.
+
+    The extractor plugin of the document's variant then regenerates its data for the corrected
+    PDF and returns the TEI updated for it. It is saved as a new version of the document
+    (`tei_stable_id`; its content is returned as `xml`), which is based on the corrected PDF, made
+    from the given version and locked for the session. The TEI files based on the old PDF,
+    including the one given, are linked to the archived old PDF.
+
+    Refused with 409 if the corrections cannot be written (see the preview's `reason`) or if some
+    differences cannot be written and `skip_unwritable` is false, and with 423 if another session
+    holds the lock of the TEI. If the plugin finds that the corrected PDF does not match the
+    document, the response is 422 with `message` and the unmatched `lines`; if its service is
+    unreachable or the plugin fails, 502. Nothing is replaced in these cases.
+    """
+    settings = get_settings()
+    context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id)
+    plan, pdf, tei = context.plan, context.pdf, context.tei
+    if not plan.corrections:
+        raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
+    if plan.unwritable and not request.skip_unwritable:
+        raise HTTPException(status_code=409, detail=UNWRITABLE_MESSAGE)
+    # refuse before anything is changed if the user cannot create the new version
+    version_collections(repo, tei.doc_id, current_user, settings.db_dir, logger)
+
+    with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
+        output_path = Path(tmp) / "corrected.pdf"
+        try:
+            await asyncio.to_thread(_patch_pdf, context.pdf_path, output_path, plan.corrections)
+        except (ValueError, pikepdf.PdfError) as e:
+            logger.warning(f"Cannot write text corrections into {pdf.stable_id}: {e}")
+            raise HTTPException(status_code=422, detail=f"The text layer of the PDF cannot be changed: {e}")
+        content = output_path.read_bytes()
+    new_hash, new_path = storage.save_file(content, "pdf", increment_ref=False)
+    if new_hash == pdf.id:
+        raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
+
+    corrected_lines = frozenset(c.line for c in plan.corrections)
+    try:
+        xml = await asyncio.to_thread(context.handler, context.xml, tei.doc_id, new_path, new_hash, corrected_lines)
+    except CorrectedPdfMismatch as e:
+        logger.warning(f"Corrected PDF of {pdf.stable_id} does not match {tei.stable_id} (lines {e.lines}): {e}")
+        raise HTTPException(status_code=422, detail={"message": str(e), "lines": e.lines})
+    except RuntimeError as e:
+        logger.warning(f"Cannot process the corrected PDF of {pdf.stable_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logger.exception(f"The corrected-PDF handler failed for {pdf.stable_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"The corrected PDF could not be processed: {e}")
+    try:
+        version_xml, version_metadata = _prepare_version_xml(xml, tei.doc_id, context.xml)
+    except ValueError as e:
+        logger.warning(f"The corrected-PDF handler returned an invalid document for {tei.stable_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+    record: dict[str, str | list[dict[str, str | int]]] = {
+        "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "applied_by": str(current_user.get("username") or ""),
+        "tei_stable_id": tei.stable_id,
+        "corrections": [{"page": c.page, "old": c.old, "new": c.new} for c in plan.corrections],
+    }
+    previous = pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
+    file_metadata = {**pdf.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, record]}
+    # the handler can take a while: do not overwrite a replacement of the PDF made meanwhile
+    current = repo.get_file_by_stable_id(pdf.stable_id)
+    if current is None or current.id != pdf.id or jobs.find_active(pdf.stable_id) is not None:
+        raise HTTPException(status_code=409, detail=PDF_CHANGED_MESSAGE)
+    try:
+        _, archived = repo.replace_pdf_content(pdf.stable_id, new_hash, len(content), file_metadata)
+    except ValueError as e:
+        logger.warning(f"Cannot replace {pdf.stable_id} with the corrected PDF: {e}")
+        raise HTTPException(status_code=409, detail=PDF_CHANGED_MESSAGE)
+    archived_stable_id = archived.stable_id if archived else None
+
+    # The new version is based on the corrected PDF (pdf_stable_id None). It is created before the
+    # response is sent, so that a lost response leaves a consistent state
+    try:
+        version = await create_tei_version(
+            xml_string=version_xml,
+            doc_id=tei.doc_id,
+            variant=tei.variant,
+            label=version_metadata["label"],
+            status=version_metadata["status"],
+            last_revision=version_metadata["last_revision"],
+            parent_stable_id=tei.stable_id,
+            pdf_stable_id=None,
+            user=current_user,
+            session_id=session_id,
+            base_url=f"{http_request.url.scheme}://{http_request.url.netloc}",
+            db_dir=settings.db_dir,
+            file_repo=repo,
+            file_storage=storage,
+            sse_service=sse_service,
+            session_manager=session_manager,
+            logger_inst=logger,
+        )
+    except Exception as e:
+        logger.exception(f"Wrote the text corrections of {tei.stable_id} into {pdf.stable_id}, but could not create the new version: {e}")
+        reason = e.detail if isinstance(e, HTTPException) else str(e)
+        raise HTTPException(status_code=500, detail=f"The corrections were written to the PDF, but the new version of the document could not be created: {reason}")
+    logger.info(f"Wrote {len(plan.corrections)} text correction(s) of {tei.stable_id} into {pdf.stable_id}: {pdf.id[:8]} -> {new_hash[:8]}, new version {version.file.stable_id}" + (f", original archived as {archived_stable_id}" if archived_stable_id else ""))
+    return TextCorrectionsResult(
+        xml=version_xml,
+        tei_stable_id=version.file.stable_id,
+        pdf_stable_id=pdf.stable_id,
+        archived_stable_id=archived_stable_id,
+        corrections=len(plan.corrections),
     )

@@ -513,6 +513,58 @@
  */
 
 /**
+ * Request to preview or write the text corrections of a TEI document into the PDF's OCR text layer
+ * @typedef {Object} TextCorrectionsRequest
+ * @property {string} stable_id - stable_id of the TEI document
+ * @property {boolean=} skip_unwritable - Write the corrections even though some differences cannot be written (they are skipped)
+ */
+
+/**
+ * A word of the text layer that is replaced by the TEI's word
+ * @typedef {Object} TextCorrectionItem
+ * @property {number} page - Page index (0-based)
+ * @property {number} line - Index of the TEI line
+ * @property {string} old - Word of the text layer
+ * @property {string} new - Word of the TEI
+ */
+
+/**
+ * A difference between text layer and TEI that cannot be written into the layer
+ * @typedef {Object} UnwritableItem
+ * @property {number} page - Page index (0-based)
+ * @property {number|null=} line - Index of the TEI line, if the TEI has words there
+ * @property {string} layer_text - Text of the text layer
+ * @property {string} tei_text - Text of the TEI
+ * @property {string} reason - Why the difference cannot be written
+ */
+
+/**
+ * Another TEI file of the document that stays linked to the old PDF
+ * @typedef {Object} AffectedFile
+ * @property {string} stable_id - stable_id of the TEI file
+ * @property {string} label - Label of the file
+ */
+
+/**
+ * What writing the text corrections would do, or why it is not possible
+ * @typedef {Object} TextCorrectionsPreview
+ * @property {Array<TextCorrectionItem>} corrections - Corrections that would be written
+ * @property {Array<UnwritableItem>} unwritable - Differences that cannot be written
+ * @property {Array<AffectedFile>} affected_files - Other TEI files of the document that would stay linked to the old PDF
+ * @property {string|null=} reason - Why the corrections cannot be written; set means the action is not possible. The lists are then empty, except when there are no corrections: `unwritable` and `affected_files` explain why
+ */
+
+/**
+ * Result of writing the text corrections into the PDF
+ * @typedef {Object} TextCorrectionsResult
+ * @property {string} xml - The TEI document updated for the corrected PDF, as stored in the new version
+ * @property {string} tei_stable_id - stable_id of the new version of the document, which is based on the corrected PDF
+ * @property {string} pdf_stable_id - stable_id of the PDF (unchanged)
+ * @property {string|null=} archived_stable_id - stable_id of the archived old PDF, if versions were made from it
+ * @property {number} corrections - Number of corrections written
+ */
+
+/**
  * @typedef {Object} ExtractorInfo
  * @property {string} id - Unique identifier for the extractor
  * @property {string} name - Human-readable name of the extractor
@@ -2403,6 +2455,33 @@ export class ApiClientV1 {
   async ocrJob(jobId) {
     const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}`
     return this.callApi(endpoint);
+  }
+
+  /**
+   * Show what writing the text corrections of a TEI document into the OCR text layer of its PDF
+   * would do. If it is not possible, `reason` says why. Requires the reviewer role.
+   *
+   * @param {TextCorrectionsRequest} requestBody
+   * @returns {Promise<TextCorrectionsPreview>}
+   */
+  async ocrTextCorrectionsPreview(requestBody) {
+    const endpoint = `/ocr/text-corrections/preview`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Write the text corrections of a TEI document into the OCR text layer of its PDF, replacing the
+   * stored PDF. The TEI updated for the corrected PDF is saved as a new version (`tei_stable_id`),
+   * locked for the session. Rejected with 409 if not possible, 423 if another session holds the
+   * lock of the TEI, 422 (`{message, lines}`) if the corrected PDF does not match the document,
+   * 502 if the extractor service is unreachable or fails. Requires the reviewer role.
+   *
+   * @param {TextCorrectionsRequest} requestBody
+   * @returns {Promise<TextCorrectionsResult>}
+   */
+  async ocrTextCorrectionsApply(requestBody) {
+    const endpoint = `/ocr/text-corrections/apply`
+    return this.callApi(endpoint, 'POST', requestBody);
   }
 
   /**

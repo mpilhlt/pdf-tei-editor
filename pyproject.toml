@@ -118,6 +118,7 @@ dev = [
     "pytest>=8.4.0",
     "tap-py>=3.2",
     "send2trash>=2.1.0",
+    "pymupdf>=1.26,<2",
 ]
 
 [tool.pytest.ini_options]

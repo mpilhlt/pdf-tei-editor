@@ -1,0 +1,21 @@
+<sl-dialog name="textCorrectionsDialog" label="Write text corrections to PDF" class="dialog-stacked">
+  <div class="dialog-column">
+    <p name="summary"></p>
+    <div name="correctionsSection" class="dialog-column">
+      <strong>Corrections</strong>
+      <ul name="corrections"></ul>
+    </div>
+    <div name="unwritableSection" class="dialog-column">
+      <strong>Changes that cannot be written</strong>
+      <ul name="unwritable"></ul>
+      <sl-checkbox name="skipUnwritable" size="small">Skip these changes</sl-checkbox>
+    </div>
+    <div name="affectedSection" class="dialog-column">
+      <strong>Other versions that stay linked to the old PDF</strong>
+      <ul name="affectedFiles"></ul>
+      <small>They keep the old PDF; the corrected PDF is used by the new version only.</small>
+    </div>
+  </div>
+  <sl-button slot="footer" name="close" variant="neutral">Close</sl-button>
+  <sl-button slot="footer" name="write" variant="primary">Write</sl-button>
+</sl-dialog>

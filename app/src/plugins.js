@@ -28,6 +28,7 @@ import {
   DocumentRulesPlugin,
   ExtractionPlugin,
   OcrPlugin,
+  TextCorrectionsPlugin,
   FiledataPlugin,
   FileSelectionDrawerPlugin,
   FileSelectionPlugin,
@@ -117,6 +118,7 @@ const plugins = [
   OcrPlugin,              // text recognition (OCR) engines and options dialog, used by ExtractionPlugin
   ExtractionPlugin,
   ToolsPlugin,
+  TextCorrectionsPlugin,  // Tools menu — OCR section: write text corrections to the PDF
   InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)
   DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
   TeiValidationPlugin,

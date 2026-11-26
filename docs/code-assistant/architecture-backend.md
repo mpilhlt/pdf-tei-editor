@@ -109,6 +109,15 @@ For frontend architecture, see [architecture-frontend.md](./architecture-fronten
 | `manager.py` | Extractor management |
 | `http_utils.py` | HTTP utilities |
 
+### `ocr/` — OCR text layer
+
+| File | Purpose |
+| --- | --- |
+| `text_layer.py` | Reads the words of the invisible OCR text layer of a PDF (`read_text_layer`) and patches words in place (`patch_text_layer`). The width of a patched word is kept with `Tz` and `TJ` kerning; characters missing from the font are added to its `ToUnicode` CMap, `/W` and `CIDToGIDMap`. Refuses visible text, pages whose font objects are shared with visible text, and fonts other than Type0/Identity-H. Without corrections the layer is unchanged: corrections are not written by synthesizing hOCR and rendering again. |
+| `text_corrections.py` | Derives word corrections by diffing the words of the TEI pages with the words of the text layer. Tokenization shifts and moved blocks are ignored; word-count changes, unrelated multi-word blocks, unpatchable pages and pages without a layer page are reported as unwritable. |
+
+The routes `POST /api/v1/ocr/text-corrections/preview` and `/apply` (`fastapi_app/routers/ocr.py`) use these modules. `apply` writes the corrected PDF, calls the corrected PDF handler registered by the extractor plugin of the document's variant (plugin API 1.8.0) to regenerate its data and update the TEI, then replaces the stored PDF with `replace_pdf_content()` (which links the edited TEI to the archived PDF) and saves the updated TEI as a new version based on the corrected PDF with `create_tei_version()` (`fastapi_app/lib/services/tei_versions.py`, shared with `POST /api/v1/files/save`). Both routes refuse a TEI locked by another session. The applied corrections are recorded under `text_corrections` in the PDF's file metadata. Frontend: `app/src/plugins/text-corrections.js`.
+
 ### `messages/` — Messages for reviews and comments
 
 | File | Purpose |
