@@ -30,6 +30,15 @@ class OcrEngineInfo(BaseModel):
     options: dict[str, OcrOptionInfo] = Field(default_factory=dict, description="Parameters apart from the languages")
 
 
+class OcrLlmCorrectionRequest(BaseModel):
+    """Request to correct the OCR errors of the text layer of a stored PDF with an LLM."""
+
+    stable_id: str = Field(..., min_length=1, description="stable_id of the PDF")
+    provider_id: str = Field(..., min_length=1, description="Id of the LLM provider")
+    model_id: str = Field(..., min_length=1, description="Id of the model")
+    languages: list[str] = Field(default_factory=list, description="Languages of the document as BCP 47 codes; if empty, those of the last OCR run of the PDF")
+
+
 class OcrRequest(BaseModel):
     """Request to apply OCR to a PDF."""
 

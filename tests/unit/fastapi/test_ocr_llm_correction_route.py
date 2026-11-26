@@ -79,7 +79,9 @@ def layer_words(content: bytes, path: Path) -> list[str]:
         return [w.text for w in read_text_layer(pdf)[0].words]
 
 
-class TestOcrLlmCorrectionRoute(unittest.TestCase):
+class _RouteTestCase(unittest.TestCase):
+    """Fixtures and helpers of the OCR route tests with an LLM provider."""
+
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         make_image_only_pdf(self.tmp / "oldhash.pdf")
@@ -129,6 +131,8 @@ class TestOcrLlmCorrectionRoute(unittest.TestCase):
     def stored_metadata(self) -> dict[str, Any]:
         return self.repo.updates[-1][1]["file_metadata"]
 
+
+class TestOcrLlmCorrectionRoute(_RouteTestCase):
     def test_option_off_runs_no_llm(self) -> None:
         result = self.run_ocr()
         self.assertEqual(self.provider.calls, 0)
@@ -232,6 +236,82 @@ class TestOcrLlmCorrectionRoute(unittest.TestCase):
         with patch.object(ocr_router.llm_correction, "correct_text_layer", side_effect=RuntimeError("boom")), self.assertLogs(ocr_router.logger.name, level="ERROR"):
             result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
         self.assertIn("boom", result["llm_correction_error"])
+
+
+class TestStandaloneLlmCorrectionRoute(_RouteTestCase):
+    """`POST /ocr/llm-correction`: the correction pass on a stored PDF, e.g. to restart a cancelled one."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        shutil.copy(FIXTURE, self.tmp / "ocrhash.pdf")
+        self.ocr_pdf = SimpleNamespace(id="ocrhash", stable_id="pdf2", file_type="pdf", superseded_by=None, file_metadata={
+            "ocr": {"engine": "fake", "languages": ["de"], "applied_at": "2026-01-01T00:00:00+00:00", "applied_by": "alice"},
+            "text_corrections": [{"source": "earlier"}],
+        })
+        self.repo.files["pdf2"] = self.ocr_pdf
+
+    def correct(self, **body: Any) -> dict[str, Any]:
+        """Start a correction job, wait for it and return the finished job."""
+        response = self.client.post("/ocr/llm-correction", json={"stable_id": "pdf2", "provider_id": "fake", "model_id": "m", **body})
+        self.assertEqual(response.status_code, 202, response.text)
+        job = response.json()
+        deadline = time.monotonic() + 30
+        while job["status"] in ("queued", "running"):
+            self.assertLess(time.monotonic(), deadline, "correction job did not finish")
+            time.sleep(0.05)
+            job = self.client.get(f"/ocr/jobs/{job['job_id']}").json()
+        return job
+
+    def test_corrects_the_stored_pdf_and_records(self) -> None:
+        with patch.object(llm_correction, "correct_text_layer", wraps=llm_correction.correct_text_layer) as spy:
+            job = self.correct()
+        self.assertEqual(job["status"], "done", job.get("error"))
+        result = job["result"]
+        self.assertEqual(result["llm_corrections"], [{"page": 0, "old": "Regel’).", "new": "Regel12).", "rationale": "OCR"}])
+        self.assertTrue(result["changed"])
+        self.assertEqual(result["message"], "Corrected 1 OCR error with m.")
+        # the languages of the last OCR run are used
+        self.assertEqual(spy.call_args.args[3], ["de"])
+        self.assertEqual(self.engine.calls, [])
+        self.assertEqual(len(self.storage.saved), 1)
+        self.assertIn("Regel12).", layer_words(self.storage.saved[0], self.tmp / "check.pdf"))
+        records = self.stored_metadata()["text_corrections"]
+        self.assertEqual(records[0], {"source": "earlier"})
+        self.assertEqual((records[1]["source"], records[1]["model_id"]), ("llm-correction", "m"))
+        # the OCR record is kept
+        self.assertEqual(self.stored_metadata()["ocr"]["engine"], "fake")
+
+    def test_nothing_to_correct_leaves_the_pdf_unchanged(self) -> None:
+        self.provider.response = "[]"
+        job = self.correct()
+        self.assertEqual(job["status"], "done")
+        self.assertFalse(job["result"]["changed"])
+        self.assertEqual(self.storage.saved, [])
+        self.assertEqual(self.repo.updates, [])
+
+    def test_cancelled_correction_leaves_the_pdf_unchanged(self) -> None:
+        jobs = self.jobs
+        original = self.provider.chat_completion
+
+        async def cancel_then_answer(model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+            job_id = next(jobs.directory.glob("*.json")).stem
+            (jobs.directory / f"{job_id}.cancel").touch()
+            return await original(model_id, system_prompt, user_prompt, temperature)
+
+        with patch.object(self.provider, "chat_completion", cancel_then_answer):
+            job = self.correct()
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(self.storage.saved, [])
+        self.assertEqual(self.repo.updates, [])
+
+    def test_rejected_while_a_job_for_the_pdf_runs(self) -> None:
+        self.jobs.create("pdf2", "alice")
+        response = self.client.post("/ocr/llm-correction", json={"stable_id": "pdf2", "provider_id": "fake", "model_id": "m"})
+        self.assertEqual(response.status_code, 409, response.text)
+
+    def test_unknown_provider_and_missing_model(self) -> None:
+        self.assertEqual(self.client.post("/ocr/llm-correction", json={"stable_id": "pdf2", "provider_id": "nope", "model_id": "m"}).status_code, 404)
+        self.assertEqual(self.client.post("/ocr/llm-correction", json={"stable_id": "pdf2", "provider_id": "fake"}).status_code, 422)
 
 
 def correction_run(**fields: Any) -> llm_correction.CorrectionRun:

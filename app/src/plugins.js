@@ -30,6 +30,7 @@ import {
   OcrPlugin,
   TextCorrectionsPlugin,
   OcrReviewPlugin,
+  OcrCorrectionPlugin,
   FiledataPlugin,
   FileSelectionDrawerPlugin,
   FileSelectionPlugin,
@@ -121,6 +122,7 @@ const plugins = [
   ToolsPlugin,
   TextCorrectionsPlugin,  // Tools menu — OCR section: write text corrections to the PDF
   OcrReviewPlugin,        // Tools menu — OCR section: find OCR errors with an LLM
+  OcrCorrectionPlugin,    // Tools menu — OCR section: correct OCR errors of the PDF text layer with an LLM
   InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)
   DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
   TeiValidationPlugin,

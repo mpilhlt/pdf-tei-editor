@@ -427,6 +427,15 @@
  */
 
 /**
+ * Request to correct the OCR errors of the text layer of a stored PDF with an LLM
+ * @typedef {Object} OcrLlmCorrectionRequest
+ * @property {string} stable_id - stable_id of the PDF
+ * @property {string} provider_id - Id of the LLM provider
+ * @property {string} model_id - Id of the model
+ * @property {string[]=} languages - Languages of the document as BCP 47 codes; if empty, those of the last OCR run of the PDF
+ */
+
+/**
  * @typedef {Object} OcrRequest
  * @property {string} stable_id - stable_id of the PDF
  * @property {string} engine - Id of the OCR engine
@@ -2501,6 +2510,20 @@ export class ApiClientV1 {
    */
   async ocr(requestBody) {
     const endpoint = `/ocr`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Start correcting the OCR errors of the text layer of a stored PDF with an LLM, e.g. after the
+   * correction pass of an OCR run was cancelled. The run is a job like an OCR run: poll
+   * {@link ApiClientV1#ocrJob} for the result, cancel it with {@link ApiClientV1#ocrCancelJob}.
+   * Rejected with 409 if a job for the PDF is already queued or running.
+   *
+   * @param {OcrLlmCorrectionRequest} requestBody
+   * @returns {Promise<OcrJob>}
+   */
+  async ocrLlmCorrection(requestBody) {
+    const endpoint = `/ocr/llm-correction`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

@@ -9,6 +9,7 @@
  * @import { extractionOptionsPart } from '../templates/extraction-dialog.types.js'
  * @import { OcrRunOptions, OcrSettings } from './ocr.js'
  * @import { OcrEngineInfo, OcrJob, TextQualityReport, LanguageConflict } from '../modules/api-client-v1.js'
+ * @import { ShownDocuments } from '../modules/background-result.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -24,13 +25,7 @@ import { getFileDataById } from '../modules/file-data-utils.js'
 import { notify } from '../modules/sl-utils.js'
 import { languageName } from '../modules/language-chooser.js'
 import { OcrCancelledError } from './ocr.js'
-
-/**
- * The documents shown when a background process started
- * @typedef {object} ShownDocuments
- * @property {string|null} pdf - stable_id of the PDF
- * @property {string|null} xml - stable_id of the XML document
- */
+import { loadWhenFinished } from '../modules/background-result.js'
 
 /**
  * Percentage of the current phase of an OCR job that is done, or null if the phase is not counted
@@ -378,26 +373,21 @@ class ExtractionPlugin extends Plugin {
   }
 
   /**
-   * Loads the result of a process that ran in the background. If the user still has the documents
-   * open that were shown when it started, the result is loaded at once. Otherwise the user is asked
-   * whether to load it now; if not, only the file list is updated.
+   * Loads the result of a process that ran in the background, see {@link loadWhenFinished}.
    * @param {ShownDocuments} started - The documents shown when the process started
    * @param {string} finishedMessage - Says which process is finished
    * @param {() => Promise<void>} load - Loads the result
    * @returns {Promise<boolean>} Whether the result was loaded
    */
   async #loadWhenFinished(started, finishedMessage, load) {
-    const state = this.state
-    const unchanged = state.pdf === started.pdf && state.xml === started.xml
-    testLog('BACKGROUND_PROCESS_FINISHED', { unchanged })
-    if (!unchanged) {
-      await this.getDependency('file-selection').reload({ refresh: true })
-      const confirmed = await this.getDependency('dialog').confirm(`${finishedMessage} Load the result now?`, 'Finished')
-      testLog('BACKGROUND_RESULT_CONFIRMED', { confirmed })
-      if (!confirmed) return false
-    }
-    await load()
-    return true
+    return loadWhenFinished({
+      started,
+      current: { pdf: this.state.pdf, xml: this.state.xml },
+      finishedMessage,
+      confirm: message => this.getDependency('dialog').confirm(message, 'Finished'),
+      refreshFileList: () => this.getDependency('file-selection').reload({ refresh: true }),
+      load
+    })
   }
 
   /**

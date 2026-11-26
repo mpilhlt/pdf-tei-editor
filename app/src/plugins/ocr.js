@@ -24,6 +24,9 @@ await registerTemplate('ocr-dialog', 'ocr-dialog.html')
 /** Interval in milliseconds at which the status of a running OCR job is requested */
 const OCR_POLL_INTERVAL_MS = 2000
 
+/** Where the user finds the standalone correction (see ocr-correction.js) */
+export const CORRECTION_MENU_PATH = 'Tools > OCR > Correct OCR errors in PDF (LLM)'
+
 /**
  * Parameters of an OCR run
  * @typedef {object} OcrSettings
@@ -309,19 +312,68 @@ class OcrPlugin extends Plugin {
    *   ServerError (failure of the engine or the server) if the run fails
    */
   async recognize(stableId, run, { onStatus, signal } = {}) {
-    const logger = this.getDependency('logger')
-    logger.info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
+    this.getDependency('logger').info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
     const model = run.llmCorrection ? this.getDependency('inference-settings').getDefaultModel() : null
-    // 428 if the provider of the model needs an API key of the user: ask for it and start the run again
-    let job = await this.getDependency('api-keys').withKeyPrompt(() => client.apiClient.ocr({
+    const job = await this.#runJob(stableId, () => client.apiClient.ocr({
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
       options: run.options,
       rebuild: Boolean(run.rebuild),
       ...(model ? { llm_correction: true, provider_id: model.providerId, model_id: model.modelId } : {})
-    }))
+    }), { onStatus, signal }, 'Applying text recognition')
+    const result = job.result
+    testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
+    this.#reportCorrections(result, Boolean(model))
+    return result
+  }
+
+  /**
+   * Correct the OCR errors of the text layer of a stored PDF with the default language model, e.g.
+   * after the correction pass of a text recognition run was cancelled. The PDF is replaced if
+   * anything was corrected; its stable_id stays the same. Runs in the background on the server like
+   * {@link recognize}.
+   * @param {string} stableId - stable_id of the PDF
+   * @param {OcrRecognizeOptions} [options]
+   * @returns {Promise<OcrResponse>}
+   * @throws {OcrCancelledError} If the run was cancelled: the PDF is unchanged
+   * @throws {Error} If no default model is selected, the request is invalid (409 if a job for the PDF
+   *   is already queued or running) or the run fails
+   */
+  async correct(stableId, { onStatus, signal } = {}) {
+    const model = this.getDependency('inference-settings').getDefaultModel()
+    if (!model) {
+      throw new Error('No default model configured. Set one via Tools > Inference > Default Model.')
+    }
+    this.getDependency('logger').info(`Correcting the OCR errors of ${stableId} with ${model.providerId}/${model.modelId}`)
+    const client = this.#client
+    const job = await this.#runJob(stableId, () => client.apiClient.ocrLlmCorrection({
+      stable_id: stableId,
+      provider_id: model.providerId,
+      model_id: model.modelId
+    }), { onStatus, signal }, 'Correcting OCR errors')
+    const result = job.result
+    testLog('OCR_CORRECTION_COMPLETED', { stableId, changed: result.changed, corrections: (result.llm_corrections ?? []).length })
+    this.#reportCorrections(result, true)
+    return result
+  }
+
+  /**
+   * Start a job of the OCR job API and poll it until it is finished.
+   * @param {string} stableId - stable_id of the PDF
+   * @param {() => Promise<OcrJob>} start - Starts the job
+   * @param {OcrRecognizeOptions} options
+   * @param {string} heading - What the job does, for the status messages (see {@link describeOcrJob})
+   * @returns {Promise<OcrJob>} The finished job, with the status 'done'
+   * @throws {OcrCancelledError} If the job was cancelled
+   * @throws {Error} An ApiError or ServerError if the job could not be started or failed
+   */
+  async #runJob(stableId, start, { onStatus, signal }, heading) {
+    const logger = this.getDependency('logger')
+    const client = this.#client
+    // 428 if the provider of the model needs an API key of the user: ask for it and start the run again
+    let job = await this.getDependency('api-keys').withKeyPrompt(start)
     const jobId = job.job_id
     let cancelRequested = false
     const requestCancel = () => {
@@ -341,7 +393,7 @@ class OcrPlugin extends Plugin {
           reported = job.status
           testLog('OCR_JOB_STATUS', { stableId, status: job.status })
         }
-        const message = describeOcrJob(job)
+        const message = describeOcrJob(job, heading)
         if (message !== described) {
           described = message
           onStatus?.(job.status, message, job)
@@ -357,28 +409,34 @@ class OcrPlugin extends Plugin {
       throw new OcrCancelledError()
     }
     if (job.status === 'failed') {
-      const message = job.error || 'Text recognition failed'
+      const message = job.error || `${heading} failed`
       const status = job.error_status ?? 500
       testLog('OCR_FAILED', { stableId, error: message, status })
       throw status < 500 ? new client.ApiError(message, status) : new client.ServerError(message, status)
     }
-    const result = job.result
-    testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
+    return job
+  }
+
+  /**
+   * Tell the user what the LLM correction pass of a finished job did.
+   * @param {OcrResponse} result
+   * @param {boolean} requested - Whether the correction was requested
+   */
+  #reportCorrections(result, requested) {
     const corrections = result.llm_corrections ?? []
     const error = result.llm_correction_error ?? null
-    testLog('OCR_LLM_CORRECTION', { requested: Boolean(model), corrections: corrections.length, error, cancelled: Boolean(result.llm_correction_cancelled) })
+    testLog('OCR_LLM_CORRECTION', { requested, corrections: corrections.length, error, cancelled: Boolean(result.llm_correction_cancelled) })
     if (corrections.length) {
       notify(describeLlmCorrections(corrections), 'primary', 'info-circle', 15000)
     }
     if (result.llm_correction_cancelled) {
-      notify('The correction with a language model was cancelled. The result of the text recognition was kept.', 'primary', 'info-circle', 10000)
+      notify(`The correction with a language model was cancelled. The result of the text recognition was kept. To run the correction again, choose ${CORRECTION_MENU_PATH}.`, 'primary', 'info-circle', 10000)
     } else if (error) {
       notify(`The correction with a language model did not finish: ${error}`, 'warning', 'exclamation-triangle', 10000)
-    } else if (model && !corrections.length && result.message) {
+    } else if (requested && !corrections.length && result.message) {
       // Why nothing was corrected, e.g. "No OCR errors found on 3 reviewed pages."
       notify(result.message, 'primary', 'info-circle', 10000)
     }
-    return result
   }
 }
 
@@ -386,17 +444,18 @@ class OcrPlugin extends Plugin {
  * Describe the state of an unfinished OCR job for the user, with the progress and the estimated
  * remaining time of the current phase if the server reports them.
  * @param {OcrJob} job
+ * @param {string} [heading] - What the job does
  * @returns {string} E.g. "Applying text recognition: Recognizing text, page 12 of 71, about 2 minutes left"
  */
-export function describeOcrJob(job) {
+export function describeOcrJob(job, heading = 'Applying text recognition') {
   if (job.status === 'queued') {
     return 'Waiting for another text recognition to finish'
   }
   const progress = job.progress
   if (!progress) {
-    return 'Applying text recognition, this may take a while'
+    return `${heading}, this may take a while`
   }
-  let message = `Applying text recognition: ${progress.phase}`
+  let message = `${heading}: ${progress.phase}`
   if (progress.total) {
     message += progress.unit ? `, ${progress.unit} ${progress.done ?? 0} of ${progress.total}` : ` (${progress.done ?? 0} of ${progress.total})`
   }
