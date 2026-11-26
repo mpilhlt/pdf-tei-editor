@@ -97,7 +97,8 @@ class TextCorrectionsPreview(BaseModel):
 class TextCorrectionsResult(BaseModel):
     """Result of writing the text corrections into the PDF."""
 
-    xml: str = Field(..., description="The TEI document updated for the corrected PDF")
+    xml: str = Field(..., description="The TEI document updated for the corrected PDF, as stored in the new version")
+    tei_stable_id: str = Field(..., description="stable_id of the new version of the document, which is based on the corrected PDF")
     pdf_stable_id: str = Field(..., description="stable_id of the PDF (unchanged)")
     archived_stable_id: Optional[str] = Field(None, description="stable_id of the archived old PDF, if versions were made from it")
     corrections: int = Field(..., description="Number of corrections written")

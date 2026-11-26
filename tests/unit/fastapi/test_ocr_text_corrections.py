@@ -14,14 +14,15 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pikepdf
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
-from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
+from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_authenticated_user
+from fastapi_app.lib.core.locking import acquire_lock, check_lock
 from fastapi_app.lib.models.models import FileCreate, FileMetadata
 from fastapi_app.lib.ocr.jobs import OcrJobStore
 from fastapi_app.lib.ocr.text_corrections import CorrectedPdfMismatch, register_corrected_pdf_handler, unregister_corrected_pdf_handler
@@ -37,6 +38,7 @@ FIXTURE_PDF = PROJECT_ROOT / "fastapi_app" / "plugins" / "ocrmypdf" / "tests" / 
 VARIANT = "test.text-corrections"
 REVIEWER = {"username": "rev", "roles": ["reviewer"], "groups": []}
 ANNOTATOR = {"username": "ann", "roles": ["annotator"], "groups": []}
+SESSION = "session-1"
 
 LINES = [
     "Die Gesellschaft haftet nach der neuen Regel’). Weitere Ausführungen folgen im nächsten Abschnitt der Darstellung.",
@@ -64,9 +66,13 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.repo = FileRepository(self.db)
         self.storage = FileStorage(self.tmp / "files", self.db)
         # FileRepository creates its own FileStorage under settings.data_root / "files" to delete content
-        settings = type("S", (), {"data_root": self.tmp})()
+        settings = type("S", (), {"data_root": self.tmp, "db_dir": self.tmp})()
         self.settings_patch = patch("fastapi_app.config.get_settings", lambda: settings)
         self.settings_patch.start()
+        self.router_settings_patch = patch.object(ocr_router, "get_settings", lambda: settings)
+        self.router_settings_patch.start()
+        self.collections_patch = patch("fastapi_app.lib.services.tei_versions.user_has_collection_access", return_value=True)
+        self.collections_patch.start()
         self.labels_patch = patch("fastapi_app.lib.ocr.text_corrections.get_zone_labels", return_value=[ZoneLabel("body", "body")])
         self.labels_patch.start()
 
@@ -92,13 +98,17 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         app.dependency_overrides[get_file_repository] = lambda: self.repo
         app.dependency_overrides[get_file_storage] = lambda: self.storage
         app.dependency_overrides[ocr_router.get_ocr_job_store] = lambda: self.jobs
-        self.client = TestClient(app)
+        app.dependency_overrides[get_sse_service] = lambda: MagicMock()
+        app.dependency_overrides[get_session_manager] = lambda: MagicMock()
+        self.client = TestClient(app, headers={"X-Session-ID": SESSION})
 
     def tearDown(self):
         self.access.stop()
         unregister_layout_provider(VARIANT)
         unregister_corrected_pdf_handler(VARIANT)
         self.labels_patch.stop()
+        self.collections_patch.stop()
+        self.router_settings_patch.stop()
         self.settings_patch.stop()
         gc.collect()
         shutil.rmtree(self.tmp)
@@ -288,6 +298,79 @@ class TestTextCorrectionRoutes(unittest.TestCase):
             response = self.apply()
         self.assertEqual(response.status_code, 502)
         self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
+
+    def test_handler_unexpected_error_is_502(self):
+        self.handler_error = KeyError("zone")
+        with self.assertLogs("fastapi_app.routers.ocr", level="ERROR") as logs:
+            response = self.apply()
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("Traceback", "\n".join(logs.output))
+        self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
+
+    def test_apply_creates_version_based_on_corrected_pdf(self):
+        response = self.apply()
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        pdf = self.repo.get_file_by_stable_id("pdf1")
+        assert pdf is not None
+        version = self.repo.get_file_by_stable_id(result["tei_stable_id"])
+        assert version is not None
+        # a new version based on the corrected (current) PDF, made from the edited TEI
+        self.assertNotIn(version.stable_id, ("tei1", "tei2"))
+        self.assertEqual((version.file_type, version.doc_id, version.variant, version.version), ("tei", "doc1", VARIANT, 3))
+        self.assertIsNone(version.pdf_stable_id)
+        self.assertEqual(version.parent_stable_id, "tei1")
+        self.assertEqual(version.created_by, "rev")
+        self.assertEqual(version.doc_collections, ["c1"])
+        content = self.storage.read_file(version.id, "tei")
+        assert content is not None
+        self.assertEqual(content.decode("utf-8"), result["xml"])
+        self.assertIn(f'<idno type="pdf-hash">{pdf.id}</idno>', result["xml"])
+        # locked for the session that wrote the corrections
+        self.assertTrue(check_lock(version.stable_id, "other-session", self.tmp, ocr_router.logger)["is_locked"])
+        self.assertFalse(check_lock(version.stable_id, SESSION, self.tmp, ocr_router.logger)["is_locked"])
+        # the edited TEI is linked to the archived PDF
+        tei = self.repo.get_file_by_stable_id("tei1")
+        assert tei is not None
+        self.assertEqual(tei.pdf_stable_id, result["archived_stable_id"])
+        # the new version can be corrected further, the edited one not
+        self.assertNotEqual(self.preview(stable_id=version.stable_id)["reason"], ocr_router.ARCHIVED_VERSION_MESSAGE)
+        response = self.apply()
+        self.assertEqual((response.status_code, response.json()["detail"]), (409, ocr_router.ARCHIVED_VERSION_MESSAGE))
+
+    def test_unchanged_pdf_is_refused(self):
+        with patch.object(ocr_router, "_patch_pdf", lambda source, target, corrections: shutil.copyfile(source, target)):
+            response = self.apply()
+        self.assertEqual((response.status_code, response.json()["detail"]), (409, ocr_router.NO_CORRECTIONS_MESSAGE))
+        self.assertEqual(self.handler_calls, [])
+        self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
+        self.assertEqual(self.repo.get_latest_tei_version("doc1", VARIANT).stable_id, "tei2")  # type: ignore[union-attr]
+
+    def test_lock_of_other_session_is_refused(self):
+        self.assertTrue(acquire_lock("tei1", "other-session", self.tmp, ocr_router.logger))
+        self.assertEqual(self.preview()["reason"], ocr_router.LOCKED_MESSAGE)
+        response = self.apply()
+        self.assertEqual((response.status_code, response.json()["detail"]), (423, ocr_router.LOCKED_MESSAGE))
+        self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
+
+    def test_lock_of_own_session_is_accepted(self):
+        self.assertTrue(acquire_lock("tei1", SESSION, self.tmp, ocr_router.logger))
+        self.assertIsNone(self.preview()["reason"])
+        self.assertEqual(self.apply().status_code, 200)
+
+    def test_invalid_handler_xml_keeps_pdf(self):
+        register_corrected_pdf_handler(VARIANT, "test", lambda xml, doc_id, pdf_path, pdf_hash, lines: "<TEI")
+        with self.assertLogs("fastapi_app.routers.ocr", level="WARNING"):
+            response = self.apply()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
+
+    def test_version_creation_failure_reports_written_pdf(self):
+        with patch.object(ocr_router, "create_tei_version", side_effect=RuntimeError("disk full")):
+            with self.assertLogs("fastapi_app.routers.ocr", level="ERROR"):
+                response = self.apply()
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("The corrections were written to the PDF", response.json()["detail"])
 
 
 if __name__ == "__main__":

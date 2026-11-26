@@ -557,7 +557,8 @@
 /**
  * Result of writing the text corrections into the PDF
  * @typedef {Object} TextCorrectionsResult
- * @property {string} xml - The TEI document updated for the corrected PDF
+ * @property {string} xml - The TEI document updated for the corrected PDF, as stored in the new version
+ * @property {string} tei_stable_id - stable_id of the new version of the document, which is based on the corrected PDF
  * @property {string} pdf_stable_id - stable_id of the PDF (unchanged)
  * @property {string|null=} archived_stable_id - stable_id of the archived old PDF, if versions were made from it
  * @property {number} corrections - Number of corrections written
@@ -2470,9 +2471,10 @@ export class ApiClientV1 {
 
   /**
    * Write the text corrections of a TEI document into the OCR text layer of its PDF, replacing the
-   * stored PDF, and return the TEI updated for the corrected PDF. Rejected with 409 if not possible,
-   * 422 (`{message, lines}`) if the corrected PDF does not match the document, 502 if the
-   * extractor service is unreachable. Requires the reviewer role.
+   * stored PDF. The TEI updated for the corrected PDF is saved as a new version (`tei_stable_id`),
+   * locked for the session. Rejected with 409 if not possible, 423 if another session holds the
+   * lock of the TEI, 422 (`{message, lines}`) if the corrected PDF does not match the document,
+   * 502 if the extractor service is unreachable or fails. Requires the reviewer role.
    *
    * @param {TextCorrectionsRequest} requestBody
    * @returns {Promise<TextCorrectionsResult>}

@@ -68,11 +68,13 @@ If you corrected words in the TEI document that the text recognition got wrong, 
 
 The action compares the text of the open TEI version with the text layer of its PDF. A dialog lists the words that would be corrected, the differences that cannot be written, and the other versions of the document that are affected. Only words that were replaced by other words are corrected; the position and size of the words in the layer do not change. Differences that are only a matter of splitting or joining words or of the order of text blocks are ignored.
 
-After you confirm, the stored PDF is replaced by the corrected one and the original PDF is archived, as after text recognition. The version you are editing is kept with the corrected text and stays linked to the archived original PDF. The action then creates a new version for the corrected PDF, with the line coordinates updated for it, and opens it. Other versions of the document stay linked to the archived original PDF and are shown with it. The corrections are recorded in the metadata of the PDF.
+After you click "Write", the dialog stays open until the corrections are written, which can take a minute. The stored PDF is replaced by the corrected one and the original PDF is archived, as after text recognition. The version you are editing is kept with the corrected text and stays linked to the archived original PDF. A new version of the document, based on the corrected PDF and with the line coordinates updated for it, is created from it and opened together with the corrected PDF. Further corrections are written from this new version. If the new version cannot be opened, for example because the connection was lost, it exists nevertheless: open the newest version of the document in the file selection. Other versions of the document stay linked to the archived original PDF and are shown with it. The corrections are recorded in the metadata of the PDF.
 
 The action is refused, with a message that says why, in these cases:
 
 - The open version was made from an earlier PDF than the current one. Open a version that is based on the current PDF.
+- The document is open read-only, because it is edited in another session or you cannot edit it.
+- The document has changes that could not be saved, for example because the XML is not well-formed. Fix and save it first.
 - Text recognition is running for the PDF of the document.
 - The document has no text corrections, or the PDF has no invisible text layer from text recognition. Visible text of the PDF is never changed.
 - The text layer cannot be changed, for example because of an unusual font encoding.
