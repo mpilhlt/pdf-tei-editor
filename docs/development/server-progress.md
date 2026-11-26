@@ -24,6 +24,7 @@ Backend                          Frontend
         │ progressShow                   │ Creates widget
         │ progressValue                  │ Updates progress
         │ progressLabel                  │ Updates label
+        │ progressTitle                  │ Updates title
         │ progressHide                   │ Removes widget
         │                                │
         │                        ┌───────▼───────┐
@@ -48,8 +49,8 @@ async def process_files(
     # Create progress bar instance
     progress = ProgressBar(sse_service, session_id)
 
-    # Show with initial label (indeterminate mode)
-    progress.show(label="Starting...", cancellable=True)
+    # Show with a title naming the process and an initial status label (indeterminate mode)
+    progress.show(title="Processing files", label="Starting...", cancellable=True)
 
     files = get_files_to_process()
     for i, file in enumerate(files):
@@ -206,7 +207,8 @@ import { progress } from '../plugins.js'
 
 // Show a progress widget programmatically
 progress.show('my-progress-id', {
-    label: 'Processing...',
+    title: 'Processing files',  // names the process; omit to keep the current title when re-showing
+    label: 'Processing...',     // current status
     value: null,  // null for indeterminate
     cancellable: true,
     cancelUrl: '/api/my-endpoint/cancel/my-progress-id',
@@ -216,6 +218,7 @@ progress.show('my-progress-id', {
 // Update progress
 progress.setValue('my-progress-id', 50)
 progress.setLabel('my-progress-id', 'Halfway there...')
+progress.setTitle('my-progress-id', 'Processing files (2nd pass)')
 
 // Hide widget
 progress.hide('my-progress-id')
@@ -236,6 +239,7 @@ All progress events are JSON-encoded with a `progress_id` field:
 ```json
 {
     "progress_id": "abc123",
+    "title": "Processing files",
     "label": "Processing...",
     "value": null,
     "cancellable": true,
@@ -264,6 +268,17 @@ All progress events are JSON-encoded with a `progress_id` field:
 }
 ```
 
+### progressTitle
+
+```json
+{
+    "progress_id": "abc123",
+    "title": "Processing files"
+}
+```
+
+Sent by `ProgressBar.set_title()`.
+
 ### progressHide
 
 ```json
@@ -285,7 +300,8 @@ All progress events are JSON-encoded with a `progress_id` field:
 ## Widget Behavior
 
 - **Click to toggle**: Clicking on the widget toggles between minimized and maximized states
-- **Stacking**: Multiple widgets stack vertically (bottom-left when minimized, centered when maximized)
+- **Title and label**: The title names the process and is shown above the bar; when minimized it is shown in small type and cropped with an ellipsis (the full title is the widget's tooltip). The label is the current status, shown below the bar and hidden when minimized. Without a title, the title line is hidden
+- **Stacking**: Widgets are placed in two flex containers: minimized widgets stack upward from the bottom-left, maximized widgets stack in the center of the viewport and scroll when they exceed it. There is no limit on the number of widgets; within each container widgets keep their creation order
 - **State persistence**: Minimized state is stored per `progress_id` in session storage
 - **Cancel**: When clicked, sends POST to the configured `cancelUrl`
 

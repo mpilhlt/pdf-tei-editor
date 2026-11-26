@@ -94,6 +94,7 @@ class OcrCorrectionPlugin extends Plugin {
     const controller = new AbortController()
     this.#running.add(stableId)
     progress.show(progressId, {
+      title: 'OCR correction',
       label: `Correcting OCR errors using ${label}…`,
       value: null,
       cancellable: true,

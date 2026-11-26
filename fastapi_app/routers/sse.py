@@ -168,7 +168,7 @@ async def progress_test(
     """
     Test endpoint that simulates a progress bar workflow.
 
-    Sends progressShow, progressValue, progressLabel, and progressHide events
+    Sends progressShow, progressValue, progressLabel, progressTitle and progressHide events
     to test the frontend progress widget.
 
     Args:
@@ -176,6 +176,7 @@ async def progress_test(
             - steps: Number of progress steps (default: 5)
             - delay_ms: Delay between steps in ms (default: 500)
             - label_prefix: Prefix for step labels (default: "Processing step")
+            - title: Widget title (default: "Progress test")
 
     Returns:
         dict: Summary with status and progress_id
@@ -188,6 +189,7 @@ async def progress_test(
     steps = body.get("steps", 5)
     delay_ms = body.get("delay_ms", 500)
     label_prefix = body.get("label_prefix", "Processing step")
+    title = body.get("title", "Progress test")
 
     username = user.get('username', 'unknown')
 
@@ -197,7 +199,7 @@ async def progress_test(
     progress = ProgressBar(sse_service, session_id)
 
     # Show progress widget
-    progress.show(label=f"{label_prefix} 0/{steps}", value=0, cancellable=True)
+    progress.show(title=title, label=f"{label_prefix} 0/{steps}", value=0, cancellable=True)
     logger.debug(f"Progress test: show (progress_id={progress.progress_id})")
 
     # Run progress simulation in background without blocking
@@ -208,6 +210,8 @@ async def progress_test(
             value = int((i / steps) * 100)
             progress.set_value(value)
             progress.set_label(f"{label_prefix} {i}/{steps}")
+            if i == steps:
+                progress.set_title(f"{title} (done)")
             logger.debug(f"Progress test: step {i}/{steps}, value={value}")
 
         # Small delay before hiding
