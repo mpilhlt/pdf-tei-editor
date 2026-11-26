@@ -106,7 +106,8 @@ test.describe('OCR extraction option', () => {
         ui.extractionOptions.cancel.click();
       });
 
-      // Applying OCR gives the PDF a text layer and keeps its stable_id. OCR runs as a background job.
+      // Applying OCR stores a new PDF of the document with a text layer (#944); the source is
+      // not changed. OCR runs as a background job.
       const job = await page.evaluate(async ({ id, engine }) => {
         const apiClient = /** @type {any} */(window).client.apiClient;
         let job = await apiClient.ocr({ stable_id: id, engine, languages: ['en'] });
@@ -118,7 +119,8 @@ test.describe('OCR extraction option', () => {
       }, { id: stableId, engine: engines[0].id });
       expect(job.status, job.error).toBe('done');
       const result = job.result;
-      expect(result.stable_id).toBe(stableId);
+      expect(result.source_stable_id).toBe(stableId);
+      expect(result.stable_id).not.toBe(stableId);
       expect(result.changed).toBe(true);
       expect(result.quality.status).toBe('good');
       expect(result.quality.ocr_applied.languages).toEqual(['en']);
