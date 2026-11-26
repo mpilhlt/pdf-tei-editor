@@ -164,4 +164,48 @@ class OcrJob(BaseModel):
     updated_at: str = Field(..., description="ISO timestamp of the last status change")
 
 
+class OcrReviewPlanRequest(BaseModel):
+    """Request for the number of page windows of the LLM review of OCR errors."""
+
+    stable_id: str = Field(..., min_length=1, description="stable_id of the TEI document (zone document with a line layout)")
+    xml: str = Field(..., description="Current, possibly unsaved XML content of the document")
+    scope: Optional[str] = Field(None, description="Raw XML of a node of `xml` to review instead of the whole text")
+
+
+class OcrReviewPlanResponse(BaseModel):
+    """The number of page windows the review needs."""
+
+    window_count: int = Field(..., description="Number of windows; request each `window_index` below it in turn")
+
+
+class OcrReviewRequest(BaseModel):
+    """Request to review one page window of a TEI document for OCR errors with an LLM."""
+
+    stable_id: str = Field(..., min_length=1, description="stable_id of the TEI document (zone document with a line layout)")
+    xml: str = Field(..., description="Current, possibly unsaved XML content of the document")
+    provider_id: str = Field(..., min_length=1, description="Id of the LLM provider")
+    model_id: str = Field(..., min_length=1, description="Id of the model")
+    window_index: int = Field(0, description="Index of the page window to review (0-based)")
+    scope: Optional[str] = Field(None, description="Raw XML of a node of `xml` to review instead of the whole text")
+
+
+class OcrReviewFinding(BaseModel):
+    """A proposed correction: replace `old` (unique in the XML) by `new`."""
+
+    id: int = Field(..., description="Id of the finding, unique within its window")
+    old: str = Field(..., description="Exact text of the XML to replace")
+    new: str = Field(..., description="Replacement")
+    rationale: str = Field(..., description="Why the text is an OCR error")
+
+
+class OcrReviewResponse(BaseModel):
+    """The findings of one page window."""
+
+    findings: list[OcrReviewFinding] = Field(..., description="Proposed corrections")
+    window_count: int = Field(..., description="Number of windows of the document")
+    discarded: int = Field(0, description="Proposals of the model that were dropped as implausible or not applicable")
+    window_start: Optional[int] = Field(None, description="Start of the window's text in `xml` (UTF-16 code units)")
+    window_end: Optional[int] = Field(None, description="End of the window's text in `xml` (UTF-16 code units)")
+
+
 OcrResponse.model_rebuild()
