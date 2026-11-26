@@ -1,5 +1,5 @@
 /**
- * Tools action "Correct OCR errors in PDF (LLM)": lets the default language model correct the OCR
+ * Tools action "Correct OCR errors in PDF without review (LLM)": lets the default language model correct the OCR
  * errors of the text layer of the open PDF, without running text recognition again. This is the
  * correction pass of text recognition on its own, e.g. to run it again after it was cancelled.
  *
@@ -17,7 +17,10 @@ import { testLog } from '../modules/test-log.js'
 import { loadWhenFinished } from '../modules/background-result.js'
 import { OcrCancelledError } from './ocr.js'
 
-/** Shown as tooltip of the menu item when no PDF is open */
+/** Tooltip of the menu item */
+const TOOLTIP = 'The language model corrects the text layer of the PDF directly, without a review. To review the corrections first, use "Find OCR errors (LLM)".'
+
+/** Added to the tooltip when no PDF is open */
 const NO_PDF_MESSAGE = 'Requires an open PDF.'
 
 /**
@@ -43,7 +46,7 @@ class OcrCorrectionPlugin extends Plugin {
 
   async start() {
     const item = /** @type {SlMenuItem} */ (document.createElement('sl-menu-item'))
-    item.textContent = 'Correct OCR errors in PDF (LLM)'
+    item.textContent = 'Correct OCR errors in PDF without review (LLM)'
     item.addEventListener('click', () => {
       this.run().catch(error => this.#fail(error))
     })
@@ -61,7 +64,7 @@ class OcrCorrectionPlugin extends Plugin {
     if (!this.#menuItem) return
     const enabled = Boolean(this.state?.pdf)
     this.#menuItem.disabled = !enabled
-    this.#menuItem.title = enabled ? '' : NO_PDF_MESSAGE
+    this.#menuItem.title = enabled ? TOOLTIP : `${TOOLTIP} ${NO_PDF_MESSAGE}`
   }
 
   /**
