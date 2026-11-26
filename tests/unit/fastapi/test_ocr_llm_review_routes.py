@@ -116,10 +116,15 @@ class TestOcrLlmReviewRoutes(unittest.TestCase):
         response = self.review()
         self.assertEqual(response.status_code, 200, response.text)
         result = response.json()
-        self.assertEqual(result["findings"], [{"id": 0, "old": "Regel’).", "new": "Regel12).", "rationale": "OCR"}])
+        self.assertEqual(result["findings"], [{"id": 0, "old": "Regel’).", "new": "Regel12).", "rationale": "“Regel’).” → “Regel12).”: OCR"}])
         self.assertEqual((result["window_count"], result["discarded"]), (1, 0))
         self.assertEqual(result["window_start"], XML.index("Die Gesellschaft"))
         self.assertEqual(result["window_end"], XML.index("</body>"))
+
+    def test_scope_occurring_more_than_once_is_422(self):
+        response = self.plan(scope="<lb/>")
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("occurs more than once", response.json()["detail"])
 
     def test_window_index_out_of_range_is_422(self):
         self.assertEqual(self.review(window_index=1).status_code, 422)

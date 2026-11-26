@@ -212,8 +212,7 @@ class OcrReviewPlugin extends Plugin {
     let cancelled = false
     let windowsDone = 0
     let total = 0
-    /** @type {Finding[]} */
-    const findings = []
+    let count = 0
     this.#busy = true
     progress.show(progressId, { label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
     try {
@@ -227,34 +226,39 @@ class OcrReviewPlugin extends Plugin {
         if (cancelled || documentChanged()) break
         progress.setValue(progressId, Math.round((index / total) * 100))
         progress.setLabel(progressId, `${heading} (page window ${index + 1} of ${total})`)
+        /** @type {Finding[]} */
+        let found
         try {
           const response = await this.#client.apiClient.ocrLlmReview({
             stable_id: stableId, xml, ...scoped, provider_id: model.providerId, model_id: model.modelId, window_index: index
           })
           total = response.window_count ?? total
-          for (const finding of response.findings) findings.push({ ...finding, id: findings.length })
+          found = response.findings
         } catch (error) {
           if (!documentChanged()) {
             const reason = /** @type {Error} */ (error)?.message ?? String(error)
-            notify(`Finding OCR errors failed in page window ${index + 1} of ${total}: ${reason}. ${findings.length} possible error(s) found before.`, 'danger', 'exclamation-octagon', 10000)
-            testLog('OCR_REVIEW_FAILED', { window: index + 1, message: reason, findings: findings.length })
+            notify(`Finding OCR errors failed in page window ${index + 1} of ${total}: ${reason}. ${count} possible error(s) found before.`, 'danger', 'exclamation-octagon', 10000)
+            testLog('OCR_REVIEW_FAILED', { window: index + 1, message: reason, findings: count })
           }
           return
         }
         windowsDone = index + 1
         // findings of another document must not attach to the one now open
         if (documentChanged()) return
-        this.#display.show([...findings], this.#display.findings.length === 0)
+        // the findings of the previous review are replaced by those of this one
+        if (index === 0) this.#display.clear()
+        // appended, so that findings dismissed or applied meanwhile do not come back; the drawer
+        // opens for the first findings only
+        if (found.length) count += this.#display.append(found, count === 0)
       }
       if (documentChanged()) return
-      const count = findings.length
       if (cancelled) {
         notify(`Review cancelled after ${windowsDone} of ${total} page windows; ${count} possible OCR error(s) so far.`, 'warning', 'exclamation-triangle')
         return
       }
       notify(
         count
-          ? `Found ${count} possible OCR errors. Accept the ones you agree with, then use Tools > Write text corrections to PDF.`
+          ? `Found ${count} possible OCR error${count === 1 ? '' : 's'}. Accept the ones you agree with, then use Tools > Write text corrections to PDF.`
           : 'No OCR errors found.',
         count ? 'primary' : 'success',
         count ? 'info-circle' : 'check-circle'

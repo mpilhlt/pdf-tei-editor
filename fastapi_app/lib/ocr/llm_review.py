@@ -125,7 +125,7 @@ def prepare_source(xml: str, doc_id: str, variant_id: str, scope: str | None = N
     Raises:
         MissingLayoutError: the document has no line layout.
         ValueError: the variant is not a zone document, the document cannot be read as zones, or
-            the scope is not part of its `<text>`.
+            the scope is not part of its `<text>` or occurs more than once in the document.
     """
     labels = get_zone_labels(variant_id)
     if labels is None:
@@ -137,6 +137,8 @@ def prepare_source(xml: str, doc_id: str, variant_id: str, scope: str | None = N
     pages = pages_of(doc, layout.pages)
     if scope is not None:
         start = xml.find(scope)
+        if start >= 0 and xml.find(scope, start + 1) >= 0:
+            raise ValueError("The node to review occurs more than once in the document; review the whole document instead.")
         if start < doc.start or start + len(scope) > doc.end:
             raise ValueError("The node to review is not part of the document's <text>")
         end = start + len(scope)
@@ -269,8 +271,8 @@ def parse_corrections(
     """
     The plausible corrections of an answer and a description of each dropped one: unreadable
     entries, lines outside the window, `old` not occurring exactly once in the line, a different
-    number of words, and letters that differ too much. Corrections that change nothing are
-    ignored without a description.
+    number of words, and letters that differ too much. Corrections that change nothing (or only
+    whitespace) are ignored without a description.
 
     Raises:
         UnusableResponseError: the response contains no JSON list.
@@ -290,7 +292,7 @@ def parse_corrections(
             dropped.append(f"unreadable: {item!r}"[:200])
             continue
         old, new = old.strip(), new.strip()
-        if old == new:
+        if old.split() == new.split():
             continue
         label = f'line {line_id(index, width) if index >= 0 else item.get("line")}: "{old}" -> "{new}"'
         reason: str | None = None
@@ -372,8 +374,9 @@ def findings_from_corrections(source: OcrReviewSource, corrections: Sequence[Lin
     """
     The findings of the corrections: `old` is the raw XML of the corrected words, widened by whole
     atoms on both sides until it is unique in the document, `new` the same span with the corrected
-    words XML-escaped. Corrections spanning markup, overlapping an earlier correction or not unique
-    within the document's text are dropped (and logged).
+    words XML-escaped. The rationale starts with the plain correction (`“old” → “new”: `).
+    Corrections spanning markup, overlapping an earlier correction, not unique within the
+    document's text or not changing the XML are dropped (and logged).
     """
     doc, xml = source.doc, source.xml
     findings: list[Finding] = []
@@ -397,9 +400,13 @@ def findings_from_corrections(source: OcrReviewSource, corrections: Sequence[Lin
         if not _occurs_once(xml, old):
             logger.info(f"{LOG_PREFIX}: dropped correction of line {correction.line + 1} {correction.old!r}: not unique in the document")
             continue
-        taken.append((mapped.first_atom, mapped.last_atom))
         new = xml[start:core_start] + mapped.new_core + xml[core_end:end]
-        rationale = correction.rationale + (FIRST_WORD_NOTE if mapped.first_word else "")
+        if new == old:
+            logger.info(f"{LOG_PREFIX}: dropped correction of line {correction.line + 1} {correction.old!r}: changes nothing")
+            continue
+        taken.append((mapped.first_atom, mapped.last_atom))
+        change = f"“{correction.old}” → “{correction.new}”"
+        rationale = (f"{change}: {correction.rationale}" if correction.rationale else change) + (FIRST_WORD_NOTE if mapped.first_word else "")
         findings.append({"id": len(findings), "old": old, "new": new, "rationale": rationale})
     return findings
 

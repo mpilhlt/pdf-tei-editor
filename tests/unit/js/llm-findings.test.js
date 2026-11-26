@@ -183,6 +183,61 @@ describe('FindingsDisplay', () => {
     assert.deepStrictEqual(lintCalls.at(-1).options, { openPanel: false });
   });
 
+  it('does not re-render when every finding still matches', async () => {
+    const { display, lintCalls, updateListeners } = build({ docText: 'x AAA y' });
+    display.attach();
+    display._pruneDelayMs = 1;
+    display._findings = [finding];
+    updateListeners[0]({ transactions: [], docChanged: true });
+    await new Promise(r => setTimeout(r, 20));
+    assert.strictEqual(lintCalls.length, 0);
+  });
+
+  it('debounces bursts of edits into one check', async () => {
+    const { display, lintCalls, updateListeners } = build({ docText: 'x y' });
+    display.attach();
+    display._pruneDelayMs = 10;
+    display._findings = [finding];
+    for (let i = 0; i < 5; i++) updateListeners[0]({ transactions: [], docChanged: true });
+    await new Promise(r => setTimeout(r, 40));
+    assert.strictEqual(lintCalls.length, 1);
+  });
+
+  it('append adds findings with ids after the current ones and skips duplicates of old', () => {
+    const { display, lintCalls } = build({ docText: 'x AAA BBB CCC y' });
+    display.show([{ id: 0, old: 'AAA', new: 'a', rationale: 'first' }]);
+    const added = display.append([
+      { id: 0, old: 'BBB', new: 'b', rationale: 'second' },
+      { id: 1, old: 'AAA', new: 'x', rationale: 'duplicate' },
+      { id: 2, old: 'CCC', new: 'c', rationale: 'third' },
+      { id: 3, old: 'CCC', new: 'y', rationale: 'duplicate in batch' },
+    ], false);
+    assert.strictEqual(added, 2);
+    assert.deepStrictEqual(display.findings.map(f => [f.id, f.old]), [[0, 'AAA'], [1, 'BBB'], [2, 'CCC']]);
+    assert.deepStrictEqual(lintCalls.at(-1).own.map(d => d.message), ['first', 'second', 'third']);
+    assert.deepStrictEqual(lintCalls.at(-1).options, { openPanel: false });
+  });
+
+  it('append renders nothing when no finding is added', () => {
+    const { display, lintCalls } = build({ docText: 'x AAA y' });
+    display.show([finding]);
+    assert.strictEqual(display.append([{ ...finding }]), 0);
+    assert.strictEqual(display.append([]), 0);
+    assert.strictEqual(lintCalls.length, 1);
+  });
+
+  it('findings dismissed during a run stay dismissed after a later append', () => {
+    const { display, dismissListeners, lintCalls, store } = build({ docText: 'x AAA BBB y' });
+    display.attach();
+    display.restore('doc1');
+    display.append([{ id: 0, old: 'AAA', new: 'a', rationale: 'dismissed' }]);
+    dismissListeners[0]([{ from: 2, to: 5, severity: 'info', message: 'dismissed', source: 'test-source' }]);
+    display.append([{ id: 0, old: 'BBB', new: 'b', rationale: 'later' }], false);
+    assert.deepStrictEqual(display.findings.map(f => f.old), ['BBB']);
+    assert.deepStrictEqual(lintCalls.at(-1).own.map(d => d.message), ['later']);
+    assert.deepStrictEqual(store.get('doc1').review.findings.map(f => f.old), ['BBB']);
+  });
+
   it('restore drops cached findings that no longer occur exactly once', () => {
     const store = new Map();
     const before = build({ docText: 'x AAA BBB y', store });

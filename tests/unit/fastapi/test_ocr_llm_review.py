@@ -129,6 +129,10 @@ class TestPrepareAndPrompts(OcrReviewTestCase):
         with self.assertRaises(ValueError):
             prepare_source(XML, "doc1", VARIANT, scope="<teiHeader>")
 
+    def test_scope_occurring_more_than_once_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "occurs more than once"):
+            prepare_source(XML, "doc1", VARIANT, scope="<lb/>")
+
 
 class TestParse(OcrReviewTestCase):
     def test_parse_keeps_marker_fix(self):
@@ -173,6 +177,10 @@ class TestParse(OcrReviewTestCase):
         kept, dropped = self.parse(answer(("0007", "Berlin.", "Berlin.")))
         self.assertEqual((kept, dropped), ([], []))
 
+    def test_parse_ignores_whitespace_only_change(self):
+        kept, dropped = self.parse(answer(("0002", "Die Gesellschaft", "Die  Gesellschaft")))
+        self.assertEqual((kept, dropped), ([], []))
+
 
 class TestFindings(OcrReviewTestCase):
     def test_findings_map_to_unique_xml_span(self):
@@ -207,8 +215,32 @@ class TestFindings(OcrReviewTestCase):
             self.source, [LineCorrection(6, "?!?)", "14)", "marker"), LineCorrection(1, "Regel’).", "Regel12).", "marker")]
         )
         by_new = {f["new"]: f["rationale"] for f in findings}
-        self.assertEqual(by_new["14)"], "marker" + FIRST_WORD_NOTE)
-        self.assertEqual(by_new["Regel12)."], "marker")
+        self.assertEqual(by_new["14)"], "“?!?)” → “14)”: marker" + FIRST_WORD_NOTE)
+        self.assertEqual(by_new["Regel12)."], "“Regel’).” → “Regel12).”: marker")
+
+    def test_rationale_shows_plain_correction(self):
+        findings = findings_from_corrections(self.source, [LineCorrection(6, "Dnncker&Humblot,", "Duncker&Humblot,", "")])
+        self.assertEqual(findings[0]["rationale"], "“Dnncker&Humblot,” → “Duncker&Humblot,”")
+
+    def test_correction_changing_nothing_is_dropped(self):
+        with self.assertLogs("fastapi_app.lib.ocr.llm_review", level="INFO") as logs:
+            findings = findings_from_corrections(self.source, [LineCorrection(1, "Die Gesellschaft", "Die  Gesellschaft", "spacing")])
+        self.assertEqual(findings, [])
+        self.assertIn("changes nothing", logs.output[0])
+
+    def test_widened_finding_keeps_lb(self):
+        # "wie" also occurs in "zwie", so the finding is widened by the <lb/> before the line
+        findings = findings_from_corrections(self.source, [LineCorrection(2, "wie", "Wie", "case")])
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(findings[0]["old"].startswith("<lb/>"), findings[0]["old"])
+        self.assertTrue(findings[0]["new"].startswith("<lb/>"), findings[0]["new"])
+        xml = XML.replace(findings[0]["old"], findings[0]["new"])
+        self.assertIn("ausdrücklich vorsieht.<lb/>", xml)
+        self.assertIn("Regel’). Weitere Ausführungen folgen.<lb/>Wie es das Gesetz", xml)
+        self.assertEqual(xml.count("<lb/>"), XML.count("<lb/>"))
+        expected = line_texts(XML)
+        expected[2] = expected[2].replace("wie", "Wie", 1)
+        self.assertEqual(line_texts(xml), expected)
 
 
 class TestReviewWindow(OcrReviewTestCase):

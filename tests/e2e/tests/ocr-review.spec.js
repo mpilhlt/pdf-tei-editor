@@ -163,7 +163,7 @@ test.describe('OCR review', () => {
       const done = await waitForTestMessage(consoleLogs, 'OCR_REVIEW_DONE', 20000);
       expect(done.value.findings).toBe(1);
       expect(done.value.windows).toBe(2);
-      await expect(page.locator('sl-alert:has-text("Found 1 possible OCR errors")')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('sl-alert:has-text("Found 1 possible OCR error.")')).toBeVisible({ timeout: 10000 });
       await expect(page.locator('.cm-lintRange-info')).toHaveCount(1);
     } finally {
       stopErrorMonitoring();

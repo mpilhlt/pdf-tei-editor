@@ -199,6 +199,8 @@ export class FindingsDisplay {
   /**
    * Register the editor update listener (re-merge after other sources replace the diagnostics,
    * prune after edits), the `editorAfterLoad` restore and the dismiss listener.
+   * Does not restore the cached findings itself: callers must call {@link FindingsDisplay#restore}
+   * with the id of the open document afterwards.
    * @returns {void}
    */
   attach() {
@@ -284,6 +286,31 @@ export class FindingsDisplay {
   show(findings, openPanel = true) {
     this._setFindings(findings);
     this._renderFindings(openPanel);
+  }
+
+  /**
+   * Add findings to the current ones (e.g. those of the next part of a running review) and display
+   * them, keeping the findings the user has dismissed or applied in the meantime removed. The ids
+   * of the added findings are renumbered after the current ones; findings whose `old` equals that
+   * of a current (or earlier added) finding are skipped.
+   * @param {Finding[]} findings
+   * @param {boolean} [openPanel] Expand the diagnostics drawer
+   * @returns {number} The number of findings added
+   */
+  append(findings, openPanel = true) {
+    const olds = new Set(this._findings.map(f => f.old));
+    let nextId = this._findings.reduce((max, f) => Math.max(max, f.id), -1) + 1;
+    /** @type {Finding[]} */
+    const added = [];
+    for (const finding of findings) {
+      if (olds.has(finding.old)) continue;
+      olds.add(finding.old);
+      added.push({ ...finding, id: nextId++ });
+    }
+    if (!added.length) return 0;
+    this._setFindings([...this._findings, ...added]);
+    this._renderFindings(openPanel);
+    return added.length;
   }
 
   /**

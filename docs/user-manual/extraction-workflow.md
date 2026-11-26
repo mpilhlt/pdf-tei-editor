@@ -64,9 +64,9 @@ Text recognition replaces the stored PDF with the result. The PDF keeps its iden
 
 #### Finding OCR errors with a language model
 
-Text recognition leaves errors that the footnote correction does not cover: misread letters, wrong characters, garbled footnote numbers. For a segmentation document with line coordinates (such as `grobid.training.segmentation`), a language model can look for them. Choose "Tools > OCR > Find OCR errors (LLM)", then the provider and model. The document is reviewed page by page, with some lines of the neighbouring pages as context. Alternatively, focus a node in the XML editor and click "LLM OCR review" to review only the pages of that node.
+Text recognition leaves errors that the footnote correction does not cover: misread letters, wrong characters, garbled footnote numbers. For a segmentation document with line coordinates (such as `grobid.training.segmentation`), a language model can look for them. Choose "Tools > OCR > Find OCR errors (LLM)" and confirm. The review uses the default model, which you set under Tools > Inference > Default Model (see [Choosing a language model](language-models.md)); the confirmation names it. The document is reviewed page by page, with some lines of the neighbouring pages as context. Alternatively, focus a node in the XML editor and click "LLM OCR review" to review only the pages of that node.
 
-The model suggests corrections for lines. They are shown as diagnostics in the XML editor and in the diagnostics panel, with the old and the new text and a rationale. Use "Propose fix" or "Apply" to take over a suggestion. A suggestion is dropped if
+The model suggests corrections for lines. They are shown as diagnostics in the XML editor and in the diagnostics panel. Each diagnostic shows the correction as plain text, such as “Regel’).” → “Regel12).”, followed by the model's rationale; a note is added if the correction changes the first word of a line. Use "Propose fix" or "Apply" to take over a suggestion. A suggestion is dropped if
 
 - its text cannot be found exactly once in the document,
 - it would change markup (text that spans a tag, comment or line break), or
