@@ -65,13 +65,14 @@ from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMIL
 from ..lib.ocr.progress import OcrCancelled, ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
-from ..lib.ocr.text_layer import WordPatch, patch_text_layer, read_text_layer
+from ..lib.ocr.text_layer import PageCallback, WordPatch, patch_text_layer, read_text_layer
 from ..lib.ocr.text_quality import analyze_text_layer
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
 from ..lib.secrets import MissingSecretError, secret_required_detail
 from ..lib.services.tei_versions import create_tei_version, version_collections
 from ..lib.sse.sse_service import SSEService
+from ..lib.sse.sse_utils import ProgressBar
 from ..lib.storage.file_storage import FileStorage
 from ..lib.tei.zone_lines import window_range
 from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
@@ -91,6 +92,9 @@ TEXT_CORRECTIONS_METADATA_KEY = "text_corrections"
 """Key in the PDF's file_metadata under which the text corrections written into it are recorded."""
 
 PROGRESS_WRITE_INTERVAL_SECONDS = 1.0
+
+PAGE_PROGRESS_INTERVAL_SECONDS = 0.2
+"""Least time between two page reports of the text corrections to the client."""
 """Least time between two progress updates of a job within the same phase."""
 
 _running_jobs: set["asyncio.Task[None]"] = set()
@@ -803,15 +807,46 @@ def _get_tei(repo: FileRepository, stable_id: str, user: dict[str, Any]) -> File
     return file
 
 
-def _derive_plan(xml: str, variant_id: str, layout: LineLayout, pdf_path: Path) -> CorrectionPlan:
+class _CorrectionProgress:
+    """
+    Shows the steps of previewing or writing text corrections in a progress widget of the client
+    (via SSE), if the request names one. The client shows and hides the widget.
+    """
+
+    def __init__(self, sse_service: SSEService, session_id: str, progress_id: str | None) -> None:
+        self._bar = ProgressBar(sse_service, session_id, progress_id) if progress_id else None
+        self._last_page_report = 0.0
+
+    def step(self, label: str) -> None:
+        """Show a step whose duration is unknown."""
+        if self._bar is None:
+            return
+        self._bar.set_label(label)
+        self._bar.set_value(None)
+
+    def pages(self, label: str) -> PageCallback:
+        """Return a callback that shows the pages done of a step (called from a worker thread)."""
+        def report(done: int, total: int) -> None:
+            if self._bar is None:
+                return
+            now = time.monotonic()
+            if done < total and now - self._last_page_report < PAGE_PROGRESS_INTERVAL_SECONDS:
+                return
+            self._last_page_report = now
+            self._bar.set_label(f"{label}: page {done} of {total}")
+            self._bar.set_value(round(done / total * 100) if total else None)
+        return report
+
+
+def _derive_plan(xml: str, variant_id: str, layout: LineLayout, pdf_path: Path, progress: _CorrectionProgress) -> CorrectionPlan:
     """Compare the TEI's words with the PDF's text layer (blocking)."""
     words = tei_words(xml, variant_id, layout)
     with pikepdf.open(pdf_path) as pdf:
-        layer = read_text_layer(pdf)
-    return derive_corrections(words, layer)
+        layer = read_text_layer(pdf, progress.pages("Reading the text layer of the PDF"))
+    return derive_corrections(words, layer, progress.pages("Comparing the document with the text layer"))
 
 
-async def _correction_context(stable_id: str, repo: FileRepository, storage: FileStorage, jobs: OcrJobStore, user: dict[str, Any], session_id: str) -> _CorrectionContext:
+async def _correction_context(stable_id: str, repo: FileRepository, storage: FileStorage, jobs: OcrJobStore, user: dict[str, Any], session_id: str, progress: _CorrectionProgress) -> _CorrectionContext:
     """
     Check the preconditions of writing a TEI's text corrections into its PDF and derive them.
 
@@ -830,6 +865,7 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
     if content is None:
         raise HTTPException(status_code=404, detail=f"TEI content not found: {stable_id}")
     xml = content.decode("utf-8")
+    progress.step("Reading the lines of the document")
     layout = await asyncio.to_thread(get_line_layout, xml, tei.doc_id, tei.variant)
     if layout is None:
         raise HTTPException(status_code=409, detail=MISSING_LAYOUT_MESSAGE)
@@ -844,7 +880,7 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
         raise HTTPException(status_code=409, detail=OCR_RUNNING_MESSAGE)
     pdf_path = _pdf_path(storage, pdf)
     try:
-        plan = await asyncio.to_thread(_derive_plan, xml, tei.variant, layout, pdf_path)
+        plan = await asyncio.to_thread(_derive_plan, xml, tei.variant, layout, pdf_path, progress)
     except ValueError as e:
         # the variant has no zone labels
         logger.debug(f"Cannot derive text corrections for {stable_id}: {e}")
@@ -908,6 +944,7 @@ async def preview_text_corrections(
     jobs: OcrJobStore = Depends(get_ocr_job_store),
     current_user: dict[str, Any] = Depends(require_reviewer_or_admin),
     session_id: str = Depends(require_session_id),
+    sse_service: SSEService = Depends(get_sse_service),
 ) -> TextCorrectionsPreview:
     """
     Show what writing the text corrections of a TEI document into the OCR text layer of its PDF
@@ -918,9 +955,12 @@ async def preview_text_corrections(
     there are no corrections: then `unwritable` and `affected_files` are filled, since the
     unwritable differences explain why. This includes a lock of the TEI held by another session.
     A missing TEI file or missing access is reported with 404/403 as usual.
+
+    If `progress_id` is given, the steps are shown in that progress widget of the client.
     """
+    progress = _CorrectionProgress(sse_service, session_id, request.progress_id)
     try:
-        context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id)
+        context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress)
     except HTTPException as e:
         if e.status_code not in (409, 423):
             raise
@@ -962,9 +1002,12 @@ async def apply_text_corrections(
     holds the lock of the TEI. If the plugin finds that the corrected PDF does not match the
     document, the response is 422 with `message` and the unmatched `lines`; if its service is
     unreachable or the plugin fails, 502. Nothing is replaced in these cases.
+
+    If `progress_id` is given, the steps are shown in that progress widget of the client.
     """
     settings = get_settings()
-    context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id)
+    progress = _CorrectionProgress(sse_service, session_id, request.progress_id)
+    context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress)
     plan, pdf, tei = context.plan, context.pdf, context.tei
     if not plan.corrections:
         raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
@@ -975,6 +1018,7 @@ async def apply_text_corrections(
 
     with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
         output_path = Path(tmp) / "corrected.pdf"
+        progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
         try:
             await asyncio.to_thread(_patch_pdf, context.pdf_path, output_path, plan.corrections)
         except (ValueError, pikepdf.PdfError) as e:
@@ -986,6 +1030,7 @@ async def apply_text_corrections(
         raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
 
     corrected_lines = frozenset(c.line for c in plan.corrections)
+    progress.step("Updating the document for the corrected PDF. This can take a minute.")
     try:
         xml = await asyncio.to_thread(context.handler, context.xml, tei.doc_id, new_path, new_hash, corrected_lines)
     except CorrectedPdfMismatch as e:
@@ -1021,6 +1066,7 @@ async def apply_text_corrections(
         logger.warning(f"Cannot replace {pdf.stable_id} with the corrected PDF: {e}")
         raise HTTPException(status_code=409, detail=PDF_CHANGED_MESSAGE)
     archived_stable_id = archived.stable_id if archived else None
+    progress.step("Saving the new version of the document")
 
     # The new version is based on the corrected PDF (pdf_stable_id None). It is created before the
     # response is sent, so that a lost response leaves a consistent state

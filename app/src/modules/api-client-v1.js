@@ -540,6 +540,7 @@
  * @typedef {Object} TextCorrectionsRequest
  * @property {string} stable_id - stable_id of the TEI document
  * @property {boolean=} skip_unwritable - Write the corrections even though some differences cannot be written (they are skipped)
+ * @property {string|null=} progress_id - Id of a progress widget of the client that shows the steps of the request (via SSE)
  */
 
 /**

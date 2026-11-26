@@ -88,6 +88,7 @@ class TextCorrectionsRequest(BaseModel):
 
     stable_id: str = Field(..., min_length=1, description="stable_id of the TEI document")
     skip_unwritable: bool = Field(False, description="Write the corrections even though some differences cannot be written (they are skipped)")
+    progress_id: str | None = Field(None, description="Id of a progress widget of the client that shows the steps of the request (via SSE)")
 
 
 class TextCorrectionItem(BaseModel):
