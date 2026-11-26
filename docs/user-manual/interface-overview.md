@@ -24,7 +24,7 @@ The header bar of the PDF viewer provides the following information:
 
 Both values can be copied by single-click, in addition, administrators can change title and id by double-clicking.
 
-In the status bar of the PDF viewer, you can toggle the "Sync with editor" feature, which tries to automatically navigate to the position within the PDF that corresponds to the cursor position in the XML Editor. In documents with page markers (`<pb/>`), it also works the other way round: when you page through the PDF, the XML Editor scrolls to the page marker of that page, without moving the cursor. It works well on most documents; results can be less reliable when the PDF's underlying text extraction is poor (e.g. scanned pages or unusual layouts).
+In the status bar of the PDF viewer, you can toggle the "Sync with editor" feature, which tries to automatically navigate to the position within the PDF that corresponds to the cursor position in the XML Editor. In documents with page markers (`<pb/>`), it also works the other way round: when you page through the PDF, the XML Editor scrolls to the page marker of that page, without moving the cursor. Page markers also make the lookup itself more reliable: text is first searched only on the page that the preceding page marker points to, so that short or repeated text such as running heads, footers and page numbers is found on the right page. It works well on most documents; results can be less reliable when the PDF's underlying text extraction is poor (e.g. scanned pages or unusual layouts).
 
 ### Right Panel: XML Editor  
 

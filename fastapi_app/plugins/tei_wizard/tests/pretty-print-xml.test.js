@@ -154,6 +154,44 @@ describe('pretty-print-xml enhancement', () => {
     });
   });
 
+  describe('inline elements between block elements', () => {
+    it('puts a pb between block elements on its own line', () => {
+      const input = `<TEI xmlns="${TEI_NS}"><text><body><div><p>One</p></div><pb n="2"/><div><p>Two</p></div></body></text></TEI>`;
+      const out = prettyPrint(input);
+      assert.ok(out.includes('</div>\n      <pb n="2"/>\n      <div>'), out);
+    });
+
+    it('puts a trailing pb on its own line before the closing tag', () => {
+      const input = `<TEI xmlns="${TEI_NS}"><text><body><div><p>One</p></div><pb n="2"/></body></text></TEI>`;
+      const out = prettyPrint(input);
+      assert.ok(out.includes('</div>\n      <pb n="2"/>\n    </body>'), out);
+    });
+
+    it('puts a leading pb on its own line', () => {
+      const input = `<TEI xmlns="${TEI_NS}"><text><body><pb n="1"/><div><p>One</p></div></body></text></TEI>`;
+      const out = prettyPrint(input);
+      assert.ok(out.includes('<body>\n      <pb n="1"/>\n      <div>'), out);
+    });
+
+    it('leaves a pb that follows text in place', () => {
+      const input = `<TEI xmlns="${TEI_NS}"><text><body><div><p>One</p></div>stray<pb n="2"/>text<div><p>Two</p></div></body></text></TEI>`;
+      const out = prettyPrint(input);
+      assert.ok(out.includes('stray<pb n="2"/>text'), out);
+    });
+
+    it('leaves a pb inside a paragraph in place', () => {
+      const input = `<TEI xmlns="${TEI_NS}"><text><body><p>One<pb n="2"/>two</p></body></text></TEI>`;
+      const out = prettyPrint(input);
+      assert.ok(out.includes('<p>One<pb n="2"/>two</p>'), out);
+    });
+
+    it('keeps consecutive inline elements together', () => {
+      const input = `<TEI xmlns="${TEI_NS}"><text><body><div><p>One</p></div><pb n="2"/><cb n="1"/><div><p>Two</p></div></body></text></TEI>`;
+      const out = prettyPrint(input);
+      assert.ok(out.includes('</div>\n      <pb n="2"/><cb n="1"/>\n      <div>'), out);
+    });
+  });
+
   describe('review units', () => {
     const unitXml = `<TEI xmlns="${TEI_NS}"><text><back><listBibl><bibl><author>A</author> <title>T</title>  <lb/>x</bibl><bibl><label>2</label> <author>B</author></bibl></listBibl></back></text></TEI>`;
 
