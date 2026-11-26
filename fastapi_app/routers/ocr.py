@@ -34,6 +34,7 @@ from ..lib.models.models_ocr import (
     AffectedFile,
     OcrEngineInfo,
     OcrJob,
+    OcrLlmCorrection,
     OcrOptionInfo,
     OcrProgress,
     OcrRequest,
@@ -50,12 +51,13 @@ from ..lib.models.models_ocr import (
     TextQualityReport,
     UnwritableItem,
 )
-from ..lib.llm import LLMProviderRegistry
+from ..lib.llm import LLMProvider, LLMProviderRegistry
 from ..lib.llm.http_errors import llm_http_error
 from ..lib.llm.model_access import check_model_access
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
 from ..lib.ocr.jobs import OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
+from ..lib.ocr import llm_correction
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
 from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window
 from ..lib.ocr.progress import ProgressCallback, progress_reporter
@@ -82,6 +84,9 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
 
 OCR_METADATA_KEY = "ocr"
 """Key in the PDF's file_metadata under which the last OCR run is recorded."""
+
+TEXT_CORRECTIONS_METADATA_KEY = "text_corrections"
+"""Key in the PDF's file_metadata under which the text corrections written into it are recorded."""
 
 PROGRESS_WRITE_INTERVAL_SECONDS = 1.0
 """Least time between two progress updates of a job within the same phase."""
@@ -216,6 +221,37 @@ def _analyze(path: Path, layout: bool) -> TextQualityReport:
     return apply_layout_check(report, result)
 
 
+def _llm_provider(provider_id: str, user: dict[str, Any]) -> LLMProvider:
+    """
+    The LLM provider for the user.
+
+    Raises:
+        HTTPException: 404 for an unknown provider, 428 if the provider needs a secret of the user
+    """
+    try:
+        return LLMProviderRegistry.get_instance().get_provider_for_user(provider_id, user["username"])
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+
+
+def _check_llm_model(provider: LLMProvider, provider_id: str, model_id: str, user: dict[str, Any]) -> None:
+    """
+    Check that the user may use the model (may list the provider's models).
+
+    Raises:
+        HTTPException: 403 if the user may not use the model, 5xx if the provider fails
+    """
+    try:
+        check_model_access(provider, model_id, user)
+    except Exception as e:
+        http_error = llm_http_error(e, provider_id)
+        if http_error is None:
+            raise
+        raise http_error from e
+
+
 @router.get("/engines", response_model=list[OcrEngineInfo])
 def list_ocr_engines(
     current_user: dict[str, Any] = Depends(require_authenticated_user),
@@ -271,6 +307,12 @@ async def apply_ocr(
 
     The stable_id of the PDF stays the same; its content hash changes. The OCR run, including the
     method the engine used, is recorded in the PDF's file metadata under "ocr".
+
+    With `llm_correction`, an LLM corrects OCR errors of the new text layer before the PDF is
+    stored; the corrections are recorded under "text_corrections". The provider and the model are
+    checked before the run: 404 for an unknown provider, 428 if the provider needs a secret of the
+    user, 403 if the user may not use the model. A failure of the correction pass keeps the OCR
+    result and is reported in `llm_correction_error`.
     """
     file = _get_pdf(repo, request.stable_id, current_user, "edit")
     try:
@@ -282,12 +324,17 @@ async def apply_ocr(
     languages = _validate_languages(engine, request.languages)
     options = _validate_options(engine, request.options)
     _pdf_path(storage, file)
+    llm: _LlmCorrection | None = None
+    if request.llm_correction and request.provider_id and request.model_id:
+        provider = _llm_provider(request.provider_id, current_user)
+        _check_llm_model(provider, request.provider_id, request.model_id, current_user)
+        llm = _LlmCorrection(provider, request.provider_id, request.model_id)
 
     try:
         job = jobs.create(file.stable_id, str(current_user.get("username") or ""))
     except OcrJobConflict as e:
         raise HTTPException(status_code=409, detail=f"{e}. Please wait until it is finished.")
-    task = asyncio.create_task(_run_job(job, jobs, engine, languages, options, request.rebuild, repo, storage, current_user))
+    task = asyncio.create_task(_run_job(job, jobs, engine, languages, options, request.rebuild, repo, storage, current_user, llm))
     _running_jobs.add(task)
     task.add_done_callback(_running_jobs.discard)
     return job
@@ -311,6 +358,34 @@ def get_ocr_job(
     return job
 
 
+@dataclass
+class _LlmCorrection:
+    """The checked provider and model of the LLM correction pass of an OCR run."""
+
+    provider: LLMProvider
+    provider_id: str
+    model_id: str
+
+
+async def _correct_with_llm(output_path: Path, llm: _LlmCorrection, languages: list[str]) -> llm_correction.CorrectionRun:
+    """Run the LLM correction pass on the OCR output in place; never raises, so that OCR cannot fail because of it."""
+    min_similarity = float(get_config().get(llm_correction.MIN_LETTER_SIMILARITY_KEY, llm_correction.DEFAULT_MIN_LETTER_SIMILARITY))
+    try:
+        return await llm_correction.correct_text_layer(output_path, llm.provider, llm.model_id, languages, min_similarity)
+    except Exception as e:  # noqa: BLE001 - the OCR result is kept
+        logger.exception(f"LLM correction with {llm.provider_id}/{llm.model_id} failed")
+        return llm_correction.CorrectionRun(corrections=[], pages_reviewed=[], skipped=0, error=str(e))
+
+
+def _llm_correction_message(run: llm_correction.CorrectionRun, model_id: str) -> str:
+    """The sentence about the LLM correction pass appended to the message of the OCR run."""
+    count = len(run.corrections)
+    corrected = f"Corrected {count} OCR {'error' if count == 1 else 'errors'} with {model_id}."
+    if run.error:
+        return (corrected + " " if count else "") + f"The LLM correction failed: {run.error}"
+    return corrected if count else "No pages needed correction."
+
+
 async def _run_job(
     job: OcrJob,
     jobs: OcrJobStore,
@@ -321,11 +396,12 @@ async def _run_job(
     repo: FileRepository,
     storage: FileStorage,
     user: dict[str, Any],
+    llm: _LlmCorrection | None = None,
 ) -> None:
     """Wait until no other OCR run happens on the server, run OCR and record the outcome in the job."""
     try:
         async with jobs.run_slot(job) as job:
-            result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user, _progress_writer(jobs, job))
+            result = await _recognize(job.stable_id, engine, languages, options, rebuild, repo, storage, user, _progress_writer(jobs, job), llm)
     except HTTPException as e:
         jobs.fail(job, str(e.detail), e.status_code)
     except asyncio.CancelledError:
@@ -370,11 +446,13 @@ async def _recognize(
     storage: FileStorage,
     user: dict[str, Any],
     on_progress: ProgressCallback | None = None,
+    llm: _LlmCorrection | None = None,
 ) -> OcrResponse:
     """
     Apply OCR to a PDF and replace the stored PDF with the result. The caller holds the run slot.
 
     Progress reported by the engine (see `fastapi_app.lib.ocr.progress`) is passed to on_progress.
+    With `llm`, the LLM correction pass corrects the new text layer in place before it is stored.
 
     Raises:
         HTTPException: if the PDF is gone, the options are invalid or the engine fails
@@ -394,16 +472,19 @@ async def _recognize(
             raise HTTPException(status_code=500, detail=f"Text recognition failed: {e}")
         if not output_path.exists():
             raise HTTPException(status_code=500, detail="Text recognition produced no output")
+        run = await _correct_with_llm(output_path, llm, languages) if llm is not None else None
         content = output_path.read_bytes()
         progress.report("Checking the new text layer")
         quality = await asyncio.to_thread(analyze_text_layer, output_path)
 
     result = outcome if isinstance(outcome, OcrResult) else OcrResult(message=outcome)
+    applied_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    applied_by = str(user.get("username") or "")
     record: dict[str, str | list[str]] = {
         "engine": engine.id,
         "languages": languages,
-        "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "applied_by": str(user.get("username") or ""),
+        "applied_at": applied_at,
+        "applied_by": applied_by,
     }
     if result.method:
         record["method"] = result.method
@@ -412,6 +493,21 @@ async def _recognize(
     new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
     changed = new_hash != file.id
     file_metadata = {**file.file_metadata, OCR_METADATA_KEY: record}
+    message = result.message
+    if llm is not None and run is not None:
+        if run.corrections:
+            correction_record: dict[str, str | list[dict[str, str | int]]] = {
+                "applied_at": applied_at,
+                "applied_by": applied_by,
+                "source": "llm-after-ocr",
+                "provider_id": llm.provider_id,
+                "model_id": llm.model_id,
+                "corrections": [{"page": c.page, "old": c.old, "new": c.new} for c in run.corrections],
+            }
+            previous = file.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
+            file_metadata[TEXT_CORRECTIONS_METADATA_KEY] = [*previous, correction_record]
+        note = _llm_correction_message(run, llm.model_id)
+        message = f"{message} {note}" if message else note
     archived_stable_id: str | None = None
     if changed:
         # Moves the storage reference to the new content; the old content is kept as an archived
@@ -426,17 +522,16 @@ async def _recognize(
         stable_id=file.stable_id,
         changed=changed,
         archived_stable_id=archived_stable_id,
-        message=result.message,
+        message=message,
         method=result.method,
         fallback_reason=result.fallback_reason,
         quality=quality,
+        llm_corrections=[OcrLlmCorrection(page=c.page, old=c.old, new=c.new, rationale=c.rationale) for c in run.corrections] if run else [],
+        llm_correction_error=run.error if run else None,
     )
 
 
 # --- Text corrections (#931) ------------------------------------------------------------------
-
-TEXT_CORRECTIONS_METADATA_KEY = "text_corrections"
-"""Key in the PDF's file_metadata under which the text corrections written into it are recorded."""
 
 ARCHIVED_VERSION_MESSAGE = "This version was made from an earlier PDF of the document. Open a version based on the current PDF."
 UNSUPPORTED_DOCUMENT_MESSAGE = "Text corrections cannot be written for this kind of document."
@@ -773,12 +868,7 @@ async def ocr_llm_review(
     secret of the user, 403 if the user may not use the model.
     """
     tei = _get_tei(repo, body.stable_id, current_user)
-    try:
-        provider = LLMProviderRegistry.get_instance().get_provider_for_user(body.provider_id, current_user["username"])
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except MissingSecretError as e:
-        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+    provider = _llm_provider(body.provider_id, current_user)
 
     source = await asyncio.to_thread(_review_source, tei, body.xml, body.scope)
     if not 0 <= body.window_index < len(source.windows):

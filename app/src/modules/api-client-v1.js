@@ -433,6 +433,17 @@
  * @property {Array<string>=} languages - Languages of the document as BCP 47 codes; the engine default if empty
  * @property {Object<string, OcrOptionValue>=} options - Engine parameters
  * @property {boolean=} rebuild - The user explicitly asked to recreate the text layer: a digital text layer is replaced even if it looks fine
+ * @property {boolean=} llm_correction - Let an LLM correct OCR errors of the new text layer before the PDF is stored; requires provider_id and model_id
+ * @property {string|null=} provider_id - Id of the LLM provider of the correction pass
+ * @property {string|null=} model_id - Id of the model of the correction pass
+ */
+
+/**
+ * @typedef {Object} OcrLlmCorrection
+ * @property {number} page - Page index (0-based)
+ * @property {string} old - Text of the text layer before the correction
+ * @property {string} new - Corrected text
+ * @property {string} rationale - Why the text is an OCR error
  */
 
 /**
@@ -480,6 +491,8 @@
  * @property {OcrMethod|null=} method - How the text layer was created, if the engine reports it
  * @property {string|null=} fallback_reason - Why the engine fell back from the preferred method
  * @property {TextQualityReport} quality - Text layer quality after OCR
+ * @property {Array<OcrLlmCorrection>=} llm_corrections - Corrections made by the LLM correction pass, if it was requested
+ * @property {string|null=} llm_correction_error - Why the LLM correction pass stopped or failed; the OCR result is kept
  */
 
 /**
