@@ -8,7 +8,7 @@ For the LLM review of OCR errors (#931), the words are grouped into lines (one t
 import importlib.util
 import io
 import zlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from functools import cache
@@ -283,9 +283,14 @@ class _Reader(_ContentWalker):
                 start, text = None, ""
 
 
-def read_text_layer(pdf: pikepdf.Pdf) -> list[LayerPage]:
-    """Read the words of the OCR text layer of every page."""
+PageCallback = Callable[[int, int], None]
+"""`callback(done, total)`: called after each page of a loop over the pages of a document."""
+
+
+def read_text_layer(pdf: pikepdf.Pdf, on_page: PageCallback | None = None) -> list[LayerPage]:
+    """Read the words of the OCR text layer of every page; `on_page` is called after each page."""
     pages: list[LayerPage] = []
+    total = len(pdf.pages)
     for index, page in enumerate(pdf.pages):
         reader = _Reader(index)
         reader.walk_page(page)
@@ -300,6 +305,8 @@ def read_text_layer(pdf: pikepdf.Pdf) -> list[LayerPage]:
         elif not reader.result.words:
             reader.result.unpatchable = REASON_NO_LAYER
         pages.append(reader.result)
+        if on_page is not None:
+            on_page(index + 1, total)
     return pages
 
 

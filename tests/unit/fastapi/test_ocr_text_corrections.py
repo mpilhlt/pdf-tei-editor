@@ -9,6 +9,7 @@ text layer (#931).
 """
 
 import gc
+import json
 import shutil
 import tempfile
 import unittest
@@ -98,7 +99,8 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         app.dependency_overrides[get_file_repository] = lambda: self.repo
         app.dependency_overrides[get_file_storage] = lambda: self.storage
         app.dependency_overrides[ocr_router.get_ocr_job_store] = lambda: self.jobs
-        app.dependency_overrides[get_sse_service] = lambda: MagicMock()
+        self.sse = MagicMock()
+        app.dependency_overrides[get_sse_service] = lambda: self.sse
         app.dependency_overrides[get_session_manager] = lambda: MagicMock()
         self.client = TestClient(app, headers={"X-Session-ID": SESSION})
 
@@ -179,6 +181,37 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         # the handler got the corrected PDF and the corrected lines
         _, doc_id, pdf_path, pdf_hash, lines = self.handler_calls[0]
         self.assertEqual((doc_id, pdf_hash, lines), ("doc1", pdf.id, frozenset({0})))
+
+    def progress_labels(self, progress_id: str) -> list[str]:
+        """The labels sent to the progress widget of the client."""
+        labels = []
+        for call in self.sse.send_message.call_args_list:
+            data = json.loads(call.kwargs["data"])
+            self.assertEqual((call.kwargs["client_id"], data["progress_id"]), (SESSION, progress_id))
+            if call.kwargs["event_type"] == "progressLabel":
+                labels.append(data["label"])
+        return labels
+
+    def test_preview_reports_progress(self):
+        self.preview(progress_id="p1")
+        self.assertEqual(self.progress_labels("p1"), [
+            "Reading the lines of the document",
+            "Reading the text layer of the PDF: page 1 of 1",
+            "Comparing the document with the text layer: page 1 of 1",
+        ])
+
+    def test_apply_reports_progress(self):
+        self.assertEqual(self.apply(progress_id="p2").status_code, 200)
+        self.assertEqual(self.progress_labels("p2")[-3:], [
+            "Writing 1 correction into the PDF",
+            "Updating the document for the corrected PDF. This can take a minute.",
+            "Saving the new version of the document",
+        ])
+
+    def test_no_progress_without_progress_id(self):
+        self.preview()
+        self.assertEqual(self.apply().status_code, 200)
+        self.sse.send_message.assert_not_called()
 
     def test_version_of_an_older_pdf_writes_from_its_own_pdf(self):
         # another lineage has a newer PDF, which is the canonical one

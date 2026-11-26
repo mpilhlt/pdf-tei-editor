@@ -4,6 +4,9 @@
  * the backend, which saves the updated TEI as a new version based on the corrected PDF. The new
  * version and the corrected PDF are then loaded.
  *
+ * Each step is shown in a progress widget; the backend reports its steps and the pages it has done
+ * to that widget via SSE (`progress_id` of the requests).
+ *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlMenuItem } from '../ui.js'
  * @import { textCorrectionsDialogPart } from '../templates/text-corrections-dialog.types.js'
@@ -35,10 +38,12 @@ const UNSAVED_MESSAGE = 'The document has changes that could not be saved, for e
 class TextCorrectionsPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'text-corrections', deps: ['client', 'tools'] })
+    super(context, { name: 'text-corrections', deps: ['client', 'tools', 'progress'] })
   }
 
   get #client() { return this.getDependency('client') }
+
+  get #progress() { return this.getDependency('progress') }
 
   /** @type {SlDialog & textCorrectionsDialogPart} */
   #dialogUi = null
@@ -98,15 +103,8 @@ class TextCorrectionsPlugin extends Plugin {
     }
     this.#busy = true
     try {
-      const xmlEditor = this.getDependency('xmleditor')
-      await xmlEditor.saveIfDirty()
-      // the preview and the write use the stored document: refuse if the editor content is not it
-      if (xmlEditor.isDirty() || !xmlEditor.getXmlTree()) {
-        notify(UNSAVED_MESSAGE, 'warning', 'exclamation-triangle')
-        testLog('TEXT_CORRECTIONS_REFUSED', { reason: 'unsaved' })
-        return
-      }
-      const preview = await this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId })
+      const preview = await this.#preview(stableId)
+      if (!preview) return
       testLog('TEXT_CORRECTIONS_PREVIEW', {
         corrections: preview.corrections.length,
         unwritable: preview.unwritable.length,
@@ -120,8 +118,35 @@ class TextCorrectionsPlugin extends Plugin {
   }
 
   /**
+   * Save the document and find the corrections that can be written, showing the steps in a
+   * progress widget.
+   * @param {string} stableId
+   * @returns {Promise<TextCorrectionsPreview|null>} The preview, or null if the document could not be saved
+   */
+  async #preview(stableId) {
+    const progressId = `text-corrections-preview-${stableId}`
+    this.#progress.show(progressId, { label: 'Saving the document…', value: null, cancellable: false })
+    testLog('TEXT_CORRECTIONS_PROGRESS', { step: 'preview' })
+    try {
+      const xmlEditor = this.getDependency('xmleditor')
+      await xmlEditor.saveIfDirty()
+      // the preview and the write use the stored document: refuse if the editor content is not it
+      if (xmlEditor.isDirty() || !xmlEditor.getXmlTree()) {
+        notify(UNSAVED_MESSAGE, 'warning', 'exclamation-triangle')
+        testLog('TEXT_CORRECTIONS_REFUSED', { reason: 'unsaved' })
+        return null
+      }
+      // the backend shows its steps in the widget
+      this.#progress.setLabel(progressId, 'Comparing the document with the text layer of the PDF…')
+      return await this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId, progress_id: progressId })
+    } finally {
+      this.#progress.hide(progressId)
+    }
+  }
+
+  /**
    * Fill and show the dialog. When the user confirms, the corrections are written while the dialog
-   * stays open with the Write button in loading state.
+   * stays open with the Write button in loading state, and the steps are shown in a progress widget.
    * @param {TextCorrectionsPreview} preview
    * @param {string} stableId
    * @returns {Promise<TextCorrectionsResult|null>} The result of writing, or null if the user did not confirm
@@ -152,6 +177,7 @@ class TextCorrectionsPlugin extends Plugin {
     dlg.show()
     testLog('TEXT_CORRECTIONS_DIALOG_OPENED', { stableId, canApply: summary.canApply, needsSkip: summary.needsSkip })
     const controller = new AbortController()
+    const progressId = `text-corrections-write-${stableId}`
     try {
       return await new Promise((resolve, reject) => {
         let writing = false
@@ -169,11 +195,14 @@ class TextCorrectionsPlugin extends Plugin {
           skipBox.disabled = true
           dlg.summary.textContent = 'Writing the corrections to the PDF and updating the document. This can take a minute.'
           testLog('TEXT_CORRECTIONS_WRITING', { stableId })
-          this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipBox.checked })
+          // the backend shows its steps in the widget
+          this.#progress.show(progressId, { label: 'Writing the corrections to the PDF…', value: null, cancellable: false })
+          this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipBox.checked, progress_id: progressId })
             .then(resolve, reject)
         }, { signal: controller.signal })
       })
     } finally {
+      this.#progress.hide(progressId)
       controller.abort()
       skipBox.removeEventListener('sl-change', onSkipChange)
       dlg.write.loading = false
@@ -188,6 +217,8 @@ class TextCorrectionsPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   async #loadResult(result) {
+    const progressId = `text-corrections-load-${result.tei_stable_id}`
+    this.#progress.show(progressId, { label: 'Loading the new version and the corrected PDF…', value: null, cancellable: false })
     try {
       await this.getDependency('file-selection').reload({ refresh: true })
       // passing the PDF reloads it in the viewer, although its stable_id did not change
@@ -198,6 +229,8 @@ class TextCorrectionsPlugin extends Plugin {
       const reason = /** @type {Error} */ (error)?.message ?? String(error)
       notify(`The corrections were written to the PDF and a new version based on the corrected PDF was created, but it could not be opened (${reason}). Open the newest version of the document from the file selection.`, 'danger', 'exclamation-octagon', 15000)
       testLog('TEXT_CORRECTIONS_FAILED', { message: reason, afterApply: true })
+    } finally {
+      this.#progress.hide(progressId)
     }
   }
 

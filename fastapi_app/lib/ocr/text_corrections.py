@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord
+from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord, PageCallback
 from fastapi_app.lib.tei.layout import LineLayout, get_zone_labels
 from fastapi_app.lib.tei.zone_lines import read_zone_document
 
@@ -96,14 +96,16 @@ def _joined(words: Sequence[LayerWord] | Sequence[TeiWord]) -> str:
     return _norm("".join(w.text for w in words))
 
 
-def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[LayerPage]) -> CorrectionPlan:
-    """Compare the words of each page of the layer with those of the TEI and derive corrections."""
+def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[LayerPage], on_page: PageCallback | None = None) -> CorrectionPlan:
+    """Compare the words of each page of the layer with those of the TEI and derive corrections; `on_page` is called after each page of the layer."""
     plan = CorrectionPlan()
     layer_indices = {page.index for page in layer}
     for index in sorted(set(tei) - layer_indices):
         if tei[index]:
             plan.unwritable.append(UnwritableChange(index, tei[index][0].line, "", " ".join(w.text for w in tei[index]), NO_LAYER_PAGE))
-    for page in layer:
+    for done, page in enumerate(layer, start=1):
+        if on_page is not None:
+            on_page(done, len(layer))
         if page.index not in tei:
             continue
         tws = list(tei[page.index])
