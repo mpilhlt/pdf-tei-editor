@@ -158,8 +158,24 @@ class TestOcrLlmCorrectionRoute(unittest.TestCase):
     def test_no_correction_needed(self) -> None:
         self.provider.response = "[]"
         result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
-        self.assertEqual(result["message"], "done No pages needed correction.")
+        self.assertEqual(result["message"], "done No OCR errors found on 1 reviewed page.")
         self.assertEqual(self.stored_metadata()["text_corrections"], [{"source": "earlier"}])
+
+    def test_no_pages_selected(self) -> None:
+        with patch.object(llm_correction, "pages_needing_review", return_value=[]):
+            result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
+        self.assertEqual(self.provider.calls, 0)
+        self.assertEqual(result["message"], "done No pages needed correction.")
+
+    def test_page_limit_from_config(self) -> None:
+        class LimitConfig:
+            def get(self, key: str, default: Any = None) -> Any:
+                return 0 if key == llm_correction.MAX_PAGES_KEY else default
+
+        with patch.object(ocr_router, "get_config", lambda: LimitConfig()), self.assertLogs("fastapi_app.lib.ocr", level="INFO"):
+            result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
+        self.assertEqual(self.provider.calls, 0)
+        self.assertEqual(result["message"], "done 1 page was not reviewed: the correction reviews at most 0 pages per run.")
 
     def test_denied_model_refused_before_ocr(self) -> None:
         with patch.object(ocr_router, "check_model_access", side_effect=ModelAccessDenied("not allowed")):
@@ -190,6 +206,39 @@ class TestOcrLlmCorrectionRoute(unittest.TestCase):
         with patch.object(ocr_router.llm_correction, "correct_text_layer", side_effect=RuntimeError("boom")), self.assertLogs(ocr_router.logger.name, level="ERROR"):
             result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
         self.assertIn("boom", result["llm_correction_error"])
+
+
+def correction_run(**fields: Any) -> llm_correction.CorrectionRun:
+    return llm_correction.CorrectionRun(**{"corrections": [], "pages_reviewed": [], "skipped": 0, "error": None, **fields})
+
+
+class TestLlmCorrectionMessage(unittest.TestCase):
+    def message(self, **fields: Any) -> str:
+        return ocr_router._llm_correction_message(correction_run(**fields), "m")
+
+    def test_no_page_selected(self) -> None:
+        self.assertEqual(self.message(), "No pages needed correction.")
+
+    def test_all_selected_pages_skipped(self) -> None:
+        self.assertEqual(self.message(pages_selected=[0, 1], pages_skipped=[0, 1]), "2 pages could not be corrected (text layer not patchable or not line-structured).")
+        self.assertEqual(self.message(pages_selected=[0], pages_skipped=[0]), "1 page could not be corrected (text layer not patchable or not line-structured).")
+
+    def test_nothing_found(self) -> None:
+        self.assertEqual(self.message(pages_selected=[0, 1, 2], pages_reviewed=[0, 1], pages_skipped=[2]), "No OCR errors found on 2 reviewed pages.")
+
+    def test_found_but_not_applied(self) -> None:
+        self.assertEqual(self.message(pages_selected=[0], pages_reviewed=[0], found=3, skipped=1), "3 corrections could not be applied.")
+
+    def test_corrected(self) -> None:
+        applied = [llm_correction.AppliedCorrection(0, "a’)", "a1)", ""), llm_correction.AppliedCorrection(0, "b’)", "b2)", "")]
+        self.assertEqual(self.message(pages_selected=[0], pages_reviewed=[0], found=2, corrections=applied), "Corrected 2 OCR errors with m.")
+
+    def test_limit_note(self) -> None:
+        message = self.message(pages_selected=[0, 1, 2], pages_reviewed=[0], pages_skipped=[1, 2], pages_over_limit=[1, 2], max_pages=1)
+        self.assertEqual(message, "No OCR errors found on 1 reviewed page. 2 pages were not reviewed: the correction reviews at most 1 pages per run.")
+
+    def test_error(self) -> None:
+        self.assertEqual(self.message(pages_selected=[0], error="down"), "The LLM correction failed: down")
 
 
 if __name__ == "__main__":

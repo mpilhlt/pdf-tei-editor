@@ -18,8 +18,10 @@ import pikepdf
 
 from fastapi_app.lib.llm.base import LLMProviderError
 from fastapi_app.lib.ocr import llm_correction
-from fastapi_app.lib.ocr.line_review import LineCorrection
+from fastapi_app.lib.ocr.line_review import LineCorrection, build_user_prompt, letters_similar
 from fastapi_app.lib.ocr.llm_correction import (
+    REASON_LETTERS,
+    REASON_NUMBER,
     CorrectionRun,
     correct_text_layer,
     patches_from_corrections,
@@ -70,6 +72,16 @@ def fixture_page(index: int) -> LayerPage:
     return LayerPage(index, [replace(word, page=index) for word in page.words], page.unpatchable)
 
 
+def text_line(text: str, page: int = 0, line: int = 0) -> LayerLine:
+    """A layer line with the words of `text`."""
+    return LayerLine(page, [LayerWord(page, 1, line, i, i + 1, word, line) for i, word in enumerate(text.split())])
+
+
+def text_page(index: int, lines: int = 3) -> LayerPage:
+    """A page whose lines `p<index> l<j>` are drawn in text objects of their own."""
+    return LayerPage(index, [w for j in range(lines) for w in text_line(f"p{index} l{j}", index, j).words])
+
+
 def words(path: Path, page: int) -> list[str]:
     """The words of the text layer of a page of `path`."""
     with pikepdf.open(path) as pdf:
@@ -100,10 +112,10 @@ class CorrectTextLayerTest(unittest.TestCase):
         return path
 
     def run_pass(
-        self, path: Path, provider: FakeProvider, selected: list[int], threshold: float = 0.7
+        self, path: Path, provider: FakeProvider, selected: list[int], threshold: float = 0.7, max_pages: int = 50
     ) -> CorrectionRun:
         with mock.patch.object(llm_correction, "pages_needing_review", return_value=selected):
-            return asyncio.run(correct_text_layer(path, provider, "m", ["de"], threshold))  # type: ignore[arg-type]
+            return asyncio.run(correct_text_layer(path, provider, "m", ["de"], threshold, max_pages))  # type: ignore[arg-type]
 
     def test_marker_corrected_in_text_layer(self) -> None:
         path = self.make_pdf()
@@ -116,6 +128,26 @@ class CorrectTextLayerTest(unittest.TestCase):
         self.assertNotIn("Regel’).", words(path, 0))
         self.assertEqual(list(self.tmp.iterdir()), [path])  # no temp file left
 
+    def test_pages_beyond_the_limit_not_reviewed(self) -> None:
+        path = self.make_pdf(fixture_pages=3)
+        provider = FakeProvider([answer(("0001", "Regel’).", "Regel12)."))])
+        with self.assertLogs("fastapi_app.lib.ocr.llm_correction", level="INFO") as logs:
+            run = self.run_pass(path, provider, [0, 1, 2], max_pages=1)
+        self.assertIn("2 page(s) not reviewed: the pass reviews at most 1 pages", "\n".join(logs.output))
+        self.assertEqual(len(provider.user_prompts), 1)
+        self.assertEqual(run.pages_reviewed, [0])
+        self.assertEqual(run.pages_over_limit, [1, 2])
+        self.assertEqual(run.pages_skipped, [1, 2])
+        self.assertEqual((run.pages_selected, run.max_pages, run.found), ([0, 1, 2], 1, 1))
+        self.assertEqual([c.new for c in run.corrections], ["Regel12)."])
+        self.assertIn("Regel’).", words(path, 1))
+
+    def test_found_counts_corrections_not_applied(self) -> None:
+        path = self.make_pdf()
+        provider = FakeProvider([answer(("0001", "Regel’).", "Regel12)."), ("0001", "nach der neuen", "nach die neuen"))])
+        run = self.run_pass(path, provider, [0])
+        self.assertEqual((run.found, len(run.corrections)), (2, 1))
+
     def test_no_pages_selected_makes_no_call(self) -> None:
         path = self.make_pdf()
         before = path.read_bytes()
@@ -127,7 +159,7 @@ class CorrectTextLayerTest(unittest.TestCase):
 
     def test_provider_failure_keeps_earlier_windows(self) -> None:
         path = self.make_pdf(fixture_pages=3)
-        first_of_page_2 = f"{LINES_PER_PAGE + 1:04d}"  # the lines of pages 0 and 2 are numbered consecutively
+        first_of_page_2 = f"{2 * LINES_PER_PAGE + 1:04d}"  # page 1 is numbered too, as context of both windows
         provider = FakeProvider([answer(("0001", "Regel’).", "Regel12).")), LLMProviderError("service down")])
         with self.assertLogs("fastapi_app.lib.ocr.llm_correction", level="WARNING"):
             run = self.run_pass(path, provider, [0, 2])
@@ -260,12 +292,41 @@ class ReviewLinesForPagesTest(unittest.TestCase):
         pages = [fixture_page(i) for i in range(4)]
         review, lines = review_lines_for_pages(pages, [0, 1, 3], ["de"])
         per_page = len(self.lines)
-        self.assertEqual(len(review.texts), 3 * per_page)
+        self.assertEqual(len(review.texts), 4 * per_page)  # page 2 as context of both windows
         self.assertEqual(review.texts[per_page], FIRST_LINE)
-        self.assertEqual(review.windows, [range(0, 2 * per_page), range(2 * per_page, 3 * per_page)])
+        self.assertEqual(review.windows, [range(0, 2 * per_page), range(3 * per_page, 4 * per_page)])
+        self.assertEqual(review.context, [range(0, 3 * per_page), range(2 * per_page, 4 * per_page)])
         self.assertEqual({lines[i].page for i in review.windows[0]}, {0, 1})
         self.assertEqual({lines[i].page for i in review.windows[1]}, {3})
         self.assertEqual(review.languages, ["de"])
+
+    def test_context_only_from_adjacent_pages(self) -> None:
+        pages = [text_page(i) for i in range(12)]
+        review, lines = review_lines_for_pages(pages, [3, 10], [])
+        self.assertEqual(sorted({line.page for line in lines}), [2, 3, 4, 9, 10, 11])
+        second = build_user_prompt(review, review.windows[1], (2, 2))
+        self.assertIn("p9 l2", second)
+        self.assertIn("p11 l0", second)
+        self.assertNotIn("p3 ", second)
+        self.assertNotIn("p4 ", second)
+        first = build_user_prompt(review, review.windows[0], (1, 2))
+        self.assertIn("p2 l0", first)
+        self.assertIn("p4 l2", first)
+        self.assertNotIn("p9 ", first)
+
+    def test_page_between_two_runs_numbered_once(self) -> None:
+        pages = [text_page(i) for i in range(6)]
+        review, lines = review_lines_for_pages(pages, [3, 5], [])
+        self.assertEqual([line.page for line in lines], [2] * 3 + [3] * 3 + [4] * 3 + [5] * 3)
+        second = build_user_prompt(review, review.windows[1], (2, 2))
+        self.assertIn("p4 l0", second)
+        self.assertNotIn("p3 ", second)
+
+    def test_unreviewable_neighbour_not_context(self) -> None:
+        pages = [text_page(0), text_page(1), text_page(2)]
+        pages[0].unpatchable = "visible text"
+        _, lines = review_lines_for_pages(pages, [1], [])
+        self.assertEqual(sorted({line.page for line in lines}), [1, 2])
 
     def test_review_lines_windows_hold_at_most_two_pages(self) -> None:
         pages = [fixture_page(i) for i in range(3)]
@@ -279,26 +340,26 @@ class PatchesFromCorrectionsTest(unittest.TestCase):
         self.lines = layer_lines(self.page)
 
     def test_patch_from_whole_word_correction(self) -> None:
-        patches, dropped = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")])
+        patches, dropped = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")], 0.7)
         word = next(w for w in self.page.words if w.text == "Regel’).")
         self.assertEqual(patches, [WordPatch(word, "Regel12).")])
         self.assertEqual(dropped, [])
 
     def test_partial_word_correction_dropped(self) -> None:
-        patches, dropped = patches_from_corrections(self.lines, [LineCorrection(0, "egel’)", "egel12)", "")])
+        patches, dropped = patches_from_corrections(self.lines, [LineCorrection(0, "egel’)", "egel12)", "")], 0.7)
         self.assertEqual(patches, [])
         self.assertEqual(len(dropped), 1)
         self.assertIn("not whole words", dropped[0])
 
     def test_correction_occurring_twice_dropped(self) -> None:
         line = LayerLine(0, [LayerWord(0, 1, 0, i * 4, i * 4 + 3, w, 0) for i, w in enumerate("der und der".split())])
-        patches, dropped = patches_from_corrections([line], [LineCorrection(0, "der", "den", "")])
+        patches, dropped = patches_from_corrections([line], [LineCorrection(0, "der", "den", "")], 0.7)
         self.assertEqual(patches, [])
         self.assertIn("not whole words", dropped[0])
 
     def test_multi_word_correction_patches_only_changed_words(self) -> None:
         correction = LineCorrection(0, "neuen Regel’). Weitere", "neuen Regel12). Weitere", "")
-        patches, dropped = patches_from_corrections(self.lines, [correction])
+        patches, dropped = patches_from_corrections(self.lines, [correction], 0.7)
         self.assertEqual([(p.word.text, p.new_text) for p in patches], [("Regel’).", "Regel12).")])
         self.assertEqual(dropped, [])
 
@@ -308,13 +369,41 @@ class PatchesFromCorrectionsTest(unittest.TestCase):
             LineCorrection(0, "Regel’).", "Regel12).", ""),
             LineCorrection(0, "neuen Regel’).", "neuen Regel13).", ""),
         ]
-        patches, dropped = patches_from_corrections(self.lines, corrections)
+        patches, dropped = patches_from_corrections(self.lines, corrections, 0.7)
         self.assertEqual([p.new_text for p in patches], ["Regel12)."])
         self.assertEqual(len(dropped), 1)
         self.assertIn("conflicts", dropped[0])
 
+    def assert_kept(self, old: str, new: str, text: str | None = None) -> None:
+        patches, dropped = patches_from_corrections([text_line(text or old)], [LineCorrection(0, old, new, "")], 0.7)
+        self.assertEqual(dropped, [])
+        self.assertTrue(patches)
+
+    def assert_dropped(self, old: str, new: str, reason: str, text: str | None = None) -> None:
+        patches, dropped = patches_from_corrections([text_line(text or old)], [LineCorrection(0, old, new, "")], 0.7)
+        self.assertEqual(patches, [])
+        self.assertEqual(len(dropped), 1)
+        self.assertIn(reason, dropped[0])
+
+    def test_each_changed_word_must_be_similar(self) -> None:
+        old, new = "in der Regel’) zu finden", "in die Regel12) zu finden"
+        self.assertTrue(letters_similar(old, new, 0.7))  # the span as a whole passes
+        self.assertFalse(letters_similar("der", "die", 0.7))
+        self.assert_dropped(old, new, REASON_LETTERS)
+
+    def test_marker_changes_of_words_without_letters_kept(self) -> None:
+        self.assert_kept("?!?)", "312)", "siehe ?!?) unten")
+        self.assert_kept("Regel’).", "Regel12).")
+        self.assert_kept("ab’).", "ab12).")
+        self.assert_kept("(’)", "(1)")
+
+    def test_number_changes_outside_markers_dropped(self) -> None:
+        self.assert_dropped("1920", "1926", REASON_NUMBER, "im Jahre 1920 erlassen")
+        self.assert_dropped("S. 12", "S. 13", REASON_NUMBER, "vgl. S. 12 oben")
+        self.assert_dropped("zu", "zur", REASON_NUMBER, "zu finden")
+
     def test_patches_apply_to_the_fixture(self) -> None:
-        patches, _ = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")])
+        patches, _ = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")], 0.7)
         pdf = pikepdf.open(FIXTURE)
         patch_text_layer(pdf, patches)
         self.assertIn("Regel12).", [w.text for w in read_text_layer(pdf)[0].words])

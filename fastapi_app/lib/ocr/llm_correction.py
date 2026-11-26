@@ -12,8 +12,10 @@ Pure module: no FastAPI imports.
 from __future__ import annotations
 
 import asyncio
+import difflib
 import logging
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Sequence
@@ -26,7 +28,14 @@ from pypdf.errors import PyPdfError
 
 from fastapi_app.lib.llm.base import LLMProvider, LLMProviderError
 from fastapi_app.lib.llm.json_response import UnusableResponseError
-from fastapi_app.lib.ocr.line_review import LOG_PREFIX, LineCorrection, ReviewLines, review_lines_window
+from fastapi_app.lib.ocr.line_review import (
+    LOG_PREFIX,
+    MIN_LETTERS,
+    LineCorrection,
+    ReviewLines,
+    letters_similar,
+    review_lines_window,
+)
 from fastapi_app.lib.ocr.progress import report_progress
 from fastapi_app.lib.ocr.text_layer import (
     LayerLine,
@@ -43,12 +52,19 @@ logger = logging.getLogger(__name__)
 
 MIN_LETTER_SIMILARITY_KEY = "ocr.llm-correction.min-letter-similarity"
 DEFAULT_MIN_LETTER_SIMILARITY = 0.7
+MAX_PAGES_KEY = "ocr.llm-correction.max-pages"
+DEFAULT_MAX_PAGES = 50
 
 WINDOW_PAGES = 2  # consecutive pages reviewed together
 MAX_LINE_WORDS = 80  # more words in one text object: the renderer did not write one text object per line
 
 REASON_NOT_WHOLE_WORDS = "not whole words"
 REASON_NOT_LINES = f"text not structured in lines (a text object with more than {MAX_LINE_WORDS} words)"
+REASON_LETTERS = "letters differ too much"
+REASON_NUMBER = "number change outside a footnote marker"
+
+MARKER_WORD = re.compile(r"^[^\W\d_]*\d{1,3}\)[.,;:]?$")
+"""A word that ends in a footnote marker: letters (optional), 1 to 3 digits, `)` and optional punctuation."""
 
 PROGRESS_PHASE = "Correcting OCR errors"
 
@@ -85,8 +101,17 @@ class CorrectionRun:
     """Why the pass stopped early or could not save, if it did."""
     pages_skipped: list[int] = field(default_factory=list)
     """
-    Selected pages not reviewed: their text layer cannot be patched or is not structured in lines.
+    Selected pages not reviewed: their text layer cannot be patched or is not structured in lines, or they are
+    beyond the page limit (also in `pages_over_limit`).
     """
+    pages_selected: list[int] = field(default_factory=list)
+    """The pages `pages_needing_review` selected."""
+    pages_over_limit: list[int] = field(default_factory=list)
+    """Reviewable pages not reviewed because the pass reviews at most `max_pages` pages."""
+    max_pages: int = DEFAULT_MAX_PAGES
+    """The most pages the pass reviews."""
+    found: int = 0
+    """The plausible corrections the LLM proposed (applied or not)."""
 
 
 # ── Lines and patches ────────────────────────────────────────────────
@@ -99,21 +124,48 @@ def review_lines_for_pages(
     Number the lines of the selected pages globally and cut them into windows of up to 2 consecutive pages;
     a page that does not follow the previous selected page starts a new window. Returns the review lines and
     the layer line of each global line index.
+
+    Each run of consecutive selected pages is surrounded by the lines of its neighbouring pages (if they could
+    be reviewed themselves), which belong to no window. They are the only lines besides the run's own that the
+    context of the run's windows may come from, so a window never gets context from a page far away.
     """
+    runs: list[list[int]] = []
+    for index in sorted(set(page_indices)):
+        if runs and index == runs[-1][-1] + 1:
+            runs[-1].append(index)
+        else:
+            runs.append([index])
     lines: list[LayerLine] = []
     windows: list[range] = []
-    window_start, window_pages, previous = 0, 0, None
-    for index in sorted(set(page_indices)):
-        if previous is not None and (index != previous + 1 or window_pages == WINDOW_PAGES):
+    context: list[range] = []
+    after_starts: dict[int, int] = {}  # neighbouring page after a run -> the index of its first line
+
+    def add(page: int) -> int:
+        start = len(lines)
+        lines.extend(layer_lines(pages[page]))
+        return start
+
+    def neighbour(page: int) -> bool:
+        return 0 <= page < len(pages) and _not_reviewable(pages[page]) is None
+
+    for run in runs:
+        before = run[0] - 1
+        if before in after_starts:  # one page between this run and the previous one
+            context_start = after_starts[before]
+        else:
+            context_start = add(before) if neighbour(before) else len(lines)
+        run_windows = len(windows)
+        for offset in range(0, len(run), WINDOW_PAGES):
+            window_start = len(lines)
+            for page in run[offset : offset + WINDOW_PAGES]:
+                add(page)
             if len(lines) > window_start:
                 windows.append(range(window_start, len(lines)))
-            window_start, window_pages = len(lines), 0
-        lines.extend(layer_lines(pages[index]))
-        window_pages += 1
-        previous = index
-    if len(lines) > window_start:
-        windows.append(range(window_start, len(lines)))
-    return ReviewLines([line.text for line in lines], windows, languages), lines
+        after = run[-1] + 1
+        if neighbour(after):
+            after_starts[after] = add(after)
+        context.extend(range(context_start, len(lines)) for _ in windows[run_windows:])
+    return ReviewLines([line.text for line in lines], windows, languages, context), lines
 
 
 def _word_offsets(line: LayerLine) -> list[int]:
@@ -126,8 +178,37 @@ def _word_offsets(line: LayerLine) -> list[int]:
     return offsets
 
 
+def _marker_change(old: str, new: str) -> bool:
+    """
+    Whether the change from `old` to `new` is confined to a footnote marker: `new` matches `MARKER_WORD`, or
+    each change replaces (or inserts) characters that are not letters or digits by digits right before `)`.
+    """
+    if MARKER_WORD.match(new):
+        return True
+    changes = [op for op in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes() if op[0] != "equal"]
+    return bool(changes) and all(
+        tag in ("replace", "insert")
+        and not any(char.isalnum() for char in old[i1:i2])
+        and new[j1:j2].isdecimal()
+        and new[j2 : j2 + 1] == ")"
+        for tag, i1, i2, j1, j2 in changes
+    )
+
+
+def _implausible_word(old: str, new: str, min_letter_similarity: float) -> str | None:
+    """
+    Why the change of a single word from `old` to `new` is not plausible as an OCR fix, or None. A word with
+    fewer than 3 letters on either side may only change in a footnote marker (see `_marker_change`); the
+    letters of other words must be similar (see `letters_similar`).
+    """
+    letters = [sum(char.isalpha() for char in text.casefold()) for text in (old, new)]
+    if min(letters) < MIN_LETTERS:
+        return None if _marker_change(old, new) else REASON_NUMBER
+    return None if letters_similar(old, new, min_letter_similarity) else REASON_LETTERS
+
+
 def _correction_patches(
-    lines: Sequence[LayerLine], corrections: Sequence[LineCorrection]
+    lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], min_letter_similarity: float
 ) -> tuple[list[tuple[LineCorrection, list[WordPatch]]], list[str]]:
     """
     Turn line corrections into word patches, see :func:`patches_from_corrections`. Returns each correction
@@ -164,6 +245,11 @@ def _correction_patches(
             dropped.append(f"{description}: different number of words")
             continue
         changed = [(word, new) for word, new in zip(words, new_words) if new != word.text]
+        reasons = [_implausible_word(word.text, new, min_letter_similarity) for word, new in changed]
+        reason = next((r for r in reasons if r is not None), None)
+        if reason is not None:
+            dropped.append(f"{description}: {reason}")
+            continue
         if any(patched.get(word, new) != new for word, new in changed):
             dropped.append(f"{description}: conflicts with another correction")
             continue
@@ -178,15 +264,16 @@ def _correction_patches(
 
 
 def patches_from_corrections(
-    lines: Sequence[LayerLine], corrections: Sequence[LineCorrection]
+    lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], min_letter_similarity: float
 ) -> tuple[list[WordPatch], list[str]]:
     """
     Turn line corrections into word patches: `old` must occur exactly once in the line text and cover a run of
-    whole words, and `new` must have as many words. Each word whose text changes gives a patch; a correction
-    that would patch an already patched word differently is dropped. Returns the patches and a description of
-    each dropped correction.
+    whole words, and `new` must have as many words. Each changed word must be plausible on its own (see
+    `_implausible_word`), otherwise the whole correction is dropped. Each word whose text changes gives a patch;
+    a correction that would patch an already patched word differently is dropped. Returns the patches and a
+    description of each dropped correction.
     """
-    result, dropped = _correction_patches(lines, corrections)
+    result, dropped = _correction_patches(lines, corrections, min_letter_similarity)
     return [patch for _, patches in result for patch in patches], dropped
 
 
@@ -211,13 +298,17 @@ def _log_failure(message: str, error: Exception, expected: tuple[type[Exception]
 
 
 def _apply_corrections(
-    pdf: pikepdf.Pdf, lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], run: CorrectionRun
+    pdf: pikepdf.Pdf,
+    lines: Sequence[LayerLine],
+    corrections: Sequence[LineCorrection],
+    min_letter_similarity: float,
+    run: CorrectionRun,
 ) -> None:
     """
     Patch the corrections page by page into `pdf` and record the applied and skipped ones in `run`.
     `patch_text_layer` changes nothing when it fails, so a failing page leaves `pdf` as it was.
     """
-    with_patches, dropped = _correction_patches(lines, corrections)
+    with_patches, dropped = _correction_patches(lines, corrections, min_letter_similarity)
     for description in dropped:
         logger.info(f"{LOG_PREFIX}: correction not applied, {description}")
     by_page: dict[int, list[tuple[LineCorrection, list[WordPatch]]]] = {}
@@ -248,11 +339,14 @@ def _save_in_place(pdf: pikepdf.Pdf, pdf_path: Path) -> Path:
 
 
 def _select_pages(pdf_path: Path, pages: list[int], run: CorrectionRun) -> tuple[list[LayerPage], list[int]]:
-    """Read the text layer of `pdf_path` and return its pages and the selected pages that are reviewed."""
+    """
+    Read the text layer of `pdf_path` and return its pages and the selected pages that can be reviewed, in
+    page order.
+    """
     with pikepdf.open(pdf_path) as pdf:
         layer = read_text_layer(pdf)
     reviewable: list[int] = []
-    for index in pages:
+    for index in sorted(set(pages)):
         if not 0 <= index < len(layer):
             continue
         reason = _not_reviewable(layer[index])
@@ -265,12 +359,16 @@ def _select_pages(pdf_path: Path, pages: list[int], run: CorrectionRun) -> tuple
 
 
 def _write_corrections(
-    pdf_path: Path, lines: Sequence[LayerLine], corrections: Sequence[LineCorrection], run: CorrectionRun
+    pdf_path: Path,
+    lines: Sequence[LayerLine],
+    corrections: Sequence[LineCorrection],
+    min_letter_similarity: float,
+    run: CorrectionRun,
 ) -> None:
     """Patch the corrections into `pdf_path` in place (if any of them applies)."""
     temp: Path | None = None
     with pikepdf.open(pdf_path) as pdf:
-        _apply_corrections(pdf, lines, corrections, run)
+        _apply_corrections(pdf, lines, corrections, min_letter_similarity, run)
         if run.corrections:
             temp = _save_in_place(pdf, pdf_path)
     if temp is not None:
@@ -278,13 +376,18 @@ def _write_corrections(
 
 
 async def correct_text_layer(
-    pdf_path: Path, provider: LLMProvider, model_id: str, languages: list[str], min_letter_similarity: float
+    pdf_path: Path,
+    provider: LLMProvider,
+    model_id: str,
+    languages: list[str],
+    min_letter_similarity: float,
+    max_pages: int = DEFAULT_MAX_PAGES,
 ) -> CorrectionRun:
     """
     Let an LLM correct the OCR errors of the text layer of `pdf_path` and write the corrections into it in place.
 
     Only pages selected by `pages_needing_review` whose text layer can be patched and is structured in lines are
-    reviewed. An error of a review call stops the review; the corrections collected so far are still applied. A
+    reviewed, and of these only the first `max_pages`. An error of a review call stops the review; the corrections collected so far are still applied. A
     page whose patches cannot be applied is left unchanged, and if saving fails the file stays as it was. These
     problems are reported in `error` and `skipped` of the result; the function does not raise.
 
@@ -293,15 +396,18 @@ async def correct_text_layer(
         provider: The LLM provider.
         model_id: The model to use.
         languages: The document's languages, for the prompt.
-        min_letter_similarity: Minimum `difflib` ratio of the letters of `old` and `new` of a correction.
+        min_letter_similarity: Minimum `difflib` ratio of the letters of `old` and `new` of a correction, and
+            of each changed word.
+        max_pages: The most pages reviewed; further reviewable pages are recorded in `pages_over_limit`.
 
     Returns:
         The applied corrections, the reviewed and skipped pages, the number of corrections not applied and
         the error that stopped the pass, if any.
     """
-    run = CorrectionRun(corrections=[], pages_reviewed=[], skipped=0, error=None)
+    run = CorrectionRun(corrections=[], pages_reviewed=[], skipped=0, error=None, max_pages=max_pages)
     try:
         selected = await asyncio.to_thread(pages_needing_review, pdf_path)
+        run.pages_selected = sorted(set(selected))
         if not selected:
             return run
         layer, reviewable = await asyncio.to_thread(_select_pages, pdf_path, selected, run)
@@ -309,6 +415,11 @@ async def correct_text_layer(
         _log_failure(f"cannot read the text layer of {pdf_path.name}", error, READ_ERRORS)
         run.error = f"cannot read the text layer: {error}"
         return run
+    reviewable, over_limit = reviewable[: max(0, max_pages)], reviewable[max(0, max_pages) :]
+    if over_limit:
+        logger.info(f"{LOG_PREFIX}: {len(over_limit)} page(s) not reviewed: the pass reviews at most {max_pages} pages")
+        run.pages_over_limit = over_limit
+        run.pages_skipped.extend(over_limit)
     if not reviewable:
         return run
 
@@ -324,12 +435,13 @@ async def correct_text_layer(
             run.error = f"LLM review stopped at window {index + 1} of {total}: {error}"
             break
         corrections.extend(found)
+        run.found += len(found)
         run.pages_reviewed.extend(sorted({lines[i].page for i in window}))
         report_progress(PROGRESS_PHASE, index + 1, total, "window")
 
     if corrections:
         try:
-            await asyncio.to_thread(_write_corrections, pdf_path, lines, corrections, run)
+            await asyncio.to_thread(_write_corrections, pdf_path, lines, corrections, min_letter_similarity, run)
         except Exception as error:  # noqa: BLE001 - the temp file and atomic replace keep the original intact
             _log_failure(f"cannot save the corrected text layer of {pdf_path.name}", error, READ_ERRORS)
             run.error = f"cannot save the corrected text layer: {error}"

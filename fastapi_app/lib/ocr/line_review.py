@@ -40,6 +40,11 @@ class ReviewLines:
     windows: list[range]
     """Each window is a range of line indices."""
     languages: list[str]
+    context: list[range] | None = None
+    """
+    `context[i]` is the range of line indices the context lines of window `i` may come from (it contains the
+    window); None: any line.
+    """
 
 
 @dataclass(frozen=True)
@@ -75,15 +80,22 @@ def build_system_prompt() -> str:
 
 
 def build_user_prompt(lines: ReviewLines, window: range, position: tuple[int, int]) -> str:
-    """The document's languages and the window's lines, with up to 5 context lines before and after it."""
+    """
+    The document's languages and the window's lines, with up to 5 context lines before and after it (within
+    `lines.context` of the window, if given). `position` is the 1-based index of the window and the window count;
+    with `lines.context`, `window` must be one of `lines.windows`.
+    """
     texts = lines.texts
     width = line_id_width(len(texts))
 
     def rows(indices: range) -> str:
         return "\n".join(f"{line_id(i, width)} | {texts[i]}".rstrip() for i in indices)
 
-    before = range(max(0, window.start - DEFAULT_CONTEXT_LINES), window.start)
-    after = range(window.stop, min(len(texts), window.stop + DEFAULT_CONTEXT_LINES))
+    bounds = range(len(texts))
+    if lines.context is not None:
+        bounds = lines.context[lines.windows.index(window)]
+    before = range(max(bounds.start, window.start - DEFAULT_CONTEXT_LINES), window.start)
+    after = range(window.stop, min(bounds.stop, window.stop + DEFAULT_CONTEXT_LINES))
     languages = ", ".join(lines.languages) if lines.languages else "unknown"
     index, total = position
     part = f" (part {index} of {total} of the document)" if total > 1 else ""

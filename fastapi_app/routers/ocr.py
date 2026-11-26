@@ -369,21 +369,43 @@ class _LlmCorrection:
 
 async def _correct_with_llm(output_path: Path, llm: _LlmCorrection, languages: list[str]) -> llm_correction.CorrectionRun:
     """Run the LLM correction pass on the OCR output in place; never raises, so that OCR cannot fail because of it."""
-    min_similarity = float(get_config().get(llm_correction.MIN_LETTER_SIMILARITY_KEY, llm_correction.DEFAULT_MIN_LETTER_SIMILARITY))
+    config = get_config()
+    min_similarity = float(config.get(llm_correction.MIN_LETTER_SIMILARITY_KEY, llm_correction.DEFAULT_MIN_LETTER_SIMILARITY))
+    max_pages = int(config.get(llm_correction.MAX_PAGES_KEY, llm_correction.DEFAULT_MAX_PAGES))
     try:
-        return await llm_correction.correct_text_layer(output_path, llm.provider, llm.model_id, languages, min_similarity)
+        return await llm_correction.correct_text_layer(output_path, llm.provider, llm.model_id, languages, min_similarity, max_pages)
     except Exception as e:  # noqa: BLE001 - the OCR result is kept
         logger.exception(f"LLM correction with {llm.provider_id}/{llm.model_id} failed")
         return llm_correction.CorrectionRun(corrections=[], pages_reviewed=[], skipped=0, error=str(e))
 
 
+def _pages(count: int) -> str:
+    return f"{count} {'page' if count == 1 else 'pages'}"
+
+
 def _llm_correction_message(run: llm_correction.CorrectionRun, model_id: str) -> str:
-    """The sentence about the LLM correction pass appended to the message of the OCR run."""
+    """The sentences about the LLM correction pass appended to the message of the OCR run."""
     count = len(run.corrections)
     corrected = f"Corrected {count} OCR {'error' if count == 1 else 'errors'} with {model_id}."
     if run.error:
-        return (corrected + " " if count else "") + f"The LLM correction failed: {run.error}"
-    return corrected if count else "No pages needed correction."
+        message = (corrected + " " if count else "") + f"The LLM correction failed: {run.error}"
+    elif count:
+        message = corrected
+    elif not run.pages_selected:
+        message = "No pages needed correction."
+    elif not run.pages_reviewed:
+        skipped = len(run.pages_skipped) - len(run.pages_over_limit)
+        message = f"{_pages(skipped)} could not be corrected (text layer not patchable or not line-structured)." if skipped else ""
+    elif not run.found:
+        reviewed = len(run.pages_reviewed)
+        message = f"No OCR errors found on {reviewed} reviewed {'page' if reviewed == 1 else 'pages'}."
+    else:
+        message = f"{run.found} {'correction' if run.found == 1 else 'corrections'} could not be applied."
+    if run.pages_over_limit:
+        over = len(run.pages_over_limit)
+        note = f"{_pages(over)} {'was' if over == 1 else 'were'} not reviewed: the correction reviews at most {run.max_pages} pages per run."
+        message = f"{message} {note}" if message else note
+    return message
 
 
 async def _run_job(
