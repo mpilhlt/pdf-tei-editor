@@ -53,6 +53,9 @@ MAX_SINGLE_CHAR_TOKEN_RATIO = 0.5
 MAX_EMPTY_PAGE_RATIO = 0.25
 """Maximum share of pages without text before the text layer counts as incomplete."""
 
+SUSPICIOUS_MARKER_RE = re.compile(r"[^\W\d_][?!'\"‘’“”*>®™%]{1,4}\)")
+"""A letter followed by punctuation and a closing parenthesis: a footnote marker misread by OCR, e.g. "Regel?!?)"."""
+
 _CID_RE = re.compile(r"\(cid:\d+\)|/(?:[Cc]|[Gg]|glyph)\d+\b")
 _INVISIBLE_TEXT_RE = re.compile(rb"(?<![\d.])3\s+Tr\b")
 # A word: optional opening punctuation, letters (with inner hyphens, apostrophes or abbreviation
@@ -134,6 +137,32 @@ def _sample_page_indices(page_count: int) -> list[int]:
     return sorted({int(i * step) for i in range(MAX_PAGES)})
 
 
+def _extract_page_text(page: DictionaryObject, index: int) -> str:
+    """Extract the text of a page; an unreadable page gives an empty string."""
+    try:
+        return page.extract_text() or ""  # type: ignore[attr-defined]
+    except Exception as e:
+        logger.debug(f"Could not extract text of page {index + 1}: {e}")
+        return ""
+
+
+def _text_stats(text: str) -> tuple[str, int, int, list[str], int]:
+    """
+    Compute the character and token statistics of a text.
+
+    Returns:
+        The text without cid placeholders, the number of characters (placeholders count as one
+        character each), the number of garbled characters, the tokens and the number of plausible tokens
+    """
+    cid_count = len(_CID_RE.findall(text))
+    text_without_cids = _CID_RE.sub("", text)
+    chars = [c for c in text_without_cids if not c.isspace()]
+    garbled = sum(1 for c in chars if _is_garbled_char(c)) + cid_count
+    tokens = text_without_cids.split()
+    plausible = sum(1 for t in tokens if _is_plausible_token(t))
+    return text_without_cids, len(chars) + cid_count, garbled, tokens, plausible
+
+
 class _ThreadQuietFilter(logging.Filter):
     """Drops pypdf warnings (e.g. about font encodings) in threads that are analyzing a text layer."""
 
@@ -195,11 +224,7 @@ def _analyze_text_layer(pdf_path: Path | str) -> TextQualityReport:
     pages_without_text = image_only_pages = ocr_layer_pages = 0
     for index in indices:
         page = reader.pages[index]
-        try:
-            text = page.extract_text() or ""
-        except Exception as e:
-            logger.debug(f"Could not extract text of page {index + 1}: {e}")
-            text = ""
+        text = _extract_page_text(page, index)
         visible_chars = sum(1 for c in text if not c.isspace())
         if visible_chars < MIN_PAGE_CHARS:
             pages_without_text += 1
@@ -210,16 +235,11 @@ def _analyze_text_layer(pdf_path: Path | str) -> TextQualityReport:
         texts.append(text)
 
     full_text = "\n".join(texts)
-    cid_count = len(_CID_RE.findall(full_text))
-    text_without_cids = _CID_RE.sub("", full_text)
-    chars = [c for c in text_without_cids if not c.isspace()]
-    char_count = len(chars) + cid_count
-    garbled = sum(1 for c in chars if _is_garbled_char(c)) + cid_count
+    text_without_cids, char_count, garbled, tokens, plausible = _text_stats(full_text)
     garbled_ratio = garbled / char_count if char_count else 0.0
 
-    tokens = text_without_cids.split()
     single_char_ratio = (sum(1 for t in tokens if len(t) == 1) / len(tokens)) if tokens else 0.0
-    plausible_ratio = (sum(1 for t in tokens if _is_plausible_token(t)) / len(tokens)) if tokens else None
+    plausible_ratio = (plausible / len(tokens)) if tokens else None
 
     language: Optional[str] = None
     language_confidence: Optional[float] = None
@@ -276,3 +296,38 @@ def _analyze_text_layer(pdf_path: Path | str) -> TextQualityReport:
         language=language,
         language_confidence=round(language_confidence, 4) if language_confidence is not None else None,
     )
+
+
+def pages_needing_review(pdf_path: Path | str) -> list[int]:
+    """
+    Find the pages of a text layer that are candidates for an LLM correction pass.
+
+    All pages are checked (no sampling). A page qualifies if it has text and either has too many
+    garbled characters, too few plausible tokens, or contains a suspicious footnote marker.
+
+    Args:
+        pdf_path: Path to the PDF
+
+    Returns:
+        The 0-based indices of the pages to review
+
+    Raises:
+        pypdf.errors.PdfReadError: If the file is not a readable PDF
+    """
+    _install_pypdf_filter()
+    _pypdf_filter.local.quiet = True
+    try:
+        reader = PdfReader(str(pdf_path))
+        selected: list[int] = []
+        for index, page in enumerate(reader.pages):
+            text = _extract_page_text(page, index)
+            if sum(1 for c in text if not c.isspace()) < MIN_PAGE_CHARS:
+                continue
+            _, char_count, garbled, tokens, plausible = _text_stats(text)
+            garbled_ratio = garbled / char_count if char_count else 0.0
+            plausible_ratio = plausible / len(tokens) if tokens else 1.0
+            if garbled_ratio > MAX_GARBLED_RATIO or plausible_ratio < MIN_PLAUSIBLE_WORD_RATIO or SUSPICIOUS_MARKER_RE.search(text):
+                selected.append(index)
+        return selected
+    finally:
+        _pypdf_filter.local.quiet = False

@@ -25,6 +25,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
 import pypdfium2 as pdfium
@@ -44,7 +45,7 @@ from fastapi_app.lib.ocr.layout_check import (
     normalize_word,
 )
 from fastapi_app.lib.ocr.registry import OcrEngineRegistry
-from fastapi_app.lib.ocr.text_quality import _CID_RE, _is_plausible_token, analyze_text_layer
+from fastapi_app.lib.ocr.text_quality import _CID_RE, _is_plausible_token, analyze_text_layer, pages_needing_review
 from fastapi_app.routers import ocr as ocr_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -113,6 +114,51 @@ class TestTextQuality(unittest.TestCase):
         for token in ["l1ne", "w,ord", "t)h(e", "ii;:j"]:
             self.assertFalse(_is_plausible_token(token), token)
         self.assertEqual(len(_CID_RE.findall("(cid:12)(cid:3) /C80/C117 normal")), 4)
+
+
+def make_text_pdf(path: Path, page_texts: list[str]) -> None:
+    """Write a PDF with one line of Helvetica text per page (an empty string gives a blank page)."""
+    writer = PdfWriter()
+    font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")})
+    font_ref = writer._add_object(font)
+    for text in page_texts:
+        page = writer.add_blank_page(width=612, height=792)
+        page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})})
+        if text:
+            escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            stream = DecodedStreamObject()
+            stream.set_data(f"BT /F1 12 Tf 50 700 Td ({escaped}) Tj ET".encode("latin-1"))
+            page[NameObject("/Contents")] = writer._add_object(stream)
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
+CLEAN_TEXT = "The court held that the contract was valid and binding on all parties."
+
+
+class TestPagesNeedingReview(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def _review(self, texts: list[str]) -> list[int]:
+        path = self.tmp / "doc.pdf"
+        make_text_pdf(path, texts)
+        return pages_needing_review(path)
+
+    def test_clean_page_not_selected(self):
+        self.assertEqual(self._review([CLEAN_TEXT]), [])
+
+    def test_page_with_misread_marker_selected(self):
+        self.assertEqual(self._review([CLEAN_TEXT, "haftet nach der neuen Regel?!?). Weitere Folgen sind nicht zu erwarten"]), [1])
+
+    def test_garbled_page_selected(self):
+        self.assertEqual(self._review([CLEAN_TEXT, "l1ne w,ord t)h(e ii;:j x9z#q tb3 k8j2 m,n,b vv;; qq!!zz"]), [1])
+
+    def test_page_without_text_not_selected(self):
+        self.assertEqual(self._review(["", "ab"]), [])
 
 
 def word(text: str, left: float, top: float, width: float = 0.05, height: float = 0.01) -> OcrWord:
