@@ -8,6 +8,8 @@ Endpoints:
 - GET  /api/v1/ocr/jobs/{job_id}            - Status and result of an OCR run
 - POST /api/v1/ocr/text-corrections/preview - What writing a TEI's text corrections into the PDF would do
 - POST /api/v1/ocr/text-corrections/apply   - Write a TEI's text corrections into the PDF's OCR text layer
+- POST /api/v1/ocr/llm-review/plan          - Number of page windows of the LLM review of OCR errors
+- POST /api/v1/ocr/llm-review               - LLM review of one page window for OCR errors
 """
 
 import asyncio
@@ -36,6 +38,11 @@ from ..lib.models.models_ocr import (
     OcrProgress,
     OcrRequest,
     OcrResponse,
+    OcrReviewFinding,
+    OcrReviewPlanRequest,
+    OcrReviewPlanResponse,
+    OcrReviewRequest,
+    OcrReviewResponse,
     TextCorrectionItem,
     TextCorrectionsPreview,
     TextCorrectionsRequest,
@@ -43,10 +50,14 @@ from ..lib.models.models_ocr import (
     TextQualityReport,
     UnwritableItem,
 )
+from ..lib.llm import LLMProviderRegistry
+from ..lib.llm.http_errors import llm_http_error
+from ..lib.llm.model_access import check_model_access
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
 from ..lib.ocr.jobs import OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
+from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window
 from ..lib.ocr.progress import ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
@@ -54,10 +65,13 @@ from ..lib.ocr.text_layer import WordPatch, patch_text_layer, read_text_layer
 from ..lib.ocr.text_quality import analyze_text_layer
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
+from ..lib.secrets import MissingSecretError, secret_required_detail
 from ..lib.services.tei_versions import create_tei_version, version_collections
 from ..lib.sse.sse_service import SSEService
 from ..lib.storage.file_storage import FileStorage
+from ..lib.tei.zone_lines import window_range
 from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
+from ..lib.utils.config_utils import get_config
 from ..lib.utils.revision_hash import stamp_revision_hashes
 from ..lib.utils.tei_utils import extract_tei_metadata, update_fileref_in_xml
 from ..lib.utils.xml_utils import apply_entity_encoding_from_config
@@ -712,4 +726,79 @@ async def apply_text_corrections(
         pdf_stable_id=pdf.stable_id,
         archived_stable_id=archived_stable_id,
         corrections=len(plan.corrections),
+    )
+
+
+# ── LLM review of OCR errors ─────────────────────────────────────────
+
+
+def _review_source(tei: FileMetadata, xml: str, scope: str | None) -> OcrReviewSource:
+    """
+    The page windows of the TEI's (unsaved) XML (blocking).
+
+    Raises:
+        HTTPException: 422 if the document is no zone document, has no line layout or the scope is invalid
+    """
+    if tei.variant is None:
+        raise HTTPException(status_code=422, detail="The document has no variant")
+    try:
+        return prepare_source(xml, tei.doc_id, tei.variant, scope)
+    except (MissingLayoutError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@router.post("/llm-review/plan", response_model=OcrReviewPlanResponse)
+async def plan_ocr_llm_review(
+    body: OcrReviewPlanRequest,
+    repo: FileRepository = Depends(get_file_repository),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> OcrReviewPlanResponse:
+    """Report how many page windows `/ocr/llm-review` needs for the given document content (no LLM call)."""
+    tei = _get_tei(repo, body.stable_id, current_user)
+    source = await asyncio.to_thread(_review_source, tei, body.xml, body.scope)
+    return OcrReviewPlanResponse(window_count=len(source.windows))
+
+
+@router.post("/llm-review", response_model=OcrReviewResponse)
+async def ocr_llm_review(
+    body: OcrReviewRequest,
+    repo: FileRepository = Depends(get_file_repository),
+    current_user: dict[str, Any] = Depends(require_authenticated_user),
+) -> OcrReviewResponse:
+    """
+    Review one page window of the given (possibly unsaved) content of a zone document for OCR
+    errors with the given provider and model. The response reports how many windows the document
+    has; the client requests each `window_index` in turn. Refused with 422 if the document has no
+    line layout or is no zone document, 404 for an unknown provider, 428 if the provider needs a
+    secret of the user, 403 if the user may not use the model.
+    """
+    tei = _get_tei(repo, body.stable_id, current_user)
+    try:
+        provider = LLMProviderRegistry.get_instance().get_provider_for_user(body.provider_id, current_user["username"])
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except MissingSecretError as e:
+        raise HTTPException(status_code=428, detail=secret_required_detail(e)) from e
+
+    source = await asyncio.to_thread(_review_source, tei, body.xml, body.scope)
+    if not 0 <= body.window_index < len(source.windows):
+        raise HTTPException(status_code=422, detail=f"Window {body.window_index} does not exist; the document has {len(source.windows)} windows")
+    min_similarity = float(get_config().get(MIN_LETTER_SIMILARITY_KEY, DEFAULT_MIN_LETTER_SIMILARITY))
+    try:
+        # may list the provider's models, so its connection errors are handled below
+        check_model_access(provider, body.model_id, current_user)
+        findings, window_count, discarded = await review_window(source, body.window_index, provider, body.model_id, min_similarity)
+    except Exception as e:
+        http_error = llm_http_error(e, body.provider_id)
+        if http_error is None:
+            raise
+        raise http_error from e
+
+    start, end = window_range(source.doc, source.xml, source.windows[body.window_index])
+    return OcrReviewResponse(
+        findings=[OcrReviewFinding(**f) for f in findings],
+        window_count=window_count,
+        discarded=discarded,
+        window_start=start,
+        window_end=end,
     )

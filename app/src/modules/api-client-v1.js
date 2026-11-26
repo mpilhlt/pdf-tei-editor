@@ -520,6 +520,50 @@
  */
 
 /**
+ * Request for the number of page windows of the LLM review of OCR errors
+ * @typedef {Object} OcrReviewPlanRequest
+ * @property {string} stable_id - stable_id of the TEI document (zone document with a line layout)
+ * @property {string} xml - Current, possibly unsaved XML content of the document
+ * @property {string|null=} scope - Raw XML of a node of `xml` to review instead of the whole text
+ */
+
+/**
+ * The number of page windows the review needs
+ * @typedef {Object} OcrReviewPlanResponse
+ * @property {number} window_count - Number of windows; request each `window_index` below it in turn
+ */
+
+/**
+ * Request to review one page window of a TEI document for OCR errors with an LLM
+ * @typedef {Object} OcrReviewRequest
+ * @property {string} stable_id - stable_id of the TEI document (zone document with a line layout)
+ * @property {string} xml - Current, possibly unsaved XML content of the document
+ * @property {string} provider_id - Id of the LLM provider
+ * @property {string} model_id - Id of the model
+ * @property {number=} window_index - Index of the page window to review (0-based, default 0)
+ * @property {string|null=} scope - Raw XML of a node of `xml` to review instead of the whole text
+ */
+
+/**
+ * A proposed correction: replace `old` (unique in the XML) by `new`
+ * @typedef {Object} OcrReviewFinding
+ * @property {number} id - Id of the finding, unique within its window
+ * @property {string} old - Exact text of the XML to replace
+ * @property {string} new - Replacement
+ * @property {string} rationale - Why the text is an OCR error
+ */
+
+/**
+ * The findings of one page window
+ * @typedef {Object} OcrReviewResponse
+ * @property {OcrReviewFinding[]} findings - Proposed corrections
+ * @property {number} window_count - Number of windows of the document
+ * @property {number} discarded - Proposals of the model that were dropped as implausible or not applicable
+ * @property {number|null=} window_start - Start of the window's text in `xml` (UTF-16 code units)
+ * @property {number|null=} window_end - End of the window's text in `xml` (UTF-16 code units)
+ */
+
+/**
  * A word of the text layer that is replaced by the TEI's word
  * @typedef {Object} TextCorrectionItem
  * @property {number} page - Page index (0-based)
@@ -2466,6 +2510,31 @@ export class ApiClientV1 {
    */
   async ocrTextCorrectionsPreview(requestBody) {
     const endpoint = `/ocr/text-corrections/preview`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Number of page windows the LLM review of OCR errors needs for the given document content.
+   * Rejected with 422 if the document has no line layout or is no zone document.
+   *
+   * @param {OcrReviewPlanRequest} requestBody
+   * @returns {Promise<OcrReviewPlanResponse>}
+   */
+  async ocrLlmReviewPlan(requestBody) {
+    const endpoint = `/ocr/llm-review/plan`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Review one page window of a zone document for OCR errors with an LLM. Rejected with 422 (no
+   * line layout, invalid window), 404 (unknown provider), 428 (the provider needs a secret),
+   * 403 (model not permitted), 429 (rate limit) or 502 (provider failure, unusable answer).
+   *
+   * @param {OcrReviewRequest} requestBody
+   * @returns {Promise<OcrReviewResponse>}
+   */
+  async ocrLlmReview(requestBody) {
+    const endpoint = `/ocr/llm-review`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

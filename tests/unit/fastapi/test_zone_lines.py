@@ -31,6 +31,8 @@ from fastapi_app.lib.tei.zone_lines import (
     pages_of,
     parse_answer,
     parse_line_answer,
+    window_lines,
+    window_range,
     zone_labels,
 )
 
@@ -315,6 +317,24 @@ class TestPageBreaks(unittest.TestCase):
     def test_prefixed_text(self):
         xml = SAMPLE.replace('<TEI xmlns="http://www.tei-c.org/ns/1.0">', '<tei:TEI xmlns:tei="http://www.tei-c.org/ns/1.0">').replace("</TEI>", "</tei:TEI>").replace('<text xml:lang="en">', '<tei:text xml:lang="en">').replace("</text>", "</tei:text>")
         self.assertIn('<tei:pb n="1"/>', insert_page_breaks(xml, LABELS, LAYOUT["pages"])[0])
+
+
+class TestPageWindowHelpers(unittest.TestCase):
+    def test_window_lines_covers_the_lines_of_its_pages(self):
+        xml = "<TEI><text><body>One <lb/>Two <lb/>Three <lb/>Four <lb/>Five <lb/>Six <lb/></body></text></TEI>"
+        doc = ZoneDocument(xml, LABELS)
+        pages = pages_of(doc, [0, 0, 1, 1, 2, 2])
+        self.assertEqual(list(window_lines(pages[1:3])), [2, 3, 4, 5])
+
+    def test_window_range_counts_non_bmp_characters_as_two_units(self):
+        prefix = "<TEI><text><body>\U0001F600 Ab <lb/>"
+        xml = prefix + "Cd <lb/>Ef <lb/></body></text></TEI>"
+        doc = ZoneDocument(xml, LABELS)
+        pages = pages_of(doc, [0, 1, 2])
+        start, end = window_range(doc, xml, pages[1:2])
+        # the emoji is one code point but two UTF-16 code units
+        self.assertEqual(start, 28)
+        self.assertEqual(end, start + len("Cd <lb/>".encode("utf-16-le")) // 2)
 
 
 if __name__ == "__main__":

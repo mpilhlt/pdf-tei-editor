@@ -56,6 +56,9 @@ from fastapi_app.lib.extraction import (
     ExtractorUnavailableError,
     LLMBaseExtractor,
 )
+from fastapi_app.lib.llm.http_errors import llm_http_error
+from fastapi_app.lib.llm.json_response import UnusableResponseError, extract_json_list
+from fastapi_app.lib.llm.review_call import complete_with_retry
 from fastapi_app.lib.llm import (
     LLMImage,
     LLMModel,
@@ -120,6 +123,10 @@ __all__ = [
     "GcContext",
     "GcResult",
     "LLMBaseExtractor",
+    "UnusableResponseError",
+    "complete_with_retry",
+    "extract_json_list",
+    "llm_http_error",
     "LLMImage",
     "LLMModel",
     "LLMProvider",

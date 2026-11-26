@@ -29,6 +29,7 @@ import {
   ExtractionPlugin,
   OcrPlugin,
   TextCorrectionsPlugin,
+  OcrReviewPlugin,
   FiledataPlugin,
   FileSelectionDrawerPlugin,
   FileSelectionPlugin,
@@ -119,6 +120,7 @@ const plugins = [
   ExtractionPlugin,
   ToolsPlugin,
   TextCorrectionsPlugin,  // Tools menu — OCR section: write text corrections to the PDF
+  OcrReviewPlugin,        // Tools menu — OCR section: find OCR errors with an LLM
   InferenceSettingsPlugin, // Tools menu — Inference section (default LLM model picker)
   DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
   TeiValidationPlugin,
