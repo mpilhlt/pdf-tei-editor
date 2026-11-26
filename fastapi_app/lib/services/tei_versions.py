@@ -150,7 +150,7 @@ async def create_tei_version(
     pdf_file = file_repo.get_pdf_for_document(doc_id)
 
     # Validate collection access before creating new version (may assign "_inbox" if empty)
-    doc_collections = version_collections(file_repo, doc_id, user, db_dir, logger_inst)
+    doc_collections = validate_collection_access(user, pdf_file.doc_collections if pdf_file else [], db_dir, logger_inst)
 
     # Emit document.save event before saving
     await get_event_bus().emit("document.save",
