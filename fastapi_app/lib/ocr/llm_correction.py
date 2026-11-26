@@ -12,7 +12,6 @@ Pure module: no FastAPI imports.
 from __future__ import annotations
 
 import asyncio
-import difflib
 import logging
 import os
 import re
@@ -62,9 +61,15 @@ REASON_NOT_WHOLE_WORDS = "not whole words"
 REASON_NOT_LINES = f"text not structured in lines (a text object with more than {MAX_LINE_WORDS} words)"
 REASON_LETTERS = "letters differ too much"
 REASON_NUMBER = "number change outside a footnote marker"
+REASON_FEW_LETTERS = "too few letters to check the change"
 
-MARKER_WORD = re.compile(r"^[^\W\d_]*\d{1,3}\)[.,;:]?$")
-"""A word that ends in a footnote marker: letters (optional), 1 to 3 digits, `)` and optional punctuation."""
+MARKER_WORD = re.compile(r"^([^\W\d_]*)(\d{1,3})([)\].,;:]*)$")
+"""
+A word with a footnote marker: optional letters, 1 to 3 digits, and optional closing brackets and punctuation,
+e.g. "tut312", "Regel12)." or "12".
+"""
+MAX_MISREAD_MARKER = 4
+"""The most characters OCR reads a footnote marker as."""
 
 PROGRESS_PHASE = "Correcting OCR errors"
 
@@ -180,19 +185,19 @@ def _word_offsets(line: LayerLine) -> list[int]:
 
 def _marker_change(old: str, new: str) -> bool:
     """
-    Whether the change from `old` to `new` is confined to a footnote marker: `new` matches `MARKER_WORD`, or
-    each change replaces (or inserts) characters that are not letters or digits by digits right before `)`.
+    Whether the change from `old` to `new` restores a footnote marker that OCR misread, judged by its shape
+    (with or without a bracket): `new` is letters W, 1-3 digits and trailing punctuation P (see `MARKER_WORD`),
+    and `old` is W, 1-4 characters that are neither letters, digits nor spaces, and P. W may be empty for a
+    standalone marker. E.g. "tut?!?" -> "tut312", "würde‘." -> "würde165.", "?!" -> "12", "*," -> "7,".
     """
-    if MARKER_WORD.match(new):
-        return True
-    changes = [op for op in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes() if op[0] != "equal"]
-    return bool(changes) and all(
-        tag in ("replace", "insert")
-        and not any(char.isalnum() for char in old[i1:i2])
-        and new[j1:j2].isdecimal()
-        and new[j2 : j2 + 1] == ")"
-        for tag, i1, i2, j1, j2 in changes
-    )
+    match = MARKER_WORD.match(new)
+    if match is None:
+        return False
+    word, _, end = match.groups()
+    if not old.startswith(word) or not old.endswith(end):
+        return False
+    misread = old[len(word) : len(old) - len(end)]
+    return 1 <= len(misread) <= MAX_MISREAD_MARKER and not any(c.isalnum() or c.isspace() for c in misread)
 
 
 def _implausible_word(old: str, new: str, min_letter_similarity: float) -> str | None:
@@ -203,7 +208,9 @@ def _implausible_word(old: str, new: str, min_letter_similarity: float) -> str |
     """
     letters = [sum(char.isalpha() for char in text.casefold()) for text in (old, new)]
     if min(letters) < MIN_LETTERS:
-        return None if _marker_change(old, new) else REASON_NUMBER
+        if _marker_change(old, new):
+            return None
+        return REASON_NUMBER if any(c.isdigit() for c in old + new) else REASON_FEW_LETTERS
     return None if letters_similar(old, new, min_letter_similarity) else REASON_LETTERS
 
 

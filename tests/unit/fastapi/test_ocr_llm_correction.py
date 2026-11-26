@@ -20,9 +20,11 @@ from fastapi_app.lib.llm.base import LLMProviderError
 from fastapi_app.lib.ocr import llm_correction
 from fastapi_app.lib.ocr.line_review import LineCorrection, build_user_prompt, letters_similar
 from fastapi_app.lib.ocr.llm_correction import (
+    REASON_FEW_LETTERS,
     REASON_LETTERS,
     REASON_NUMBER,
     CorrectionRun,
+    _marker_change,
     correct_text_layer,
     patches_from_corrections,
     review_lines_for_pages,
@@ -391,16 +393,40 @@ class PatchesFromCorrectionsTest(unittest.TestCase):
         self.assertFalse(letters_similar("der", "die", 0.7))
         self.assert_dropped(old, new, REASON_LETTERS)
 
+    def test_marker_shapes_with_and_without_bracket(self) -> None:
+        for old, new in [
+            ("tut?!?", "tut312"),
+            ("tut?!?)", "tut312)"),
+            ('stellen?">).', "stellen313)."),
+            ('stellen?">.', "stellen313."),
+            ("würde‘.", "würde165."),
+            ("würde‘).", "würde165)."),
+            ("Regel’).", "Regel12)."),
+            ("Regel’", "Regel12"),
+            ("?!", "12"),
+            ("?!?)", "312)"),
+            ("*,", "7,"),
+        ]:
+            self.assertTrue(_marker_change(old, new), (old, new))
+        for old, new in [("1920", "1926"), ("12", "13"), ("3a", "3b"), ("Regel", "Regel12"), ("tut?!?!?", "tut3"),
+                         ("(’)", "(1)"), ("ab’).", "ac1)."), ("?!", "1234")]:
+            self.assertFalse(_marker_change(old, new), (old, new))
+
     def test_marker_changes_of_words_without_letters_kept(self) -> None:
         self.assert_kept("?!?)", "312)", "siehe ?!?) unten")
-        self.assert_kept("Regel’).", "Regel12).")
+        self.assert_kept("?!", "12", "siehe ?! unten")
+        self.assert_kept("*,", "7,", "Text *, mehr")
         self.assert_kept("ab’).", "ab12).")
-        self.assert_kept("(’)", "(1)")
+        self.assert_kept("ab’", "ab1")
+        self.assert_kept("Regel’).", "Regel12).")
+        self.assert_kept("tut?!?", "tut312")
 
     def test_number_changes_outside_markers_dropped(self) -> None:
         self.assert_dropped("1920", "1926", REASON_NUMBER, "im Jahre 1920 erlassen")
         self.assert_dropped("S. 12", "S. 13", REASON_NUMBER, "vgl. S. 12 oben")
-        self.assert_dropped("zu", "zur", REASON_NUMBER, "zu finden")
+        self.assert_dropped("12", "13", REASON_NUMBER, "Fußnote 12 oben")
+        self.assert_dropped("3a", "3b", REASON_NUMBER, "Art. 3a GG")
+        self.assert_dropped("zu", "zur", REASON_FEW_LETTERS, "zu finden")
 
     def test_patches_apply_to_the_fixture(self) -> None:
         patches, _ = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")], 0.7)

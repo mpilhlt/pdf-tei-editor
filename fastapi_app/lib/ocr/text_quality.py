@@ -53,8 +53,40 @@ MAX_SINGLE_CHAR_TOKEN_RATIO = 0.5
 MAX_EMPTY_PAGE_RATIO = 0.25
 """Maximum share of pages without text before the text layer counts as incomplete."""
 
-SUSPICIOUS_MARKER_RE = re.compile(r"[^\W\d_][?!'\"‘’“”*>®™%]{1,4}\)")
-"""A letter followed by punctuation and a closing parenthesis: a footnote marker misread by OCR, e.g. "Regel?!?)"."""
+MARKER_GARBAGE = "?!'\"‘’“”*>®™%^°"
+"""Characters that OCR reads a superscript footnote number as."""
+_G = re.escape(MARKER_GARBAGE)
+_SINGLE_G = re.escape("®™*>%^°")
+_TAIL_END = r"\)?[.,;:]?(?=\s|$)"  # optional closing bracket and punctuation at the end of the word
+_BRACKET_MARKER_RE = re.compile(rf"[^\W\d_][{_G}]{{1,4}}\)")
+"""A letter followed by 1-4 marker characters and a closing bracket, e.g. "Regel’)."."""
+_WORD_TAIL_RE = re.compile(rf"[^\W\d_]([{_G}]{{2,4}}){_TAIL_END}")
+"""A word ending in 2-4 marker characters, e.g. "tut?!?" or "sei!™."."""
+_WORD_SINGLE_RE = re.compile(rf"[^\W\d_][{_SINGLE_G}]{_TAIL_END}")
+"""A word ending in a single character that ordinary prose does not put after a word, e.g. "Regel®"."""
+_STANDALONE_RE = re.compile(rf"(?:^|(?<=\s))[{_G}]{{2,4}}{_TAIL_END}")
+"""A token of 2-4 marker characters, e.g. "?!"."""
+_PROSE_TAIL_RE = re.compile(r"^[?!][\"'‘’“”]$")
+"""Sentence punctuation and a closing quote, e.g. „Was nun?“: ordinary prose, not a marker."""
+
+
+def has_suspicious_marker(text: str) -> bool:
+    """
+    Whether `text` contains a footnote marker that OCR misread as punctuation, with or without a closing
+    bracket: a word ending in a marker character and `)` (unless the bracket closes a parenthesis opened
+    earlier in the line, as in "(siehe oben!)"), a word ending in 2-4 marker characters (but not in
+    sentence punctuation and a closing quote, as in „Was nun?“), a word ending in one of `®™*>%^°`, or a
+    standalone token of 2-4 marker characters. A single quote or apostrophe after a word ("Peter’s",
+    „Wort“.) does not count.
+    """
+    for match in _BRACKET_MARKER_RE.finditer(text):
+        line_start = text.rfind("\n", 0, match.start()) + 1
+        before = text[line_start : match.start()]
+        if before.rfind("(") <= before.rfind(")"):  # the bracket does not close an open parenthesis
+            return True
+    if any(not _PROSE_TAIL_RE.match(m.group(1)) for m in _WORD_TAIL_RE.finditer(text)):
+        return True
+    return bool(_WORD_SINGLE_RE.search(text) or _STANDALONE_RE.search(text))
 
 _CID_RE = re.compile(r"\(cid:\d+\)|/(?:[Cc]|[Gg]|glyph)\d+\b")
 _INVISIBLE_TEXT_RE = re.compile(rb"(?<![\d.])3\s+Tr\b")
@@ -326,7 +358,7 @@ def pages_needing_review(pdf_path: Path | str) -> list[int]:
             _, char_count, garbled, tokens, plausible = _text_stats(text)
             garbled_ratio = garbled / char_count if char_count else 0.0
             plausible_ratio = plausible / len(tokens) if tokens else 1.0
-            if garbled_ratio > MAX_GARBLED_RATIO or plausible_ratio < MIN_PLAUSIBLE_WORD_RATIO or SUSPICIOUS_MARKER_RE.search(text):
+            if garbled_ratio > MAX_GARBLED_RATIO or plausible_ratio < MIN_PLAUSIBLE_WORD_RATIO or has_suspicious_marker(text):
                 selected.append(index)
         return selected
     finally:

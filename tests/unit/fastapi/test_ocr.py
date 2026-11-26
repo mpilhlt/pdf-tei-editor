@@ -45,7 +45,7 @@ from fastapi_app.lib.ocr.layout_check import (
     normalize_word,
 )
 from fastapi_app.lib.ocr.registry import OcrEngineRegistry
-from fastapi_app.lib.ocr.text_quality import _CID_RE, _is_plausible_token, analyze_text_layer, pages_needing_review
+from fastapi_app.lib.ocr.text_quality import _CID_RE, _is_plausible_token, analyze_text_layer, has_suspicious_marker, pages_needing_review
 from fastapi_app.routers import ocr as ocr_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -153,6 +153,27 @@ class TestPagesNeedingReview(unittest.TestCase):
 
     def test_page_with_misread_marker_selected(self):
         self.assertEqual(self._review([CLEAN_TEXT, "haftet nach der neuen Regel?!?). Weitere Folgen sind nicht zu erwarten"]), [1])
+
+    def test_page_with_misread_marker_without_bracket_selected(self):
+        self.assertEqual(self._review([CLEAN_TEXT, "haftet nach der neuen Regel?!? Weitere Folgen sind nicht zu erwarten"]), [1])
+
+    def test_misread_markers_flagged(self):
+        markers = [
+            "tut?!?)", "tut?'?)", 'stellen?">)', "lassen‘'”).", "kénne!).", "sei!™).", "würde‘).", "werden“!%).",
+            "Regel’).", "persönlich'‘).", "vorsieht'*).",
+            "tut?!?", "sei!™.", "werden“!%", "lassen‘'”.", "Regel®", "vorsieht*", "siehe ?! unten",
+        ]
+        for marker in markers:
+            self.assertTrue(has_suspicious_marker(f"Das {marker} und mehr"), marker)
+
+    def test_ordinary_prose_not_flagged(self):
+        prose = [
+            "sei!", "(siehe oben!)", "Peter’s", "„Wort“.", "Regel’.", "kénne!.", "„Was nun?“", "sagte „Nein!“, und",
+            "(vgl. „Wort“)", "Er sagte: 'Ja'.", "50 % der Fälle", "um 20° gedreht",
+        ]
+        for text in prose:
+            self.assertFalse(has_suspicious_marker(f"Das {text} und mehr"), text)
+        self.assertFalse(has_suspicious_marker(CLEAN_TEXT))
 
     def test_garbled_page_selected(self):
         self.assertEqual(self._review([CLEAN_TEXT, "l1ne w,ord t)h(e ii;:j x9z#q tb3 k8j2 m,n,b vv;; qq!!zz"]), [1])
