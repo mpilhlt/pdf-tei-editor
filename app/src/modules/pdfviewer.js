@@ -10,6 +10,9 @@ import { buildPageModel, findBestMatch } from './pdf-text-matcher.js';
 /** Maximum number of cached search results per document */
 const SEARCH_CACHE_SIZE = 500;
 
+/** Size in bytes of the range requests in which PDF.js loads a PDF (1 MiB) */
+const PDF_RANGE_CHUNK_SIZE = 1024 * 1024;
+
 /**
  * @import { MatchResult, PageModel, TextItem } from './pdf-text-matcher.js'
  */
@@ -332,8 +335,11 @@ export class PDFJSViewer {
         // The asset URLs are required: PDF.js decodes CCITT and JBIG2 images (scanned
         // pages) with jbig2.wasm and converts ICC colours with qcms_bg.wasm, and without
         // `wasmUrl` such images are silently skipped, leaving the page blank
+        // `rangeChunkSize`: PDF.js loads the file in range requests of this size (default 64 KiB,
+        // i.e. about 80 requests for a 5 MB PDF, each with authentication and a database lookup)
         const loadingTask = this.pdfjsLib.getDocument({
           url: pdfPath,
+          rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
           wasmUrl: `${this.pdfjsBase}wasm/`,
           iccUrl: `${this.pdfjsBase}iccs/`,
           cMapUrl: `${this.pdfjsBase}cmaps/`,
