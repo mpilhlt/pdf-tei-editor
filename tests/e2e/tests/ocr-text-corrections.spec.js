@@ -148,7 +148,6 @@ test.describe('Text corrections', () => {
         json: {
           corrections: [{ page: 0, line: 3, old: 'teh', new: 'the' }],
           unwritable: [],
-          affected_files: [],
           reason: null
         }
       }));
@@ -156,7 +155,7 @@ test.describe('Text corrections', () => {
       await page.route('**/api/v1/ocr/text-corrections/apply', async route => {
         await new Promise(resolve => setTimeout(resolve, 1000));
         await route.fulfill({
-          json: { xml: correctedXml, tei_stable_id: newVersionId, pdf_stable_id: pdfId, archived_stable_id: null, corrections: 1 }
+          json: { xml: correctedXml, tei_stable_id: newVersionId, pdf_stable_id: pdfId, source_pdf_stable_id: pdfId, corrections: 1 }
         });
       });
 
