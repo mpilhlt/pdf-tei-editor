@@ -121,7 +121,7 @@ async def create_tei_version(
         status: Status of the last revision
         last_revision: Timestamp of the last revision
         parent_stable_id: stable_id of the version it was copied from (lineage), if any
-        pdf_stable_id: stable_id of the archived PDF it is based on, None for the current PDF
+        pdf_stable_id: stable_id of the PDF it is attached to; None for the canonical PDF of the document
         user: The user creating the version
         session_id: Session that gets the lock of the version
         base_url: Base URL of the server, for the `document.save` event
@@ -156,7 +156,7 @@ async def create_tei_version(
     await get_event_bus().emit("document.save",
         file_id=None,  # Will be set after creation
         doc_id=doc_id,
-        pdf_stable_id=pdf_file.stable_id if pdf_file else "",
+        pdf_stable_id=pdf_stable_id or (pdf_file.stable_id if pdf_file else ""),
         xml_content=xml_string,
         label=label,
         status=status,

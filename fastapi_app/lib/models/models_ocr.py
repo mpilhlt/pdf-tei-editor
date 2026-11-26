@@ -71,9 +71,9 @@ class OcrLlmCorrection(BaseModel):
 class OcrResponse(BaseModel):
     """Result of an OCR run."""
 
-    stable_id: str = Field(..., description="stable_id of the PDF (unchanged)")
-    changed: bool = Field(..., description="Whether the PDF content changed")
-    archived_stable_id: Optional[str] = Field(None, description="stable_id of the archived original PDF, if versions were made from it (they stay linked to it)")
+    stable_id: str = Field(..., description="stable_id of the PDF that holds the result: a new PDF of the document if the content changed (#944), else the source")
+    source_stable_id: str = Field(..., description="stable_id of the PDF the run started from; it is not changed")
+    changed: bool = Field(..., description="Whether a new PDF was created")
     message: Optional[str] = Field(None, description="Message of the engine, if any")
     method: Optional[str] = Field(None, description="How the text layer was created ('skip', 'redo', 'force', 'vectorize'), if the engine reports it")
     fallback_reason: Optional[str] = Field(None, description="Why the engine fell back from the preferred method, if it did")
@@ -109,19 +109,11 @@ class UnwritableItem(BaseModel):
     reason: str = Field(..., description="Why the difference cannot be written")
 
 
-class AffectedFile(BaseModel):
-    """Another TEI file of the document that stays linked to the old PDF."""
-
-    stable_id: str = Field(..., description="stable_id of the TEI file")
-    label: str = Field(..., description="Label of the file")
-
-
 class TextCorrectionsPreview(BaseModel):
     """What writing the text corrections would do, or why it is not possible."""
 
     corrections: list[TextCorrectionItem] = Field(default_factory=list, description="Corrections that would be written")
     unwritable: list[UnwritableItem] = Field(default_factory=list, description="Differences that cannot be written")
-    affected_files: list[AffectedFile] = Field(default_factory=list, description="Other TEI files of the document that would stay linked to the old PDF")
     reason: Optional[str] = Field(default=None, description="Why the corrections cannot be written; set means the action is not possible")
 
 
@@ -129,9 +121,9 @@ class TextCorrectionsResult(BaseModel):
     """Result of writing the text corrections into the PDF."""
 
     xml: str = Field(..., description="The TEI document updated for the corrected PDF, as stored in the new version")
-    tei_stable_id: str = Field(..., description="stable_id of the new version of the document, which is based on the corrected PDF")
-    pdf_stable_id: str = Field(..., description="stable_id of the PDF (unchanged)")
-    archived_stable_id: Optional[str] = Field(None, description="stable_id of the archived old PDF, if versions were made from it")
+    tei_stable_id: str = Field(..., description="stable_id of the new version of the document, which is attached to the corrected PDF")
+    pdf_stable_id: str = Field(..., description="stable_id of the corrected PDF, a new PDF of the document (#944)")
+    source_pdf_stable_id: str = Field(..., description="stable_id of the PDF the corrections were derived from; it is not changed")
     corrections: int = Field(..., description="Number of corrections written")
 
 

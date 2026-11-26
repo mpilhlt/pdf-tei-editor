@@ -885,8 +885,10 @@ class FileRepository:
     def get_unreferenced_pdfs(self) -> List[FileMetadata]:
         """
         Get the non-deleted PDFs that no file record references through `pdf_stable_id` and that
-        are not the canonical PDF of their document (garbage-collection candidates). Soft-deleted
-        versions still count: they can be restored, so their PDF goes only once they are purged.
+        are neither the canonical nor the most recent PDF of their document (garbage-collection
+        candidates). The most recent PDF is kept so that the result of a text recognition run that
+        no version was made from yet is not lost. Soft-deleted versions still count: they can be
+        restored, so their PDF goes only once they are purged.
 
         Returns:
             List of FileMetadata models
@@ -896,6 +898,9 @@ class FileRepository:
             WHERE pdf.file_type = 'pdf'
               AND pdf.deleted = 0
               AND pdf.stable_id != {canonical_pdf_sql('pdf.doc_id')}
+              AND pdf.stable_id != (SELECT latest.stable_id FROM files latest
+                                    WHERE latest.doc_id = pdf.doc_id AND latest.file_type = 'pdf' AND latest.deleted = 0
+                                    ORDER BY latest.created_at DESC, latest.rowid DESC LIMIT 1)
               AND NOT EXISTS (SELECT 1 FROM files ref WHERE ref.pdf_stable_id = pdf.stable_id)
         """
         with self.db.get_connection() as conn:

@@ -85,7 +85,7 @@ class _RouteTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         make_image_only_pdf(self.tmp / "oldhash.pdf")
-        self.pdf = SimpleNamespace(id="oldhash", stable_id="pdf1", file_type="pdf", file_metadata={"text_corrections": [{"source": "earlier"}]}, superseded_by=None)
+        self.pdf = SimpleNamespace(id="oldhash", stable_id="pdf1", file_type="pdf", file_metadata={"text_corrections": [{"source": "earlier"}]})
         self.repo = FakeRepo({"pdf1": self.pdf})
         self.storage = FakeStorage(self.tmp)
         self.engine = FixtureEngine()
@@ -244,7 +244,7 @@ class TestStandaloneLlmCorrectionRoute(_RouteTestCase):
     def setUp(self) -> None:
         super().setUp()
         shutil.copy(FIXTURE, self.tmp / "ocrhash.pdf")
-        self.ocr_pdf = SimpleNamespace(id="ocrhash", stable_id="pdf2", file_type="pdf", superseded_by=None, file_metadata={
+        self.ocr_pdf = SimpleNamespace(id="ocrhash", stable_id="pdf2", file_type="pdf", file_metadata={
             "ocr": {"engine": "fake", "languages": ["de"], "applied_at": "2026-01-01T00:00:00+00:00", "applied_by": "alice"},
             "text_corrections": [{"source": "earlier"}],
         })
