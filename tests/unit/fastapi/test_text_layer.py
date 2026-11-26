@@ -19,7 +19,7 @@ from fastapi_app.lib.ocr.text_layer import LayerPage, LayerWord, WordPatch, pars
 from tests.unit.fastapi.test_ocr import make_image_only_pdf
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-FIXTURE = PROJECT_ROOT / "fastapi_app" / "plugins" / "ocrmypdf" / "tests" / "fixtures" / "ocr-text-layer.pdf"
+FIXTURE = PROJECT_ROOT / "tests" / "unit" / "fastapi" / "fixtures" / "ocr-text-layer.pdf"
 
 
 def make_digital_pdf(path: Path) -> None:

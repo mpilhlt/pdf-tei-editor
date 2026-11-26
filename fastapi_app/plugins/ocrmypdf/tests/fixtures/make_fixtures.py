@@ -170,5 +170,6 @@ if __name__ == "__main__":
     make_misplaced_text(HERE / "misplaced-text.pdf")
     make_footnote_markers(HERE / "footnote-markers.pdf")
     make_footnote_markers_plain(HERE / "footnote-markers-plain.pdf")
-    make_ocr_text_layer(HERE / "ocr-text-layer.pdf")
+    # Used by core tests, so it lives outside the plugin directory
+    make_ocr_text_layer(HERE.parents[4] / "tests" / "unit" / "fastapi" / "fixtures" / "ocr-text-layer.pdf")
     print("Fixtures written to", HERE)
