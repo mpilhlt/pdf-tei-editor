@@ -11,7 +11,7 @@ Key features:
 - Proper MIME types
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pathlib import Path
 from typing import Optional
@@ -31,9 +31,28 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/files", tags=["files"])
 
 
+def is_initial_request(range_header: str | None) -> bool:
+    """
+    Returns whether a request fetches a file from its beginning, i.e. has no `Range` header or a range that starts at byte 0. PDF.js loads a PDF in many range requests (chunks of 64 KiB by default), which are logged at debug level only.
+
+    Args:
+        range_header: Value of the `Range` request header, if any
+
+    Returns:
+        True if the request has no range or the range starts at the first byte
+    """
+    if not range_header:
+        return True
+    spec = range_header.strip().lower()
+    if not spec.startswith("bytes="):
+        return True
+    return spec[len("bytes="):].lstrip().startswith("0-")
+
+
 @router.get("/{document_id}")
 def serve_file_by_id(
     document_id: str,
+    request: Request,
     repo: FileRepository = Depends(get_file_repository),
     storage: FileStorage = Depends(get_file_storage),
     current_user: Optional[dict] = Depends(get_current_user)
@@ -46,6 +65,7 @@ def serve_file_by_id(
 
     Args:
         document_id: stable_id or full hash (64 chars)
+        request: The request, whose `Range` header decides the log level
         repo: File repository (injected)
         storage: File storage (injected)
         current_user: Current user dict (injected)
@@ -120,7 +140,11 @@ def serve_file_by_id(
     }
     mime_type = mime_type_map.get(file_metadata.file_type, 'application/octet-stream')
 
-    logger.info(f"Serving file {document_id[:8]}... ({file_metadata.file_type})")
+    range_header = request.headers.get("range")
+    if is_initial_request(range_header):
+        logger.info(f"Serving file {document_id[:8]}... ({file_metadata.file_type})")
+    else:
+        logger.debug(f"Serving file {document_id[:8]}... ({file_metadata.file_type}), range {range_header}")
 
     # Set cache control headers to prevent browser caching of mutable content
     # This ensures users always get the latest version after saving changes
