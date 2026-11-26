@@ -739,13 +739,12 @@ class ExtractionPlugin extends Plugin {
     const settingsFor = engine => chosen?.engine === engine.id ? chosen.settings : ocrPlugin.getSettings(engine, hints())
 
     const updateLlmNote = () => {
-      const note = ocrPlugin.getLlmCorrectionNote()
+      const note = section.applyOcr.checked ? ocrPlugin.getLlmCorrectionNote() : ''
       section.llmNote.textContent = note
       section.llmNote.style.display = note ? '' : 'none'
     }
 
     const render = () => {
-      updateLlmNote()
       // Until the engine list is known, a placeholder shows that text recognition will be offered
       loading.style.display = wanted && !enginesLoaded ? '' : 'none'
       section.style.display = wanted && engines.length ? '' : 'none'
@@ -756,6 +755,7 @@ class ExtractionPlugin extends Plugin {
       } else if (!userToggled && quality) {
         section.applyOcr.checked = quality.status === 'poor'
       }
+      updateLlmNote()
     }
 
     /** @param {OcrEngineInfo[]} list */
@@ -823,7 +823,10 @@ class ExtractionPlugin extends Plugin {
         .catch(showCheckError)
     }
 
-    section.applyOcr.addEventListener('sl-change', () => { userToggled = true }, { signal })
+    section.applyOcr.addEventListener('sl-change', () => {
+      userToggled = true
+      updateLlmNote()
+    }, { signal })
     section.ocrEngine.addEventListener('sl-change', () => {
       const engine = selectedEngine()
       if (engine) ocrPlugin.setPreferredEngine(engine.id)

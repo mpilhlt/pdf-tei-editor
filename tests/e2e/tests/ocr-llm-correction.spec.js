@@ -181,6 +181,17 @@ test.describe('OCR dialog: LLM correction', () => {
       await page.locator('sl-dialog[name="ocrOptionsDialog"] sl-button[name="submit"]').click();
       await expect.poll(note).toEqual({ visible: true, text: 'LLM correction of OCR errors is on (Mock Provider/Mock Model).' });
 
+      // hidden while text recognition is unchecked, visible again when checked
+      const setApplyOcr = (/** @type {boolean} */ checked) => page.evaluate(c => {
+        const box = /** @type {any} */(window).ui.extractionOptions.ocrSection.applyOcr;
+        box.checked = c;
+        box.dispatchEvent(new CustomEvent('sl-change', { bubbles: true }));
+      }, checked);
+      await setApplyOcr(false);
+      await expect.poll(async () => (await note()).visible).toBe(false);
+      await setApplyOcr(true);
+      await expect.poll(async () => (await note()).visible).toBe(true);
+
       // turn it off again
       await page.waitForTimeout(1000);
       await page.evaluate(() => /** @type {any} */(window).ui.extractionOptions.ocrSection.configureOcr.click());
