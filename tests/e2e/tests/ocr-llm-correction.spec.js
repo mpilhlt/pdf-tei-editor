@@ -10,7 +10,7 @@
 
 import { test, expect } from '../fixtures/debug-on-failure.js';
 import { setupTestConsoleCapture, waitForTestMessage, setupErrorFailure } from './helpers/test-logging.js';
-import { navigateAndLogin, performLogout } from './helpers/login-helper.js';
+import { navigateAndLogin, performLogout, releaseAllLocks } from './helpers/login-helper.js';
 
 const ALLOWED_ERROR_PATTERNS = [
   'Failed to load resource.*401.*UNAUTHORIZED'
@@ -36,14 +36,18 @@ const CORRECTIONS = [
   { page: 5, old: 'l2', new: '12', rationale: 'footnote number' }
 ];
 
+const SCANNED_PDF = 'tests/e2e/fixtures/pdf/scanned-document.pdf';
+
 const CHECKBOX = 'sl-dialog[name="ocrOptionsDialog"] sl-checkbox[name="llmCorrection"]';
 
 /**
  * Mock the model routes, then log in and make the inference settings load them.
  * @param {import('@playwright/test').Page} page
  * @param {boolean} withDefault - Whether a default model is configured
+ * @param {boolean} [withEngine] - Mock the OCR engine list, so that the extraction dialog offers text recognition
  */
-async function setUp(page, withDefault) {
+async function setUp(page, withDefault, withEngine = false) {
+  if (withEngine) await page.route('**/api/v1/ocr/engines', route => route.fulfill({ json: [ENGINE] }));
   await page.route('**/api/v1/llm/providers', route => route.fulfill({ json: PROVIDERS }));
   await page.route('**/api/v1/llm/default-model', route => route.fulfill({
     json: withDefault ? { provider_id: 'mock-provider', model_id: 'mock-model' } : null
@@ -144,6 +148,52 @@ test.describe('OCR dialog: LLM correction', () => {
       await page.evaluate(() => /** @type {any} */(window).app.getDependency('ocr').uiStorage.set('llmCorrection', false));
     } finally {
       stopErrorMonitoring();
+      await performLogout(page);
+    }
+  });
+
+  test('the extraction dialog shows that the remembered option is on', async ({ page }) => {
+    test.setTimeout(60000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, [...ALLOWED_ERROR_PATTERNS, 'User cancelled the dialog']);
+    const note = () => page.evaluate(() => {
+      const section = /** @type {any} */(window).ui.extractionOptions.ocrSection;
+      return { visible: section.llmNote.style.display !== 'none', text: section.llmNote.textContent };
+    });
+    try {
+      await setUp(page, true, true);
+      const fileChooserPromise = page.waitForEvent('filechooser');
+      await page.evaluate(() => /** @type {any} */(window).ui.toolbar.extractionActions.extractNew.click());
+      await (await fileChooserPromise).setFiles(SCANNED_PDF);
+      await waitForTestMessage(consoleLogs, 'PDF_UPLOAD_COMPLETED', 15000);
+      await waitForTestMessage(consoleLogs, 'EXTRACTION_OPTIONS_DIALOG_STARTING', 10000);
+      await expect.poll(() => page.evaluate(() => /** @type {any} */(window).ui.extractionOptions.ocrSection.style.display)).not.toBe('none');
+
+      // off by default
+      expect((await note()).visible).toBe(false);
+
+      // turn the option on in the OCR dialog
+      await page.waitForTimeout(500);
+      await page.evaluate(() => /** @type {any} */(window).ui.extractionOptions.ocrSection.configureOcr.click());
+      await waitForTestMessage(consoleLogs, 'OCR_DIALOG_OPENED', 10000);
+      await page.waitForTimeout(500);
+      await page.locator(CHECKBOX).click({ position: { x: 8, y: 8 } });
+      await page.locator('sl-dialog[name="ocrOptionsDialog"] sl-button[name="submit"]').click();
+      await expect.poll(note).toEqual({ visible: true, text: 'LLM correction of OCR errors is on (Mock Provider/Mock Model).' });
+
+      // turn it off again
+      await page.waitForTimeout(1000);
+      await page.evaluate(() => /** @type {any} */(window).ui.extractionOptions.ocrSection.configureOcr.click());
+      await page.waitForTimeout(1000);
+      await page.locator(CHECKBOX).click({ position: { x: 8, y: 8 } });
+      await page.locator('sl-dialog[name="ocrOptionsDialog"] sl-button[name="submit"]').click();
+      await expect.poll(async () => (await note()).visible).toBe(false);
+
+      await page.waitForTimeout(500);
+      await page.evaluate(() => /** @type {any} */(window).ui.extractionOptions.cancel.click());
+    } finally {
+      stopErrorMonitoring();
+      await releaseAllLocks(page);
       await performLogout(page);
     }
   });

@@ -8,7 +8,7 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlSelect, SlInput, SlCheckbox } from '../ui.js'
  * @import { ocrOptionsDialogPart } from '../templates/ocr-dialog.types.js'
- * @import { OcrEngineInfo, OcrLlmCorrection, OcrJob, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, OcrJob, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -17,6 +17,7 @@ import { SlSelect as SlSelectClass, SlOption, SlInput as SlInputClass, SlCheckbo
 import { setLanguageOptions, getSelectedLanguages, matchLanguages } from '../modules/language-chooser.js'
 import { testLog } from '../modules/test-log.js'
 import { notify } from '../modules/sl-utils.js'
+import { describeLlmCorrections } from '../modules/ocr-llm-corrections.js'
 
 await registerTemplate('ocr-dialog', 'ocr-dialog.html')
 
@@ -179,6 +180,19 @@ class OcrPlugin extends Plugin {
   }
 
   /**
+   * Describe the LLM correction for display in the extraction dialog, if it will be applied to the
+   * next run: the user chose it earlier and a default model is selected.
+   * @returns {string} The note, or an empty string if the correction is off
+   */
+  getLlmCorrectionNote() {
+    if (this.uiStorage.get('llmCorrection', false) !== true) return ''
+    const inference = this.getDependency('inference-settings')
+    const model = inference.getDefaultModel()
+    if (!model) return ''
+    return `LLM correction of OCR errors is on (${inference.getModelLabel(model.providerId, model.modelId)}).`
+  }
+
+  /**
    * Show the dialog to configure the parameters of an engine. The result is stored as the
    * default for later runs (see {@link OcrPlugin#getSettings}).
    * @param {OcrEngineInfo} engine
@@ -246,7 +260,7 @@ class OcrPlugin extends Plugin {
         const llmCorrection = !llm.disabled && llm.checked
         if (!llm.disabled) this.uiStorage.set('llmCorrection', llmCorrection)
         const result = { languages, options, llmCorrection }
-        this.saveSettings(engine.id, result)
+        this.saveSettings(engine.id, { languages, options })
         testLog('OCR_OPTIONS_SAVED', { engine: engine.id, ...result })
         return result
       }
@@ -318,21 +332,6 @@ class OcrPlugin extends Plugin {
     }
     return result
   }
-}
-
-/** Maximum number of corrections listed in the OCR result */
-const MAX_LISTED_CORRECTIONS = 5
-
-/**
- * Describe the corrections made by the LLM correction pass for the user.
- * @param {OcrLlmCorrection[]} corrections
- * @returns {string} E.g. "The language model made 7 corrections: “l” → “1”, … and 2 more"
- */
-export function describeLlmCorrections(corrections) {
-  const listed = corrections.slice(0, MAX_LISTED_CORRECTIONS).map(c => `“${c.old}” → “${c.new}”`).join(', ')
-  const more = corrections.length > MAX_LISTED_CORRECTIONS ? ` and ${corrections.length - MAX_LISTED_CORRECTIONS} more` : ''
-  const count = corrections.length
-  return `The language model made ${count} correction${count === 1 ? '' : 's'}: ${listed}${more}`
 }
 
 /**

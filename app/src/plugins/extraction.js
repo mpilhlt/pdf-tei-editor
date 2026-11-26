@@ -738,7 +738,14 @@ class ExtractionPlugin extends Plugin {
     /** @param {OcrEngineInfo} engine */
     const settingsFor = engine => chosen?.engine === engine.id ? chosen.settings : ocrPlugin.getSettings(engine, hints())
 
+    const updateLlmNote = () => {
+      const note = ocrPlugin.getLlmCorrectionNote()
+      section.llmNote.textContent = note
+      section.llmNote.style.display = note ? '' : 'none'
+    }
+
     const render = () => {
+      updateLlmNote()
       // Until the engine list is known, a placeholder shows that text recognition will be offered
       loading.style.display = wanted && !enginesLoaded ? '' : 'none'
       section.style.display = wanted && engines.length ? '' : 'none'
@@ -820,6 +827,7 @@ class ExtractionPlugin extends Plugin {
     section.ocrEngine.addEventListener('sl-change', () => {
       const engine = selectedEngine()
       if (engine) ocrPlugin.setPreferredEngine(engine.id)
+      updateLlmNote()
     }, { signal })
     section.configureOcr.addEventListener('click', async () => {
       const engine = selectedEngine()
@@ -827,6 +835,7 @@ class ExtractionPlugin extends Plugin {
       try {
         const settings = await ocrPlugin.configure(engine, settingsFor(engine))
         if (settings) chosen = { engine: engine.id, settings }
+        updateLlmNote()
       } catch (error) {
         this.getDependency('dialog').error(String(error))
       }

@@ -19,6 +19,7 @@
  * @property {HTMLDivElement} textQuality
  * @property {import('../ui.js').SlSelect} ocrEngine
  * @property {import('../ui.js').SlButton} configureOcr
+ * @property {HTMLDivElement} llmNote
  */
 
 export {}
