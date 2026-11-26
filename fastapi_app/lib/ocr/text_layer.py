@@ -2,8 +2,7 @@
 Read the invisible text layer that OCRmyPDF writes (`3 Tr` text in Identity-H fonts) as words,
 each with the location of the `Tj`/`TJ` operator that shows it, and patch the text of such words.
 
-For the LLM review of OCR errors (#931), the words are grouped into lines (one text object per line),
-and line corrections are turned into word patches.
+For the LLM review of OCR errors (#931), the words are grouped into lines (one text object per line).
 """
 
 import importlib.util
@@ -19,17 +18,12 @@ import pikepdf
 from fontTools.ttLib import TTFont  # type: ignore[import-untyped]
 from pdfminer.cmapdb import CMapParser, FileUnicodeMap
 
-from fastapi_app.lib.ocr.line_review import LineCorrection, ReviewLines
-
 REASON_NO_LAYER = "no OCR text layer"
 REASON_VISIBLE = "visible text"
 REASON_NO_TOUNICODE = "font without ToUnicode"
 REASON_NOT_IDENTITY = "font is not Identity-H"
 REASON_NOT_ADDRESSABLE = "text layer not addressable"
 REASON_ODD_STRING = "text string with an odd number of bytes"
-REASON_NOT_WHOLE_WORDS = "not whole words"
-
-WINDOW_PAGES = 2  # consecutive pages reviewed together
 
 TEXT_OPERATORS = ("Tj", "TJ", "'", '"')
 DEFAULT_SCALE = 100  # horizontal scaling (Tz) at the start of a page
@@ -727,87 +721,3 @@ def layer_lines(page: LayerPage) -> list[LayerLine]:
     for word in page.words:
         lines.setdefault(word.line, []).append(word)
     return [LayerLine(page.index, words) for words in lines.values()]
-
-
-def review_lines_for_pages(
-    pages: Sequence[LayerPage], page_indices: Sequence[int], languages: list[str]
-) -> tuple[ReviewLines, list[LayerLine]]:
-    """
-    Number the lines of the selected pages globally and cut them into windows of up to 2 consecutive pages;
-    a page that does not follow the previous selected page starts a new window. Returns the review lines and
-    the layer line of each global line index.
-    """
-    lines: list[LayerLine] = []
-    windows: list[range] = []
-    window_start, window_pages, previous = 0, 0, None
-    for index in sorted(set(page_indices)):
-        if previous is not None and (index != previous + 1 or window_pages == WINDOW_PAGES):
-            if len(lines) > window_start:
-                windows.append(range(window_start, len(lines)))
-            window_start, window_pages = len(lines), 0
-        lines.extend(layer_lines(pages[index]))
-        window_pages += 1
-        previous = index
-    if len(lines) > window_start:
-        windows.append(range(window_start, len(lines)))
-    return ReviewLines([line.text for line in lines], windows, languages), lines
-
-
-def _word_offsets(line: LayerLine) -> list[int]:
-    """Return the offset of each word in the line text."""
-    offsets: list[int] = []
-    offset = 0
-    for word in line.words:
-        offsets.append(offset)
-        offset += len(word.text) + 1
-    return offsets
-
-
-def patches_from_corrections(
-    lines: Sequence[LayerLine], corrections: Sequence[LineCorrection]
-) -> tuple[list[WordPatch], list[str]]:
-    """
-    Turn line corrections into word patches: `old` must occur exactly once in the line text and cover a run of
-    whole words, and `new` must have as many words. Each word whose text changes gives a patch; a correction
-    that would patch an already patched word differently is dropped. Returns the patches and a description of
-    each dropped correction.
-    """
-    patches: list[WordPatch] = []
-    dropped: list[str] = []
-    patched: dict[LayerWord, str] = {}
-    for correction in corrections:
-        description = f"line {correction.line + 1}: {correction.old!r} -> {correction.new!r}"
-        if not 0 <= correction.line < len(lines):
-            dropped.append(f"{description}: no such line")
-            continue
-        line = lines[correction.line]
-        text = line.text
-        old_words, new_words = correction.old.split(), correction.new.split()
-        position = text.find(correction.old)
-        offsets = _word_offsets(line)
-        if (
-            not old_words
-            or position < 0
-            or text.find(correction.old, position + 1) >= 0
-            or position not in offsets
-            or " ".join(old_words) != correction.old
-        ):
-            dropped.append(f"{description}: {REASON_NOT_WHOLE_WORDS}")
-            continue
-        first = offsets.index(position)
-        words = line.words[first : first + len(old_words)]
-        if [word.text for word in words] != old_words:
-            dropped.append(f"{description}: {REASON_NOT_WHOLE_WORDS}")
-            continue
-        if len(new_words) != len(old_words):
-            dropped.append(f"{description}: different number of words")
-            continue
-        changed = [(word, new) for word, new in zip(words, new_words) if new != word.text]
-        if any(patched.get(word, new) != new for word, new in changed):
-            dropped.append(f"{description}: conflicts with another correction")
-            continue
-        for word, new in changed:
-            if word not in patched:
-                patched[word] = new
-                patches.append(WordPatch(word, new))
-    return patches, dropped

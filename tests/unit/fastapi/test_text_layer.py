@@ -15,18 +15,14 @@ import pdfminer.high_level
 import pikepdf
 import pymupdf
 
-from fastapi_app.lib.ocr.line_review import LineCorrection
 from fastapi_app.lib.ocr.text_layer import (
-    LayerLine,
     LayerPage,
     LayerWord,
     WordPatch,
     layer_lines,
     parse_to_unicode,
     patch_text_layer,
-    patches_from_corrections,
     read_text_layer,
-    review_lines_for_pages,
 )
 from tests.unit.fastapi.test_ocr import make_image_only_pdf
 
@@ -488,12 +484,6 @@ class TestPatchTextLayer(unittest.TestCase):
 FIRST_LINE = "Die Gesellschaft haftet nach der neuen Regel’). Weitere Ausführungen"
 
 
-def fixture_page(index: int) -> LayerPage:
-    """Return the words of the fixture's page as page `index`."""
-    page = read_text_layer(pikepdf.open(FIXTURE))[0]
-    return LayerPage(index, [replace(word, page=index) for word in page.words], page.unpatchable)
-
-
 class TestLayerLines(unittest.TestCase):
     def setUp(self):
         self.page = read_text_layer(pikepdf.open(FIXTURE))[0]
@@ -519,63 +509,6 @@ class TestLayerLines(unittest.TestCase):
         add_form(pdf, b"BT 3 Tr /F1 10 Tf <0044> Tj ET BT 3 Tr /F1 10 Tf <0045> Tj ET")
         lines = layer_lines(read_text_layer(pdf)[0])
         self.assertEqual([line.text for line in lines], ["D", "E"])
-
-    def test_review_lines_windows_split_on_gaps(self):
-        pages = [fixture_page(i) for i in range(4)]
-        review, lines = review_lines_for_pages(pages, [0, 1, 3], ["de"])
-        per_page = len(self.lines)
-        self.assertEqual(len(review.texts), 3 * per_page)
-        self.assertEqual(review.texts[per_page], FIRST_LINE)
-        self.assertEqual(review.windows, [range(0, 2 * per_page), range(2 * per_page, 3 * per_page)])
-        self.assertEqual({lines[i].page for i in review.windows[0]}, {0, 1})
-        self.assertEqual({lines[i].page for i in review.windows[1]}, {3})
-        self.assertEqual(review.languages, ["de"])
-
-    def test_review_lines_windows_hold_at_most_two_pages(self):
-        pages = [fixture_page(i) for i in range(3)]
-        review, lines = review_lines_for_pages(pages, [0, 1, 2], [])
-        self.assertEqual([sorted({lines[i].page for i in w}) for w in review.windows], [[0, 1], [2]])
-
-    def test_patch_from_whole_word_correction(self):
-        patches, dropped = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")])
-        word = next(w for w in self.page.words if w.text == "Regel’).")
-        self.assertEqual(patches, [WordPatch(word, "Regel12).")])
-        self.assertEqual(dropped, [])
-
-    def test_partial_word_correction_dropped(self):
-        patches, dropped = patches_from_corrections(self.lines, [LineCorrection(0, "egel’)", "egel12)", "")])
-        self.assertEqual(patches, [])
-        self.assertEqual(len(dropped), 1)
-        self.assertIn("not whole words", dropped[0])
-
-    def test_correction_occurring_twice_dropped(self):
-        line = LayerLine(0, [LayerWord(0, 1, 0, i * 4, i * 4 + 3, w, 0) for i, w in enumerate("der und der".split())])
-        patches, dropped = patches_from_corrections([line], [LineCorrection(0, "der", "den", "")])
-        self.assertEqual(patches, [])
-        self.assertIn("not whole words", dropped[0])
-
-    def test_multi_word_correction_patches_only_changed_words(self):
-        correction = LineCorrection(0, "neuen Regel’). Weitere", "neuen Regel12). Weitere", "")
-        patches, dropped = patches_from_corrections(self.lines, [correction])
-        self.assertEqual([(p.word.text, p.new_text) for p in patches], [("Regel’).", "Regel12).")])
-        self.assertEqual(dropped, [])
-
-    def test_conflicting_correction_dropped(self):
-        corrections = [
-            LineCorrection(0, "Regel’).", "Regel12).", ""),
-            LineCorrection(0, "Regel’).", "Regel12).", ""),
-            LineCorrection(0, "neuen Regel’).", "neuen Regel13).", ""),
-        ]
-        patches, dropped = patches_from_corrections(self.lines, corrections)
-        self.assertEqual([p.new_text for p in patches], ["Regel12)."])
-        self.assertEqual(len(dropped), 1)
-        self.assertIn("conflicts", dropped[0])
-
-    def test_patches_apply_to_the_fixture(self):
-        patches, _ = patches_from_corrections(self.lines, [LineCorrection(0, "Regel’).", "Regel12).", "")])
-        pdf = pikepdf.open(FIXTURE)
-        patch_text_layer(pdf, patches)
-        self.assertIn("Regel12).", [w.text for w in read_text_layer(pdf)[0].words])
 
 
 if __name__ == "__main__":
