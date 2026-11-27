@@ -2,14 +2,14 @@
 Unit tests for the optional LLM correction pass of OCR runs (#931 Part C).
 
 @testCovers fastapi_app/routers/ocr.py::apply_ocr
-@testCovers fastapi_app/routers/ocr.py::_recognize
+@testCovers fastapi_app/routers/ocr.py::correct_ocr_errors
+@testCovers fastapi_app/lib/ocr/job_types.py
 @testCovers fastapi_app/lib/models/models_ocr.py
 """
 
 import json
 import shutil
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,20 +17,18 @@ from typing import Any, Optional
 from unittest.mock import patch
 
 import pikepdf
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
+from fastapi_app.config import get_settings
+from fastapi_app.lib.core.locking import acquire_lock
 from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderRegistry
 from fastapi_app.lib.llm.base import LLMProviderError
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
+from fastapi_app.lib.ocr import job_types as ocr_job_types
 from fastapi_app.lib.ocr import llm_correction
 from fastapi_app.lib.ocr.base import OcrOptionValue, OcrResult
-from fastapi_app.lib.ocr.jobs import OcrJobStore
 from fastapi_app.lib.ocr.registry import OcrEngineRegistry
 from fastapi_app.lib.ocr.text_layer import read_text_layer
-from fastapi_app.routers import ocr as ocr_router
-from tests.unit.fastapi.test_ocr import FakeEngine, FakeRepo, FakeStorage, make_image_only_pdf
+from tests.unit.fastapi.test_ocr import FakeEngine, FakeRepo, FakeStorage, OcrJobsHarness, make_image_only_pdf
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = PROJECT_ROOT / "tests" / "unit" / "fastapi" / "fixtures" / "ocr-text-layer.pdf"
@@ -79,7 +77,7 @@ def layer_words(content: bytes, path: Path) -> list[str]:
         return [w.text for w in read_text_layer(pdf)[0].words]
 
 
-class _RouteTestCase(unittest.TestCase):
+class _RouteTestCase(OcrJobsHarness, unittest.TestCase):
     """Fixtures and helpers of the OCR route tests with an LLM provider."""
 
     def setUp(self) -> None:
@@ -94,20 +92,12 @@ class _RouteTestCase(unittest.TestCase):
         LLMProviderRegistry.reset_instance()
         self.provider = FakeProvider()
         LLMProviderRegistry.get_instance().register(self.provider)
-        app = FastAPI()
-        app.include_router(ocr_router.router)
-        app.dependency_overrides[require_authenticated_user] = lambda: USER
-        app.dependency_overrides[get_file_repository] = lambda: self.repo
-        app.dependency_overrides[get_file_storage] = lambda: self.storage
-        self.jobs = OcrJobStore(self.tmp / "jobs", poll_seconds=0.02)
-        app.dependency_overrides[ocr_router.get_ocr_job_store] = lambda: self.jobs
-        self.enterContext(patch.object(ocr_router, "check_file_access", lambda file, user, op: True))
-        self.enterContext(patch.object(ocr_router, "get_config", lambda: FakeConfig()))
+        self.enterContext(patch.object(ocr_job_types, "check_file_access", lambda file, user, op: True))
+        self.enterContext(patch.object(ocr_job_types, "get_config", lambda: FakeConfig()))
         self.enterContext(patch.object(llm_correction, "pages_needing_review", return_value=[0]))
-        self.client = TestClient(app).__enter__()
+        self.start_app(self, self.repo, self.storage, USER)
 
     def tearDown(self) -> None:
-        self.client.__exit__(None, None, None)
         OcrEngineRegistry.reset_instance()
         LLMProviderRegistry.reset_instance()
         shutil.rmtree(self.tmp)
@@ -116,17 +106,18 @@ class _RouteTestCase(unittest.TestCase):
         return self.client.post("/ocr", json={"stable_id": "pdf1", "engine": "fake", "languages": ["de"], **body})
 
     def run_ocr(self, **body: Any) -> dict[str, Any]:
-        """Start an OCR job, wait for it and return the finished job."""
+        """Start an OCR job, wait for it and return the result of the finished job."""
         response = self.start(**body)
         self.assertEqual(response.status_code, 202, response.text)
-        job = response.json()
-        deadline = time.monotonic() + 30
-        while job["status"] in ("queued", "running"):
-            self.assertLess(time.monotonic(), deadline, "OCR job did not finish")
-            time.sleep(0.05)
-            job = self.client.get(f"/ocr/jobs/{job['job_id']}").json()
+        self.assertEqual(response.json()["type"], "ocr")
+        job = self.wait_for(response.json())
         self.assertEqual(job["status"], "done", job.get("error"))
         return job["result"]
+
+    async def cancel_running_job(self) -> None:
+        """Cancel the running job (from the event loop, e.g. while the LLM reviews a window)."""
+        jobs = await self.manager.list(statuses=("active",))
+        await self.manager.cancel(jobs[0].id)
 
     def stored_metadata(self) -> dict[str, Any]:
         return self.repo.updates[-1][1]["file_metadata"]
@@ -179,16 +170,17 @@ class TestOcrLlmCorrectionRoute(_RouteTestCase):
             def get(self, key: str, default: Any = None) -> Any:
                 return 0 if key == llm_correction.MAX_PAGES_KEY else default
 
-        with patch.object(ocr_router, "get_config", lambda: LimitConfig()), self.assertLogs("fastapi_app.lib.ocr", level="INFO"):
+        with patch.object(ocr_job_types, "get_config", lambda: LimitConfig()), self.assertLogs("fastapi_app.lib.ocr", level="INFO"):
             result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
         self.assertEqual(self.provider.calls, 0)
         self.assertEqual(result["message"], "done 1 page was not reviewed: the correction reviews at most 0 pages per run.")
 
     def test_denied_model_refused_before_ocr(self) -> None:
-        with patch.object(ocr_router, "check_model_access", side_effect=ModelAccessDenied("not allowed")):
+        with patch.object(ocr_job_types, "check_model_access", side_effect=ModelAccessDenied("not allowed")):
             response = self.start(llm_correction=True, provider_id="fake", model_id="m")
         self.assertEqual(response.status_code, 403, response.text)
         self.assertEqual(self.engine.calls, [])
+        self.assertEqual(self.client.portal.call(self.manager.list), [])
 
     def test_unknown_provider_is_404(self) -> None:
         self.assertEqual(self.start(llm_correction=True, provider_id="nope", model_id="m").status_code, 404)
@@ -210,13 +202,11 @@ class TestOcrLlmCorrectionRoute(_RouteTestCase):
         self.assertIn("Regel’).", stored)
 
     def test_cancelled_correction_keeps_ocr_result(self) -> None:
-        jobs = self.jobs
         original = self.provider.chat_completion
 
         async def cancel_then_answer(model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
             # the user cancels while the LLM reviews the first window
-            job_id = next(jobs.directory.glob("*.json")).stem
-            (jobs.directory / f"{job_id}.cancel").touch()
+            await self.cancel_running_job()
             return await original(model_id, system_prompt, user_prompt, temperature)
 
         with patch.object(self.provider, "chat_completion", cancel_then_answer):
@@ -233,7 +223,7 @@ class TestOcrLlmCorrectionRoute(_RouteTestCase):
         self.assertEqual(metadata["text_corrections"], [{"source": "earlier"}])
 
     def test_unexpected_exception_keeps_ocr_result(self) -> None:
-        with patch.object(ocr_router.llm_correction, "correct_text_layer", side_effect=RuntimeError("boom")), self.assertLogs(ocr_router.logger.name, level="ERROR"):
+        with patch.object(ocr_job_types.llm_correction, "correct_text_layer", side_effect=RuntimeError("boom")), self.assertLogs(ocr_job_types.logger.name, level="ERROR"):
             result = self.run_ocr(llm_correction=True, provider_id="fake", model_id="m")
         self.assertIn("boom", result["llm_correction_error"])
 
@@ -255,12 +245,8 @@ class TestStandaloneLlmCorrectionRoute(_RouteTestCase):
         response = self.client.post("/ocr/llm-correction", json={"stable_id": "pdf2", "provider_id": "fake", "model_id": "m", **body})
         self.assertEqual(response.status_code, 202, response.text)
         job = response.json()
-        deadline = time.monotonic() + 30
-        while job["status"] in ("queued", "running"):
-            self.assertLess(time.monotonic(), deadline, "correction job did not finish")
-            time.sleep(0.05)
-            job = self.client.get(f"/ocr/jobs/{job['job_id']}").json()
-        return job
+        self.assertEqual((job["type"], job["resources"]), ("ocr.llm-correction", ["file:pdf2"]))
+        return self.wait_for(job)
 
     def test_corrects_the_stored_pdf_and_records(self) -> None:
         with patch.object(llm_correction, "correct_text_layer", wraps=llm_correction.correct_text_layer) as spy:
@@ -290,12 +276,10 @@ class TestStandaloneLlmCorrectionRoute(_RouteTestCase):
         self.assertEqual(self.repo.updates, [])
 
     def test_cancelled_correction_leaves_the_pdf_unchanged(self) -> None:
-        jobs = self.jobs
         original = self.provider.chat_completion
 
         async def cancel_then_answer(model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
-            job_id = next(jobs.directory.glob("*.json")).stem
-            (jobs.directory / f"{job_id}.cancel").touch()
+            await self.cancel_running_job()
             return await original(model_id, system_prompt, user_prompt, temperature)
 
         with patch.object(self.provider, "chat_completion", cancel_then_answer):
@@ -305,9 +289,10 @@ class TestStandaloneLlmCorrectionRoute(_RouteTestCase):
         self.assertEqual(self.repo.updates, [])
 
     def test_rejected_while_a_job_for_the_pdf_runs(self) -> None:
-        self.jobs.create("pdf2", "alice")
+        self.assertTrue(acquire_lock("pdf2", "job:other", get_settings().db_dir, ocr_job_types.logger))
         response = self.client.post("/ocr/llm-correction", json={"stable_id": "pdf2", "provider_id": "fake", "model_id": "m"})
         self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"], "Text recognition is already running for this PDF")
 
     def test_unknown_provider_and_missing_model(self) -> None:
         self.assertEqual(self.client.post("/ocr/llm-correction", json={"stable_id": "pdf2", "provider_id": "nope", "model_id": "m"}).status_code, 404)
@@ -320,7 +305,7 @@ def correction_run(**fields: Any) -> llm_correction.CorrectionRun:
 
 class TestLlmCorrectionMessage(unittest.TestCase):
     def message(self, **fields: Any) -> str:
-        return ocr_router._llm_correction_message(correction_run(**fields), "m")
+        return ocr_job_types.llm_correction_message(correction_run(**fields), "m")
 
     def test_no_page_selected(self) -> None:
         self.assertEqual(self.message(), "No pages needed correction.")

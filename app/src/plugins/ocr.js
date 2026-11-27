@@ -8,7 +8,7 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlSelect, SlInput, SlCheckbox } from '../ui.js'
  * @import { ocrOptionsDialogPart } from '../templates/ocr-dialog.types.js'
- * @import { OcrEngineInfo, OcrJob, OcrJobStatus, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { Job, OcrEngineInfo, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -18,11 +18,9 @@ import { setLanguageOptions, getSelectedLanguages, matchLanguages } from '../mod
 import { testLog } from '../modules/test-log.js'
 import { notify } from '../modules/sl-utils.js'
 import { describeLlmCorrections } from '../modules/ocr-llm-corrections.js'
+import { JobCancelledError, JobFailedError } from '../modules/job-client.js'
 
 await registerTemplate('ocr-dialog', 'ocr-dialog.html')
-
-/** Interval in milliseconds at which the status of a running OCR job is requested */
-const OCR_POLL_INTERVAL_MS = 2000
 
 /** Where the user finds the standalone correction (see ocr-correction.js) */
 export const CORRECTION_MENU_PATH = 'Tools > OCR > Correct OCR errors in PDF without review (LLM)'
@@ -49,10 +47,7 @@ export class OcrCancelledError extends Error {
 /**
  * Options of {@link OcrPlugin#recognize}
  * @typedef {object} OcrRecognizeOptions
- * @property {(status: OcrJobStatus, message: string, job: OcrJob) => void} [onStatus] - Called with the
- *   initial status of the job ('queued' or 'running') and whenever the status or the progress changes
- *   while it is not finished, with a description for the user (see {@link describeOcrJob})
- * @property {AbortSignal} [signal] - Cancels the run when aborted: the server stops it at the next
+ * @property {AbortSignal} [signal] - Cancels the job when aborted: the server stops it at the next
  *   progress report. If the OCR result was already stored, only the LLM correction pass stops and
  *   the result has `llm_correction_cancelled`
  */
@@ -69,7 +64,7 @@ export class OcrCancelledError extends Error {
 class OcrPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'ocr', deps: ['client', 'logger', 'inference-settings', 'api-keys'] })
+    super(context, { name: 'ocr', deps: ['client', 'logger', 'inference-settings', 'api-keys', 'jobs'] })
   }
 
   get #client() { return this.getDependency('client') }
@@ -295,35 +290,35 @@ class OcrPlugin extends Plugin {
   }
 
   /**
-   * Apply OCR to a PDF. The stored PDF is replaced; its stable_id stays the same.
+   * Apply OCR to a PDF; the result is stored as a new PDF of the document (#944).
    *
-   * The server runs OCR in the background, since a long document can take longer than a reverse
-   * proxy waits for a response. This method starts the job and polls it until it is finished.
-   * Only one OCR run happens at a time on the server, so the job may first wait in the queue.
+   * The server runs OCR as a job (type `ocr`), since a long document can take longer than a
+   * reverse proxy waits for a response. The `jobs` plugin shows its progress widget, whose cancel
+   * button cancels it. Only one OCR run happens at a time on the server, so the job may first wait
+   * in the queue.
    *
    * The OCR result is stored before the optional LLM correction pass starts, so that it is kept if
-   * the pass fails or is cancelled.
+   * the pass fails or is cancelled (then the result has `llm_correction_cancelled`).
    * @param {string} stableId - stable_id of the PDF
    * @param {OcrRunOptions} run - Engine and parameters
    * @param {OcrRecognizeOptions} [recognizeOptions]
    * @returns {Promise<OcrResponse>}
    * @throws {OcrCancelledError} If the run was cancelled before the OCR result was stored
-   * @throws {Error} An ApiError (invalid request, or 409 if OCR is already running for this PDF) or
+   * @throws {Error} An ApiError (invalid request, or 409 if a job already holds the PDF) or
    *   ServerError (failure of the engine or the server) if the run fails
    */
-  async recognize(stableId, run, { onStatus, signal } = {}) {
+  async recognize(stableId, run, { signal } = {}) {
     this.getDependency('logger').info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
     const model = run.llmCorrection ? this.getDependency('inference-settings').getDefaultModel() : null
-    const job = await this.#runJob(stableId, () => client.apiClient.ocr({
+    const result = await this.#runJob(stableId, () => client.apiClient.ocr({
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
       options: run.options,
       rebuild: Boolean(run.rebuild),
       ...(model ? { llm_correction: true, provider_id: model.providerId, model_id: model.modelId } : {})
-    }), { onStatus, signal }, 'Applying text recognition')
-    const result = job.result
+    }), signal)
     testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
     this.#reportCorrections(result, Boolean(model))
     return result
@@ -331,90 +326,72 @@ class OcrPlugin extends Plugin {
 
   /**
    * Correct the OCR errors of the text layer of a stored PDF with the default language model, e.g.
-   * after the correction pass of a text recognition run was cancelled. The PDF is replaced if
-   * anything was corrected; its stable_id stays the same. Runs in the background on the server like
-   * {@link recognize}.
+   * after the correction pass of a text recognition run was cancelled. The result is stored as a
+   * new PDF of the document if anything was corrected. Runs as a job (type `ocr.llm-correction`)
+   * like {@link recognize}.
    * @param {string} stableId - stable_id of the PDF
    * @param {OcrRecognizeOptions} [options]
    * @returns {Promise<OcrResponse>}
    * @throws {OcrCancelledError} If the run was cancelled: the PDF is unchanged
-   * @throws {Error} If no default model is selected, the request is invalid (409 if a job for the PDF
-   *   is already queued or running) or the run fails
+   * @throws {Error} If no default model is selected, the request is invalid (409 if a job already
+   *   holds the PDF) or the run fails
    */
-  async correct(stableId, { onStatus, signal } = {}) {
+  async correct(stableId, { signal } = {}) {
     const model = this.getDependency('inference-settings').getDefaultModel()
     if (!model) {
       throw new Error('No default model configured. Set one via Tools > Inference > Default Model.')
     }
     this.getDependency('logger').info(`Correcting the OCR errors of ${stableId} with ${model.providerId}/${model.modelId}`)
     const client = this.#client
-    const job = await this.#runJob(stableId, () => client.apiClient.ocrLlmCorrection({
+    const result = await this.#runJob(stableId, () => client.apiClient.ocrLlmCorrection({
       stable_id: stableId,
       provider_id: model.providerId,
       model_id: model.modelId
-    }), { onStatus, signal }, 'Correcting OCR errors')
-    const result = job.result
+    }), signal)
     testLog('OCR_CORRECTION_COMPLETED', { stableId, changed: result.changed, corrections: (result.llm_corrections ?? []).length })
     this.#reportCorrections(result, true)
     return result
   }
 
   /**
-   * Start a job of the OCR job API and poll it until it is finished.
+   * Submit an OCR job through its route and wait until it is finished. The `jobs` plugin shows
+   * the job's progress widget.
    * @param {string} stableId - stable_id of the PDF
-   * @param {() => Promise<OcrJob>} start - Starts the job
-   * @param {OcrRecognizeOptions} options
-   * @param {string} heading - What the job does, for the status messages (see {@link describeOcrJob})
-   * @returns {Promise<OcrJob>} The finished job, with the status 'done'
+   * @param {() => Promise<Job>} submit - Submits the job
+   * @param {AbortSignal} [signal] - Cancels the job when aborted
+   * @returns {Promise<OcrResponse>} The result of the job
    * @throws {OcrCancelledError} If the job was cancelled
-   * @throws {Error} An ApiError or ServerError if the job could not be started or failed
+   * @throws {Error} An ApiError or ServerError if the job could not be submitted or failed
    */
-  async #runJob(stableId, start, { onStatus, signal }, heading) {
+  async #runJob(stableId, submit, signal) {
     const logger = this.getDependency('logger')
     const client = this.#client
-    // 428 if the provider of the model needs an API key of the user: ask for it and start the run again
-    let job = await this.getDependency('api-keys').withKeyPrompt(start)
-    const jobId = job.job_id
-    let cancelRequested = false
+    const jobs = this.getDependency('jobs')
+    // 428 if the provider of the model needs an API key of the user: ask for it and submit again
+    const job = await this.getDependency('api-keys').withKeyPrompt(submit)
+    const waiting = jobs.wait(job.id)
+    testLog('OCR_JOB_SUBMITTED', { stableId, jobId: job.id, type: job.type })
     const requestCancel = () => {
-      if (cancelRequested) return
-      cancelRequested = true
-      testLog('OCR_CANCEL_REQUESTED', { stableId, jobId })
-      client.apiClient.ocrCancelJob(jobId).catch(error => logger.warn(`Could not cancel OCR job ${jobId}: ${String(error)}`))
+      testLog('OCR_CANCEL_REQUESTED', { stableId, jobId: job.id })
+      jobs.cancel(job.id).catch(error => logger.warn(`Could not cancel OCR job ${job.id}: ${String(error)}`))
     }
     if (signal?.aborted) requestCancel()
     signal?.addEventListener('abort', requestCancel, { once: true })
-    /** @type {OcrJobStatus|null} */
-    let reported = null
-    let described = ''
     try {
-      while (job.status === 'queued' || job.status === 'running') {
-        if (job.status !== reported) {
-          reported = job.status
-          testLog('OCR_JOB_STATUS', { stableId, status: job.status })
-        }
-        const message = describeOcrJob(job, heading)
-        if (message !== described) {
-          described = message
-          onStatus?.(job.status, message, job)
-        }
-        await new Promise(resolve => setTimeout(resolve, OCR_POLL_INTERVAL_MS))
-        job = await client.apiClient.ocrJob(jobId)
+      return /** @type {OcrResponse} */ (await waiting)
+    } catch (error) {
+      if (error instanceof JobCancelledError) {
+        testLog('OCR_CANCELLED', { stableId })
+        throw new OcrCancelledError()
       }
+      if (error instanceof JobFailedError) {
+        testLog('OCR_FAILED', { stableId, error: error.message, status: error.status })
+        throw error.status < 500 ? new client.ApiError(error.message, error.status) : new client.ServerError(error.message, error.status)
+      }
+      throw error
     } finally {
       signal?.removeEventListener('abort', requestCancel)
     }
-    if (job.status === 'cancelled') {
-      testLog('OCR_CANCELLED', { stableId })
-      throw new OcrCancelledError()
-    }
-    if (job.status === 'failed') {
-      const message = job.error || `${heading} failed`
-      const status = job.error_status ?? 500
-      testLog('OCR_FAILED', { stableId, error: message, status })
-      throw status < 500 ? new client.ApiError(message, status) : new client.ServerError(message, status)
-    }
-    return job
   }
 
   /**
@@ -438,37 +415,6 @@ class OcrPlugin extends Plugin {
       notify(result.message, 'primary', 'info-circle', 10000)
     }
   }
-}
-
-/**
- * Describe the state of an unfinished OCR job for the user, with the progress and the estimated
- * remaining time of the current phase if the server reports them.
- * @param {OcrJob} job
- * @param {string} [heading] - What the job does
- * @returns {string} E.g. "Applying text recognition: Recognizing text, page 12 of 71, about 2 minutes left"
- */
-export function describeOcrJob(job, heading = 'Applying text recognition') {
-  if (job.status === 'queued') {
-    return 'Waiting for another text recognition to finish'
-  }
-  const progress = job.progress
-  if (!progress) {
-    return `${heading}, this may take a while`
-  }
-  let message = `${heading}: ${progress.phase}`
-  if (progress.total) {
-    message += progress.unit ? `, ${progress.unit} ${progress.done ?? 0} of ${progress.total}` : ` (${progress.done ?? 0} of ${progress.total})`
-  }
-  const eta = progress.eta_seconds
-  if (typeof eta === 'number' && eta > 0) {
-    if (eta < 60) {
-      message += ', less than a minute left'
-    } else {
-      const minutes = Math.round(eta / 60)
-      message += `, about ${minutes} minute${minutes === 1 ? '' : 's'} left`
-    }
-  }
-  return message
 }
 
 /**

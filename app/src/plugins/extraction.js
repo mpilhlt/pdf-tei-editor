@@ -8,7 +8,7 @@
  * @import { extractionActionsPart } from '../templates/extraction-buttons.types.js'
  * @import { extractionOptionsPart } from '../templates/extraction-dialog.types.js'
  * @import { OcrRunOptions, OcrSettings } from './ocr.js'
- * @import { OcrEngineInfo, OcrJob, TextQualityReport, LanguageConflict } from '../modules/api-client-v1.js'
+ * @import { OcrEngineInfo, TextQualityReport, LanguageConflict } from '../modules/api-client-v1.js'
  * @import { ShownDocuments } from '../modules/background-result.js'
  */
 
@@ -26,17 +26,6 @@ import { notify } from '../modules/sl-utils.js'
 import { languageName } from '../modules/language-chooser.js'
 import { OcrCancelledError } from './ocr.js'
 import { loadWhenFinished } from '../modules/background-result.js'
-
-/**
- * Percentage of the current phase of an OCR job that is done, or null if the phase is not counted
- * @param {OcrJob} job
- * @returns {number|null}
- */
-function progressPercent(job) {
-  const progress = job.progress
-  if (!progress?.total) return null
-  return Math.min(100, Math.round(((progress.done ?? 0) / progress.total) * 100))
-}
 
 /**
  * Extractor configuration object
@@ -299,11 +288,12 @@ class ExtractionPlugin extends Plugin {
   }
 
   /**
-   * Applies text recognition to a PDF and then extracts from it, in the background: a progress
-   * widget shows the progress and lets the user cancel the text recognition (including its LLM
-   * correction pass), while the user can go on working. Cancelling before the OCR result is stored
-   * leaves the PDF unchanged; cancelling during the LLM correction pass keeps the OCR result. In both
-   * cases nothing is extracted.
+   * Applies text recognition to a PDF and then extracts from it, in the background, while the user
+   * can go on working. A progress widget shows the check of the extractor and the extraction; text
+   * recognition is a job whose widget the `jobs` plugin shows, and whose cancel button cancels the
+   * text recognition (including its LLM correction pass). Cancelling before the OCR result is
+   * stored leaves the PDF unchanged; cancelling during the LLM correction pass keeps the OCR result.
+   * In both cases nothing is extracted.
    *
    * When it is finished, the result is loaded if the user still has the documents open that were
    * shown when it started; otherwise the user is asked whether to load it (see {@link #loadWhenFinished}).
@@ -318,9 +308,10 @@ class ExtractionPlugin extends Plugin {
   async #extractWithOcr(fileId, ocr, options, extractorName, started) {
     const progress = this.getDependency('progress')
     const progressId = `ocr-extraction-${fileId}`
+    const title = `Text recognition and extraction with ${extractorName}`
     const controller = new AbortController()
     progress.show(progressId, {
-      title: `Text recognition and extraction with ${extractorName}`,
+      title,
       label: `Checking that ${extractorName} is ready`,
       value: null,
       cancellable: true,
@@ -337,17 +328,13 @@ class ExtractionPlugin extends Plugin {
         throw new Error(`${extractorName} cannot be used at the moment, so text recognition was not started: ${check.message}`)
       }
       if (controller.signal.aborted) throw new OcrCancelledError()
-      const ocrResult = await this.getDependency('ocr').recognize(fileId, ocr, {
-        signal: controller.signal,
-        onStatus: (_status, message, job) => {
-          progress.setLabel(progressId, message)
-          progress.setValue(progressId, progressPercent(job))
-        }
-      })
+      // the jobs plugin shows the widget of the text recognition job
+      progress.hide(progressId)
+      const ocrResult = await this.getDependency('ocr').recognize(fileId, ocr)
       if (ocrResult.method === 'force' && ocrResult.fallback_reason) {
         notify(`The pages were converted to images, since ${ocrResult.fallback_reason}.`, 'warning', 'exclamation-triangle', 10000)
       }
-      if (controller.signal.aborted) {
+      if (ocrResult.llm_correction_cancelled) {
         // only the LLM correction pass was cancelled: the OCR result is stored as a new PDF of the
         // document (#944), which no version is attached to yet; nothing is extracted
         await this.#loadWhenFinished(started, 'Text recognition is finished (the correction was cancelled).',
@@ -356,7 +343,7 @@ class ExtractionPlugin extends Plugin {
       }
       // extraction cannot be cancelled: the server creates the document anyway. It extracts from
       // the PDF that text recognition created, which the new version is attached to
-      progress.show(progressId, { label: `Extracting with ${extractorName}`, value: null, cancellable: false })
+      progress.show(progressId, { title, label: `Extracting with ${extractorName}`, value: null, cancellable: false })
       result = /** @type {ExtractionResult} */ (await this.getDependency('api-keys').withKeyPrompt(() => this.#client.extract(ocrResult.stable_id, options)))
     } catch (error) {
       if (error instanceof OcrCancelledError) {

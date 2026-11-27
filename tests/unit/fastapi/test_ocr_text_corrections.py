@@ -31,13 +31,13 @@ from fastapi_app.lib.core.dependencies import get_file_repository, get_file_stor
 from fastapi_app.lib.core.locking import acquire_lock, check_lock
 from fastapi_app.lib.models.models import FileCreate, FileMetadata
 from fastapi_app.lib.ocr.cancel_requests import CancelRequests
-from fastapi_app.lib.ocr.jobs import OcrJobStore
 from fastapi_app.lib.ocr.text_corrections import CorrectedPdfMismatch, register_corrected_pdf_handler, unregister_corrected_pdf_handler
 from fastapi_app.lib.ocr.text_layer import read_text_layer
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.tei.layout import LineLayout, register_layout_provider, unregister_layout_provider
 from fastapi_app.lib.tei.zone_lines import ZoneLabel
+from fastapi_app.lib.ocr import job_types as ocr_job_types
 from fastapi_app.routers import ocr as ocr_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -97,15 +97,15 @@ class TestTextCorrectionRoutes(unittest.TestCase):
 
         self.allowed = True
         self.access = patch.object(ocr_router, "check_file_access", lambda file, user, op: self.allowed)
+        # the PDF checks are shared with the OCR jobs
+        self.enterContext(patch.object(ocr_job_types, "check_file_access", lambda file, user, op: self.allowed))
         self.access.start()
-        self.jobs = OcrJobStore(self.tmp / "jobs")
         self.user: dict[str, Any] = REVIEWER
         app = FastAPI()
         app.include_router(ocr_router.router)
         app.dependency_overrides[require_authenticated_user] = lambda: self.user
         app.dependency_overrides[get_file_repository] = lambda: self.repo
         app.dependency_overrides[get_file_storage] = lambda: self.storage
-        app.dependency_overrides[ocr_router.get_ocr_job_store] = lambda: self.jobs
         self.cancels = CancelRequests(self.tmp / "cancel")
         app.dependency_overrides[ocr_router.get_text_corrections_cancels] = lambda: self.cancels
         self.sse = MagicMock()
@@ -268,7 +268,8 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.assertEqual([(u["line"], u["tei_text"]) for u in preview["unwritable"]], [(3, "neu")])
 
     def test_active_ocr_job_conflicts(self):
-        self.jobs.create("pdf1", "someone")
+        # a job (e.g. text recognition) holds the lock of the PDF
+        self.assertTrue(acquire_lock("pdf1", "job:ocr-1", self.tmp, ocr_router.logger))
         self.assertIsNotNone(self.preview()["reason"])
         self.assertEqual(self.apply().status_code, 409)
         self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]

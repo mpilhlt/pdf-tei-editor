@@ -163,4 +163,4 @@ with TestClient(app) as client:  # the context runs the lifespan, which starts t
     ...
 ```
 
-Use `client.portal.call(manager.cancel, job_id)` to call async manager methods from the test. `tests/unit/fastapi/test_jobs_infrastructure.py` is the reference. The core job type `test.progress` (params `steps`, `delay_ms`, `fail`) is meant for E2E tests of the job UI.
+Use `client.portal.call(manager.cancel, job_id)` to call async manager methods from the test. `tests/unit/fastapi/test_jobs_infrastructure.py` is the reference. The core job type `test.progress` (params `steps`, `delay_ms`, `fail`) is meant for E2E tests of the job UI. With `phase`, `unit`, `result` and `cancel_result` (a cancel then ends the job `done` with that result) it stands in for jobs that the E2E environment cannot run; `tests/e2e/tests/helpers/ocr-job-helper.js` answers the OCR routes with such jobs.

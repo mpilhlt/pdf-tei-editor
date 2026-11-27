@@ -107,17 +107,18 @@ test.describe('OCR extraction option', () => {
       });
 
       // Applying OCR stores a new PDF of the document with a text layer (#944); the source is
-      // not changed. OCR runs as a background job.
+      // not changed. OCR runs as a job of type `ocr`.
       const job = await page.evaluate(async ({ id, engine }) => {
         const apiClient = /** @type {any} */(window).client.apiClient;
         let job = await apiClient.ocr({ stable_id: id, engine, languages: ['en'] });
-        while (job.status === 'queued' || job.status === 'running') {
+        while (job.status === 'queued' || job.status === 'active') {
           await new Promise(resolve => setTimeout(resolve, 500));
-          job = await apiClient.ocrJob(job.job_id);
+          job = await apiClient.jobsGet(job.id);
         }
         return job;
       }, { id: stableId, engine: engines[0].id });
-      expect(job.status, job.error).toBe('done');
+      expect(job.type).toBe('ocr');
+      expect(job.status, job.error?.message).toBe('done');
       const result = job.result;
       expect(result.source_stable_id).toBe(stableId);
       expect(result.stable_id).not.toBe(stableId);

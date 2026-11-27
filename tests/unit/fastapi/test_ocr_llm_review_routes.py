@@ -27,6 +27,7 @@ from fastapi_app.lib.models.models import FileCreate
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.tei.layout import LineLayout, register_layout_provider, unregister_layout_provider
 from fastapi_app.lib.tei.zone_lines import ZoneLabel
+from fastapi_app.lib.ocr import job_types as ocr_job_types
 from fastapi_app.routers import ocr as ocr_router
 
 VARIANT = "test.ocr-llm-review-routes"
@@ -81,6 +82,8 @@ class TestOcrLlmReviewRoutes(unittest.TestCase):
         register_layout_provider(VARIANT, "test", lambda xml, doc_id: self.layout)
         self.allowed = True
         self.access = patch.object(ocr_router, "check_file_access", lambda file, user, op: self.allowed)
+        # the PDF checks are shared with the OCR jobs
+        self.enterContext(patch.object(ocr_job_types, "check_file_access", lambda file, user, op: self.allowed))
         self.access.start()
         LLMProviderRegistry.reset_instance()
         self.provider = FakeProvider()

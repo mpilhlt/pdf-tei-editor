@@ -178,6 +178,18 @@ class TestJobsInfrastructure(JobsTestCase):
         self.assertEqual(done["result"], {"steps": 2})
         self.assertEqual(done["progress"]["unit"], "steps")
 
+    def test_test_progress_stands_in_for_other_jobs(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 1, "delay_ms": 1, "phase": "Recognizing text", "unit": "page", "result": {"changed": True}}})
+            done = self.wait_for(client, job["id"], ("done", "error"))
+            self.assertEqual((done["result"], done["progress"]["phase"], done["progress"]["unit"]), ({"changed": True}, "Recognizing text", "page"))
+            # with cancel_result, a cancel ends the job done with that result
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 100, "delay_ms": 50, "cancel_result": {"cancelled": True}}})
+            self.wait_for(client, job["id"], ("active",))
+            client.post(f"/api/v1/jobs/{job['id']}/cancel", headers=headers("alice-session"))
+            done = self.wait_for(client, job["id"], ("done", "cancelled", "error"))
+        self.assertEqual((done["status"], done["result"]), ("done", {"cancelled": True}))
+
     def test_types_route_lists_titles(self) -> None:
         with self.make_client(self.make_manager()) as client:
             response = client.get("/api/v1/jobs/types", headers=headers("alice-session"))

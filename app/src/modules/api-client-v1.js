@@ -507,36 +507,6 @@
  */
 
 /**
- * @typedef {'queued'|'running'|'done'|'failed'|'cancelled'} OcrJobStatus
- */
-
-/**
- * Progress of a running OCR job
- * @typedef {Object} OcrProgress
- * @property {string} phase - What the engine is doing, e.g. 'Recognizing text'
- * @property {number|null=} done - Units of the phase done so far, if the phase is counted
- * @property {number|null=} total - Units of the phase in total, if the phase is counted
- * @property {string|null=} unit - Unit of `done` and `total`, e.g. 'page'
- * @property {number|null=} eta_seconds - Estimated seconds until the phase is finished, extrapolated from the units done so far
- */
-
-/**
- * An OCR run in the background, started by `POST /api/v1/ocr` and polled with `GET /api/v1/ocr/jobs/{job_id}`
- * @typedef {Object} OcrJob
- * @property {string} job_id - Id of the job
- * @property {string} stable_id - stable_id of the PDF
- * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`), 'failed' (see `error`) or 'cancelled' (stopped by the user, see {@link ApiClientV1#ocrCancelJob})
- * @property {OcrProgress|null=} progress - Progress of the run if the status is 'running' and the engine reports it
- * @property {OcrResponse|null=} result - Result of the run if the status is 'done'
- * @property {string|null=} error - Error message if the status is 'failed'
- * @property {number|null=} error_status - HTTP status code corresponding to the error (4xx: invalid request, 5xx: failure of the engine or the server)
- * @property {string} username - User who started the job
- * @property {number} pid - Id of the server process that runs the job
- * @property {string} created_at - ISO timestamp of the start of the job
- * @property {string} updated_at - ISO timestamp of the last status change
- */
-
-/**
  * Request to preview or write the text corrections of a TEI document into the PDF's OCR text layer
  * @typedef {Object} TextCorrectionsRequest
  * @property {string} stable_id - stable_id of the TEI document
@@ -2622,12 +2592,13 @@ export class ApiClientV1 {
   }
 
   /**
-   * Start applying OCR to a PDF; the stored PDF is replaced with the result and the stable_id stays
-   * the same. The run happens in the background: poll {@link ApiClientV1#ocrJob} for the result.
-   * Rejected with 409 if a job for the PDF is already queued or running.
+   * Submit a job (type `ocr`) that applies OCR to a PDF and stores the result as a new PDF of the
+   * document. Invalid requests are rejected at once (400, 403, 404, 428 if the provider of the
+   * LLM correction needs a key of the user), a PDF that another job holds with 409. Wait for the
+   * job with the `jobs` plugin; its result is an {@link OcrResponse}.
    *
    * @param {OcrRequest} requestBody
-   * @returns {Promise<OcrJob>}
+   * @returns {Promise<Job>}
    */
   async ocr(requestBody) {
     const endpoint = `/ocr`
@@ -2635,42 +2606,16 @@ export class ApiClientV1 {
   }
 
   /**
-   * Start correcting the OCR errors of the text layer of a stored PDF with an LLM, e.g. after the
-   * correction pass of an OCR run was cancelled. The run is a job like an OCR run: poll
-   * {@link ApiClientV1#ocrJob} for the result, cancel it with {@link ApiClientV1#ocrCancelJob}.
-   * Rejected with 409 if a job for the PDF is already queued or running.
+   * Submit a job (type `ocr.llm-correction`) that corrects the OCR errors of the text layer of a
+   * stored PDF with an LLM, e.g. after the correction pass of an OCR run was cancelled. Rejected
+   * like {@link ApiClientV1#ocr}; the job's result is an {@link OcrResponse}.
    *
    * @param {OcrLlmCorrectionRequest} requestBody
-   * @returns {Promise<OcrJob>}
+   * @returns {Promise<Job>}
    */
   async ocrLlmCorrection(requestBody) {
     const endpoint = `/ocr/llm-correction`
     return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Return the status of an OCR run started with {@link ApiClientV1#ocr}, and its result when it is done.
-   *
-   * @param {string} jobId - Id of the job
-   * @returns {Promise<OcrJob>}
-   */
-  async ocrJob(jobId) {
-    const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}`
-    return this.callApi(endpoint);
-  }
-
-  /**
-   * Cancel an OCR run started with {@link ApiClientV1#ocr}; the stored PDF stays unchanged. A queued
-   * job stops at once, a running one at the next progress report of the engine or of the LLM
-   * correction pass. Poll {@link ApiClientV1#ocrJob} until the status is 'cancelled', or 'done' if
-   * only the correction pass was stopped. A finished job is returned as it is.
-   *
-   * @param {string} jobId - Id of the job
-   * @returns {Promise<OcrJob>}
-   */
-  async ocrCancelJob(jobId) {
-    const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}/cancel`
-    return this.callApi(endpoint, 'POST');
   }
 
   /**
