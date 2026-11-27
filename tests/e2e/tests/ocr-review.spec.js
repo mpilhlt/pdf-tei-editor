@@ -6,11 +6,19 @@
  * windows and is named in the notification, a complete run reports the number of findings, and an
  * accepted correction is recorded in the document history. The focus action reviews the focused
  * node without asking, then writes its corrections to the PDF without creating a new version.
+ * The review runs as the client job `ocr.llm-review`: it shows a job widget whose cancel button
+ * stops it, and a reload resumes it after the saved page windows unless the document changed.
  *
  * @testCovers app/src/plugins/ocr-review.js
  * @testCovers app/src/plugins/text-corrections.js
  * @testCovers app/src/plugins/services.js
  * @testCovers app/src/modules/llm-findings.js
+ * @testCovers app/src/plugins/jobs.js
+ * @testCovers fastapi_app/lib/ocr/job_types.py
+ */
+
+/**
+ * @import { Page } from '@playwright/test'
  */
 
 import fs from 'fs';
@@ -127,6 +135,71 @@ function okWindow(index) {
       window_count: 2, discarded: 0, window_start: 0, window_end: 10
     }
   };
+}
+
+/**
+ * The job widget of a job.
+ * @param {Page} page
+ * @param {string} jobId
+ */
+function jobWidget(page, jobId) {
+  return page.locator(`.progress-widget[data-progress-id="job-${jobId}"]`);
+}
+
+/**
+ * The status of a job.
+ * @param {Page} page
+ * @param {string} jobId
+ * @returns {Promise<string>}
+ */
+function jobStatus(page, jobId) {
+  return page.evaluate(async id => (await /** @type {any} */ (window).client.apiClient.jobsGet(id)).status, jobId);
+}
+
+/**
+ * Create an `ocr.llm-review` job held by this tab, as if a reload had interrupted a review, with
+ * the findings of the first page window saved.
+ * @param {Page} page
+ * @param {{stable_id: string, xml_file_id: string}} params
+ * @returns {Promise<string>} The job id
+ */
+async function createInterruptedReview(page, params) {
+  return page.evaluate(async params => {
+    const jobs = /** @type {any} */ (window).jobs;
+    const api = /** @type {any} */ (window).client.apiClient;
+    const holder = jobs.client.holder;
+    const job = await jobs.client.submit('ocr.llm-review', { ...params, provider_id: 'mock', model_id: 'mock-model' });
+    await api.jobsClaim(job.id, { holder });
+    const findings = [{ id: 0, old: 'teh', new: 'the', rationale: 'OCR error: transposed letters' }];
+    await api.jobsSaveStep(job.id, 'window-0', { holder, result: { findings, window_count: 2 } });
+    return job.id;
+  }, params);
+}
+
+/**
+ * The content hash (SHA-256, hex) of the XML in the editor.
+ * @param {Page} page
+ * @returns {Promise<string>}
+ */
+function editorXmlHash(page) {
+  return page.evaluate(async () => {
+    const text = /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString();
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  });
+}
+
+/**
+ * Reload the page and log in again if needed; the document in the URL is loaded again.
+ * @param {Page} page
+ * @param {any[]} consoleLogs
+ */
+async function reloadAndLogin(page, consoleLogs) {
+  consoleLogs.length = 0;
+  await page.reload();
+  if (await page.locator('sl-dialog[name="loginDialog"][open]').isVisible({ timeout: 5000 }).catch(() => false)) {
+    await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+  }
 }
 
 test.describe('OCR review', () => {
@@ -292,6 +365,112 @@ test.describe('OCR review', () => {
       expect(state.xml).toBe(own.stableId);
       expect(state.text).toContain('Wrote 1 text correction on page 1');
       await expect(reviewButton).toBeVisible({ timeout: 10000 });
+    } finally {
+      stopErrorMonitoring();
+      await cleanUp(page, created);
+    }
+  });
+
+  test('review shows a job widget and cancel stops it', async ({ page }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {string[]} */
+    const created = [];
+    /** @type {number[]} */
+    const reviewed = [];
+    try {
+      await mockRoutes(page, okWindow);
+      // the first window takes a while, so that the cancel arrives before the second
+      await page.route('**/api/v1/ocr/llm-review', async route => {
+        const index = route.request().postDataJSON().window_index;
+        reviewed.push(index);
+        if (index === 0) await new Promise(resolve => setTimeout(resolve, 3000));
+        return route.fulfill(okWindow(index));
+      });
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await waitForTestMessage(consoleLogs, 'JOBS_SUBSCRIBED', 15000);
+      const own = await createOwnDocument(page);
+      created.push(own.stableId, own.pdfId);
+      await runReview(page);
+
+      const widget = page.locator('.progress-widget[data-progress-id^="job-"]', { hasText: 'Finding OCR errors' });
+      await expect(widget).toBeVisible({ timeout: 10000 });
+      const jobId = /** @type {string} */ (await widget.getAttribute('data-progress-id')).slice('job-'.length);
+      await expect(jobWidget(page, jobId).locator('[name="titleRow"]')).toHaveText('Finding OCR errors');
+      await page.waitForTimeout(500);
+      await jobWidget(page, jobId).locator('[data-name="cancelBtn"]').click();
+
+      await expect(page.locator('sl-alert[variant="warning"]', { hasText: 'Review cancelled after 1 of 2 page windows; 1 possible OCR error(s) so far.' })).toBeVisible({ timeout: 15000 });
+      await expect.poll(() => jobStatus(page, jobId), { timeout: 10000 }).toBe('cancelled');
+      await expect(jobWidget(page, jobId)).toHaveCount(0, { timeout: 10000 });
+      expect(reviewed).toEqual([0]);
+      await expect(page.locator('.cm-lintRange-info')).toHaveCount(1);
+    } finally {
+      stopErrorMonitoring();
+      await cleanUp(page, created);
+    }
+  });
+
+  test('a reload resumes the review after the saved page windows', async ({ page }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {string[]} */
+    const created = [];
+    /** @type {number[]} */
+    const reviewed = [];
+    try {
+      await mockRoutes(page, okWindow);
+      await page.route('**/api/v1/ocr/llm-review', route => {
+        const index = route.request().postDataJSON().window_index;
+        reviewed.push(index);
+        return route.fulfill(okWindow(index));
+      });
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await waitForTestMessage(consoleLogs, 'JOBS_SUBSCRIBED', 15000);
+      const own = await createOwnDocument(page);
+      created.push(own.stableId, own.pdfId);
+      const jobId = await createInterruptedReview(page, { stable_id: own.stableId, xml_file_id: await editorXmlHash(page) });
+
+      await reloadAndLogin(page, consoleLogs);
+      const done = await waitForTestMessage(consoleLogs, 'OCR_REVIEW_DONE', 30000);
+      // the findings of the first window come from the saved step; only the second is reviewed
+      expect(done.value).toMatchObject({ findings: 1, windows: 2 });
+      expect(reviewed).toEqual([1]);
+      await expect.poll(() => jobStatus(page, jobId), { timeout: 10000 }).toBe('done');
+      await expect(page.locator('.cm-lintRange-info')).toHaveCount(1);
+    } finally {
+      stopErrorMonitoring();
+      await cleanUp(page, created);
+    }
+  });
+
+  test('a reload discards the review if the document changed', async ({ page }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {string[]} */
+    const created = [];
+    /** @type {number[]} */
+    const reviewed = [];
+    try {
+      await mockRoutes(page, okWindow);
+      await page.route('**/api/v1/ocr/llm-review', route => {
+        reviewed.push(route.request().postDataJSON().window_index);
+        return route.fulfill(okWindow(0));
+      });
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      await waitForTestMessage(consoleLogs, 'JOBS_SUBSCRIBED', 15000);
+      const own = await createOwnDocument(page);
+      created.push(own.stableId, own.pdfId);
+      // the content hash of an earlier state of the document
+      const jobId = await createInterruptedReview(page, { stable_id: own.stableId, xml_file_id: '0'.repeat(64) });
+
+      await reloadAndLogin(page, consoleLogs);
+      await expect(page.locator('sl-alert[variant="warning"]', { hasText: 'The document changed; the review was discarded' })).toBeVisible({ timeout: 30000 });
+      await expect.poll(() => jobStatus(page, jobId), { timeout: 10000 }).toBe('cancelled');
+      expect(reviewed).toEqual([]);
     } finally {
       stopErrorMonitoring();
       await cleanUp(page, created);

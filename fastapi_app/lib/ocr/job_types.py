@@ -52,6 +52,7 @@ logger = get_logger(__name__)
 OCR_JOB_TYPE = "ocr"
 LLM_CORRECTION_JOB_TYPE = "ocr.llm-correction"
 TEXT_CORRECTIONS_JOB_TYPE = "ocr.text-corrections"
+LLM_REVIEW_JOB_TYPE = "ocr.llm-review"
 
 OCR_BUSY_MESSAGE = "Text recognition is already running for this PDF"
 """The response (409) to a job for a PDF whose lock another job or a user holds."""
@@ -554,3 +555,11 @@ async def run_llm_correction(ctx: JobContext, params: OcrLlmCorrectionJobParams)
 # user's session, so the client submits the job (`params: {stable_id, mode: "preview" | "apply"}`, no
 # resources: the user's own session holds the TEI lock) and passes its id to the route, which drives it.
 register_client_type(TEXT_CORRECTIONS_JOB_TYPE, title="Writing text corrections")
+
+# The client job of the OCR LLM review (`ocr-review.js`): the browser reviews the TEI document page
+# window by page window through `POST /api/v1/ocr/llm-review` and saves the findings of each window
+# as step `window-<index>`, so that a reload resumes after the saved windows. `params: {stable_id,
+# xml_file_id, scope?, xpath?, provider_id, model_id}`; no resources, since a lock would keep the
+# user from editing the document under review. The client checks for changes itself: it discards
+# the job on resume if the content hash of the XML (`xml_file_id`) is no longer that of the editor.
+register_client_type(LLM_REVIEW_JOB_TYPE, title="Finding OCR errors", resume_window=600)
