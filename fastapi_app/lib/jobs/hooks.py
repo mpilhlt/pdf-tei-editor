@@ -29,6 +29,9 @@ JOB_LOCK_HOLDER_PREFIX = "job:"
 LOCK_REFRESH_INTERVAL = 30.0
 """Seconds between refreshes of the locks of waiting jobs; well below LOCK_TIMEOUT_SECONDS."""
 
+UNCLAIMED_CLIENT_JOB_MAX_AGE = 300.0
+"""Seconds after which a client job that no client has claimed (`queued`) is cancelled; such a job has no lease and would never end."""
+
 register_lock_holder(JOB_LOCK_HOLDER_PREFIX, "This document is locked while a background job runs on it.")
 
 
@@ -120,9 +123,32 @@ async def refresh_waiting_job_locks() -> None:
             logger.warning(f"Waiting job {job.id} lost the lock of {', '.join(lost)} to another holder")
 
 
+async def cancel_unclaimed_client_jobs(max_age: float = UNCLAIMED_CLIENT_JOB_MAX_AGE) -> int:
+    """
+    Cancel the client jobs that were created more than `max_age` seconds ago and are still `queued`
+    (no client claimed them, e.g. because the browser closed before the request of a request-driven job).
+
+    Returns:
+        The number of jobs cancelled
+    """
+    from .manager import get_job_manager
+    manager = get_job_manager()
+    now = manager.clock()
+    count = 0
+    for job in await manager.list(statuses=("queued",)):
+        if job.driver == "client" and now - job.created_at.timestamp() > max_age:
+            await manager.cancel(job.id)
+            logger.info(f"Cancelled client job {job.id} ({job.type}), which was not claimed within {max_age:.0f} s")
+            count += 1
+    return count
+
+
 @asynccontextmanager
 async def job_lock_refresher(interval: float = LOCK_REFRESH_INTERVAL) -> AsyncIterator[None]:
-    """Refresh the locks of waiting jobs every `interval` seconds while the context is open (the app lifespan)."""
+    """
+    Every `interval` seconds while the context is open (the app lifespan), refresh the locks of
+    waiting jobs and cancel client jobs that stay unclaimed.
+    """
     async def run() -> None:
         while True:
             await asyncio.sleep(interval)
@@ -130,6 +156,10 @@ async def job_lock_refresher(interval: float = LOCK_REFRESH_INTERVAL) -> AsyncIt
                 await refresh_waiting_job_locks()
             except Exception:
                 logger.exception("Could not refresh the locks of waiting jobs")
+            try:
+                await cancel_unclaimed_client_jobs()
+            except Exception:
+                logger.exception("Could not cancel unclaimed client jobs")
 
     task = asyncio.create_task(run(), name="job-lock-refresher")
     try:

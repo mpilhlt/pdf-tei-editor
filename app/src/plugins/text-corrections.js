@@ -204,9 +204,10 @@ class TextCorrectionsPlugin extends Plugin {
    * Run a request of a text corrections job: submit the job, which the `jobs` plugin shows as a
    * progress widget, and call the route with its id. The route finishes the job with the request.
    * The plugin waits for the job only so that its error is not notified a second time (the error of
-   * the route is reported by the caller). If the request fails, the job is cancelled: this finishes
-   * a job that the route has not taken (e.g. after a validation error), and does nothing to a job
-   * that is finished.
+   * the route is reported by the caller). Unless the request finished the job (success, or the
+   * route's answer to the user's cancel), the job is cancelled in `finally`: this finishes a job
+   * that the route has not taken (e.g. after a validation error), and does nothing to a job that is
+   * finished. If this fails too, the server cancels the job after UNCLAIMED_CLIENT_JOB_MAX_AGE.
    * @template T
    * @param {string} stableId
    * @param {'preview'|'apply'} mode
@@ -217,15 +218,21 @@ class TextCorrectionsPlugin extends Plugin {
     const jobs = this.#jobs
     const job = await jobs.submit('ocr.text-corrections', { stable_id: stableId, mode })
     jobs.wait(job.id).catch(() => {})
+    let finished = false
     try {
-      return await request(job.id)
+      const result = await request(job.id)
+      finished = true
+      return result
     } catch (error) {
-      if (!isCancelledError(error)) {
+      // the route finishes its job as cancelled when the user cancelled it
+      finished = isCancelledError(error)
+      throw error
+    } finally {
+      if (!finished) {
         await jobs.cancel(job.id).catch(cancelError => {
           this.getDependency('logger').warn(`Could not cancel text corrections job ${job.id}: ${cancelError}`)
         })
       }
-      throw error
     }
   }
 

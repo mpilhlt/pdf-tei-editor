@@ -71,7 +71,13 @@ async function cleanUp(page, ids) {
   await releaseAllLocks(page);
   await page.evaluate(async (ids) => {
     const api = /** @type {any} */ (window).client.apiClient;
+    const jobsPlugin = /** @type {any} */ (window).jobs;
     for (const id of ids) await api.filesDelete({ files: [id] }).catch(() => {});
+    // the tests that mock the routes leave the jobs of their requests queued (no route takes them)
+    const jobs = await jobsPlugin.client.list({ mine: true, status: ['queued'] });
+    for (const job of jobs) {
+      if (job.type === 'ocr.text-corrections') await jobsPlugin.client.cancel(job.id).catch(() => {});
+    }
   }, ids).catch(() => {});
 }
 

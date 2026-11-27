@@ -3,6 +3,7 @@ Unit tests for jobs that are driven by the request that does their work, and the
 
 @testCovers fastapi_app/lib/jobs/request_job.py
 @testCovers fastapi_app/lib/jobs/adapters.py
+@testCovers fastapi_app/lib/jobs/hooks.py::cancel_unclaimed_client_jobs
 """
 
 import asyncio
@@ -17,6 +18,7 @@ from fastapi.testclient import TestClient
 from fastapi_jobqueue import JobManager, Principal
 
 from fastapi_app.lib.core.request_cancellation import SHUTDOWN_DETAIL
+from fastapi_app.lib.jobs.hooks import UNCLAIMED_CLIENT_JOB_MAX_AGE, cancel_unclaimed_client_jobs
 from fastapi_app.lib.jobs import RequestJob, RequestJobCancelled, register_client_type, run_request_job, thread_callbacks
 from tests.unit.fastapi.test_jobs_infrastructure import JobsTestCase, headers
 
@@ -180,6 +182,45 @@ class TestRequestJob(JobsTestCase):
         self.assertEqual(writes[-1], 200)
         self.assertEqual(writes, sorted(w for w in writes if w is not None))
         self.assertLess(len(writes), 10)
+
+
+    def test_progress_write_in_flight_at_exit_is_not_lost(self) -> None:
+        manager = self.make_manager()
+        original = manager.report
+
+        async def slow_report(*args: Any, **kwargs: Any) -> Any:
+            await asyncio.sleep(0.4)
+            return await original(*args, **kwargs)
+
+        manager.report = slow_report  # type: ignore[method-assign]
+        with self.make_client(manager) as client:
+            assert client.portal is not None
+            job_id = self.submit_client_job(client)
+
+            async def run() -> None:
+                async with run_request_job(job_id, ALICE) as job:
+                    await asyncio.to_thread(lambda: job.report_threadsafe(phase="last", done=1, total=2))
+                    # the delayed write has started, and the body ends while it is in progress
+                    await asyncio.sleep(0.1)
+
+            client.portal.call(run)
+            job = self.wait_for(client, job_id, ("done",))
+        self.assertEqual((job["progress"]["phase"], job["progress"]["done"]), ("last", 1))
+
+    def test_unclaimed_client_jobs_are_cancelled_after_the_max_age(self) -> None:
+        manager = self.make_manager()
+        with self.make_request_client(manager) as client:
+            assert client.portal is not None
+            old_id = self.submit_client_job(client)
+            claimed_id = self.submit_client_job(client)
+            self.assertEqual(client.post(f"/work/{claimed_id}/ok").status_code, 200)
+            self.assertEqual(client.portal.call(cancel_unclaimed_client_jobs), 0)
+            self.assertEqual(client.get(f"/api/v1/jobs/{old_id}", headers=headers("alice-session")).json()["status"], "queued")
+            # the age is injected through the clock of the manager
+            manager.clock = lambda: time.time() + UNCLAIMED_CLIENT_JOB_MAX_AGE + 1
+            self.assertEqual(client.portal.call(cancel_unclaimed_client_jobs), 1)
+            self.assertEqual(client.get(f"/api/v1/jobs/{old_id}", headers=headers("alice-session")).json()["status"], "cancelled")
+            self.assertEqual(client.get(f"/api/v1/jobs/{claimed_id}", headers=headers("alice-session")).json()["status"], "done")
 
 
 class TestThreadCallbacks(unittest.TestCase):
