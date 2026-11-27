@@ -160,6 +160,9 @@ const dismissListeners = new Set();
 /** @type {Set<(deleted: Diagnostic[]) => void>} */
 const deleteListeners = new Set();
 
+/** @type {Set<(fixed: FixableDiagnostic[]) => void>} */
+const fixListeners = new Set();
+
 /**
  * Returns the diagnostics currently stored in the editor state.
  * @param {EditorState} state
@@ -271,6 +274,29 @@ export function addDismissListener(listener) {
 export function addDeleteListener(listener) {
   deleteListeners.add(listener);
   return () => deleteListeners.delete(listener);
+}
+
+/**
+ * Registers a listener called with the diagnostics whose fix (`replacement`) the user applies
+ * without the merge view (e.g. "Apply fix" in the diagnostics drawer), so that a plugin can record
+ * the fixes of the diagnostics it owns. It is called before the diagnostics are dismissed and the
+ * fixes are dispatched; work on the changed document must wait for the dispatch (e.g. be async).
+ * @param {(fixed: FixableDiagnostic[]) => void} listener
+ * @returns {() => void} Function removing the listener
+ */
+export function addFixListener(listener) {
+  fixListeners.add(listener);
+  return () => fixListeners.delete(listener);
+}
+
+/**
+ * Notifies the fix listeners (see {@link addFixListener}) of fixes about to be applied.
+ * @param {FixableDiagnostic[]} fixed
+ * @returns {void}
+ */
+export function notifyFixesApplied(fixed) {
+  if (!fixed.length) return;
+  for (const listener of fixListeners) listener(fixed);
 }
 
 /**

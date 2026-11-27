@@ -3,7 +3,10 @@
  * with an LLM through the backend and shows the suggested corrections as diagnostics, each with a
  * "Propose fix" action that opens the merge view. In focus mode, the "OCR auto-corrections" button
  * reviews the pages of the focused node. The corrections the reviewer accepts are written to the
- * PDF with Tools > Write text corrections to PDF (see text-corrections.js).
+ * PDF with Tools > Write text corrections to PDF (see text-corrections.js). Each accepted correction
+ * is recorded in the document history (`teiHeader/revisionDesc`) by the user, naming the model that
+ * suggested it; the corrections accepted one after another share one change. This covers fixes
+ * accepted in the merge view ("Propose fix") and fixes applied in the diagnostics drawer.
  *
  * Requires the line layout of the document (`GET /api/v1/files/{stable_id}/layout`), which only
  * zone documents with a layout provider have.
@@ -11,6 +14,9 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlMenuItem } from '../ui.js'
  * @import { Finding } from '../modules/llm-findings.js'
+ * @import { OcrCorrectionsRecord } from '../modules/tei-utils.js'
+ * @import { MergeViewHideEventData } from '../modules/xmleditor.js'
+ * @import { FixableDiagnostic } from '../modules/lint-utils.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -19,6 +25,8 @@ import { testLog } from '../modules/test-log.js'
 import { FindingsDisplay, buildModifiedText } from '../modules/llm-findings.js'
 import { SessionStorage } from '../modules/session-storage.js'
 import * as lintUtils from '../modules/lint-utils.js'
+import { getRevisionStatus, recordOcrCorrections } from '../modules/tei-utils.js'
+import { prettyPrintXmlDom } from '../modules/xml-utils.js'
 
 /** Diagnostic source tag identifying this plugin's diagnostics */
 const SOURCE = 'ocr-review'
@@ -61,6 +69,20 @@ class OcrReviewPlugin extends Plugin {
   /** True while a review runs */
   #busy = false
 
+  /**
+   * The fix shown in the merge view: the document it was proposed for, its text before and the
+   * model that suggested it. `shown` is set once the merge view shows it.
+   * @type {{stableId: string, before: string, model: string|null, shown: boolean}|null}
+   */
+  #pendingFix = null
+
+  /**
+   * Per document (stable_id): the revision change that records the corrections accepted in this
+   * session, which later corrections update while it is the last change.
+   * @type {Map<string, OcrCorrectionsRecord>}
+   */
+  #recorded = new Map()
+
   /** Button shown on the focused node in the XML editor's focus mode */
   #focusAction = {
     label: 'OCR auto-corrections',
@@ -90,6 +112,8 @@ class OcrReviewPlugin extends Plugin {
     this.#display.attach()
     this.#display.restore(this.state?.xml || null)
     xmlEditor.on('editorReady', () => this.#updateMenuState())
+    xmlEditor.on('editorHideMergeView', (/** @type {MergeViewHideEventData} */ data) => this.#onMergeViewHidden(data))
+    lintUtils.addFixListener(fixed => this.#onFixesApplied(fixed))
     this.#updateMenuState()
     await this.#checkLayout()
   }
@@ -163,11 +187,91 @@ class OcrReviewPlugin extends Plugin {
       notify('The document changed; this finding no longer applies.', 'warning', 'exclamation-triangle')
       return
     }
+    const pending = { stableId: this.state?.xml || '', before: xmlEditor.getView().state.doc.toString(), model: finding.model ?? null, shown: false }
+    this.#pendingFix = pending
     try {
       await xmlEditor.showMergeView(modified)
+      pending.shown = true
     } catch (error) {
+      if (this.#pendingFix === pending) this.#pendingFix = null
       notify(`Could not show the proposed fix: ${/** @type {Error} */ (error).message}`, 'danger', 'exclamation-octagon')
     }
+  }
+
+  /**
+   * The merge view was closed. If it showed a fix of this plugin and the document changed, the fix
+   * was accepted (wholly or in part): record it in the document history.
+   * @param {MergeViewHideEventData} data
+   */
+  #onMergeViewHidden(data) {
+    const pending = this.#pendingFix
+    // a merge view replaced while showing the fix is that of another plugin or another fix
+    if (!pending?.shown) return
+    this.#pendingFix = null
+    if (data?.replaced) return
+    const xmlEditor = this.getDependency('xmleditor')
+    if (this.state?.xml !== pending.stableId || xmlEditor.getView().state.doc.toString() === pending.before) return
+    this.#recordAcceptedFixes(pending.stableId, [pending.model])
+  }
+
+  /**
+   * Fixes of diagnostics were applied without the merge view (diagnostics drawer): record those of
+   * this plugin. Called before the fixes are dispatched; the recording waits for the editor sync.
+   * @param {FixableDiagnostic[]} fixed
+   */
+  #onFixesApplied(fixed) {
+    const own = fixed.filter(d => d.source === SOURCE)
+    const stableId = this.state?.xml
+    if (!own.length || !stableId || !this.#display) return
+    const findings = this.#display.findings
+    const models = own.map(d => findings.find(f => f.rationale === d.message && f.new === d.replacement)?.model ?? null)
+    this.#recordAcceptedFixes(stableId, models)
+  }
+
+  /**
+   * Record accepted OCR corrections in the revision history of the open document, notifying the
+   * user if that fails.
+   * @param {string} stableId - The document the corrections were accepted in
+   * @param {(string|null)[]} models - Per correction, the name of the model that suggested it
+   */
+  #recordAcceptedFixes(stableId, models) {
+    // one at a time, so that each sees the change of the previous one
+    this.#recording = this.#recording.then(() => this.#recordFixes(stableId, models)).catch(error => {
+      notify(`The OCR correction could not be recorded in the document history: ${/** @type {Error} */ (error)?.message ?? String(error)}`, 'warning', 'exclamation-triangle')
+    })
+  }
+
+  /** The recording in progress */
+  #recording = Promise.resolve()
+
+  /**
+   * Record accepted OCR corrections in the revision history of the open document.
+   * @param {string} stableId - The document the corrections were accepted in
+   * @param {(string|null)[]} models - Per correction, the name of the model that suggested it
+   * @returns {Promise<void>}
+   */
+  async #recordFixes(stableId, models) {
+    const xmlEditor = this.getDependency('xmleditor')
+    await xmlEditor.syncIfChanged()
+    if (this.state?.xml !== stableId) return
+    const xmlDoc = xmlEditor.getXmlTree()
+    if (!xmlDoc || !xmlEditor.isSynced()) {
+      throw new Error('the XML in the editor is not well-formed')
+    }
+    const user = this.state?.user
+    if (!user) throw new Error('no user is logged in')
+    const record = recordOcrCorrections(xmlDoc, {
+      persId: user.username,
+      fullName: user.fullname,
+      status: getRevisionStatus(xmlDoc) || 'draft',
+      count: models.length,
+      models,
+      previous: this.#recorded.get(stableId) ?? null
+    })
+    this.#recorded.set(stableId, record)
+    prettyPrintXmlDom(xmlDoc, 'teiHeader')
+    await xmlEditor.updateEditorFromXmlTree()
+    testLog('OCR_CORRECTION_RECORDED', { stableId, count: record.count, when: record.when })
   }
 
   /**
@@ -259,7 +363,8 @@ class OcrReviewPlugin extends Plugin {
         if (index === 0) this.#display.clear()
         // appended, so that findings dismissed or applied meanwhile do not come back; the drawer
         // opens for the first findings only
-        if (found.length) count += this.#display.append(found, count === 0)
+        // the model is kept with each finding, for the document history when the fix is accepted
+        if (found.length) count += this.#display.append(found.map(f => ({ ...f, model: label })), count === 0)
       }
       if (documentChanged()) return
       if (cancelled) {

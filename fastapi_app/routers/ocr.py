@@ -61,6 +61,7 @@ from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr import llm_correction
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
 from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window
+from ..lib.ocr.provenance import OCR_METADATA_KEY, TEXT_CORRECTIONS_METADATA_KEY
 from ..lib.ocr.progress import OcrCancelled, ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
@@ -77,18 +78,15 @@ from ..lib.tei.zone_lines import window_range
 from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
 from ..lib.utils.config_utils import get_config
 from ..lib.utils.revision_hash import stamp_revision_hashes
-from ..lib.utils.tei_utils import extract_tei_metadata, update_fileref_in_xml
+from ..lib.utils.tei_utils import add_revision_change, extract_processing_instructions, extract_tei_metadata, serialize_tei_with_formatted_header, update_fileref_in_xml
 from ..lib.utils.xml_utils import apply_entity_encoding_from_config
 from ..lib.utils.logging_utils import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/ocr", tags=["ocr"])
 
-OCR_METADATA_KEY = "ocr"
-"""Key in the PDF's file_metadata under which the last OCR run is recorded."""
-
-TEXT_CORRECTIONS_METADATA_KEY = "text_corrections"
-"""Key in the PDF's file_metadata under which the text corrections written into it are recorded."""
+# OCR_METADATA_KEY: the last OCR run of a PDF; TEXT_CORRECTIONS_METADATA_KEY: the text corrections
+# written into it (keys of the PDF's file_metadata, see lib/ocr/provenance.py)
 
 PROGRESS_WRITE_INTERVAL_SECONDS = 1.0
 
@@ -886,21 +884,53 @@ def _patch_pdf(source: Path, target: Path, corrections: list[WordCorrection]) ->
         pdf.save(target)
 
 
-def _prepare_version_xml(xml: str, doc_id: str, reference_xml: str) -> tuple[str, dict[str, str | None]]:
+TEXT_CORRECTIONS_LABEL = "Corrected text layer"
+"""Label of a version created by writing text corrections into the PDF."""
+
+
+def _text_corrections_desc(count: int) -> str:
+    """The description of the revision change of a version created by writing text corrections into the PDF."""
+    return f"Wrote {count} text correction{'' if count == 1 else 's'} into the text layer of a new PDF and attached this version to it"
+
+
+def _prepare_version_xml(xml: str, doc_id: str, reference_xml: str, user: dict[str, Any], corrections: int) -> tuple[str, dict[str, str | None]]:
     """
-    Prepare the TEI returned by the corrected-PDF handler for storage as a new version, as the
-    save route does: document identifier, entity encoding and revision hashes.
+    Prepare the TEI returned by the corrected-PDF handler for storage as a new version: a revision
+    change by the user that records the corrections and labels the version (TEXT_CORRECTIONS_LABEL),
+    then, as the save route does, document identifier, entity encoding and revision hashes.
+
+    The change keeps the status of the last change of the document ("draft" if there is none).
+
+    Args:
+        xml: The TEI returned by the handler
+        doc_id: Document the version belongs to
+        reference_xml: The TEI the version is made from
+        user: The user who writes the corrections
+        corrections: Number of corrections written into the PDF
 
     Returns:
         The XML and its label, status and last_revision
 
     Raises:
-        ValueError: if the XML is not well-formed
+        ValueError: if the XML is not well-formed or has no teiHeader
     """
     try:
         root = etree.fromstring(xml.encode("utf-8"))
     except etree.XMLSyntaxError as e:
         raise ValueError(f"The updated document is not well-formed XML: {e}") from e
+    username = str(user.get("username") or "") or "unknown"
+    # the user's name is recorded in a respStmt of the fileDesc, if the document has one
+    has_file_desc = root.find("tei:teiHeader/tei:fileDesc", {"tei": "http://www.tei-c.org/ns/1.0"}) is not None
+    add_revision_change(
+        root,
+        when=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        status=str(extract_tei_metadata(root).get("status") or "draft"),
+        who=username,
+        desc=_text_corrections_desc(corrections),
+        full_name=(str(user.get("fullname") or "") or None) if has_file_desc else None,
+        label=TEXT_CORRECTIONS_LABEL,
+    )
+    xml = serialize_tei_with_formatted_header(root, extract_processing_instructions(xml))
     metadata = extract_tei_metadata(root)
     try:
         xml = update_fileref_in_xml(xml, doc_id)
@@ -970,7 +1000,8 @@ async def apply_text_corrections(
     The extractor plugin of the document's variant then regenerates its data for the corrected
     PDF and returns the TEI updated for it. It is saved as a new version of the document
     (`tei_stable_id`; its content is returned as `xml`), which is attached to the corrected PDF,
-    made from the given version and locked for the session.
+    made from the given version and locked for the session. A revision change by the user records
+    the corrections and gives the version the label "Corrected text layer".
 
     Refused with 409 if the corrections cannot be written (see the preview's `reason`) or if some
     differences cannot be written and `skip_unwritable` is false, and with 423 if another session
@@ -1018,7 +1049,7 @@ async def apply_text_corrections(
         logger.exception(f"The corrected-PDF handler failed for {pdf.stable_id}: {e}")
         raise HTTPException(status_code=502, detail=f"The corrected PDF could not be processed: {e}")
     try:
-        version_xml, version_metadata = _prepare_version_xml(xml, tei.doc_id, context.xml)
+        version_xml, version_metadata = _prepare_version_xml(xml, tei.doc_id, context.xml, current_user, len(plan.corrections))
     except ValueError as e:
         logger.warning(f"The corrected-PDF handler returned an invalid document for {tei.stable_id}: {e}")
         raise HTTPException(status_code=502, detail=str(e))

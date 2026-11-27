@@ -289,6 +289,66 @@ export function addRevisionChange(xmlDoc, revisionChange) {
 }
 
 /**
+ * The OCR corrections accepted in a document and recorded in one revision change.
+ * @typedef {object} OcrCorrectionsRecord
+ * @property {string} when - The `when` of the change that records them
+ * @property {number} count - Number of accepted corrections
+ * @property {string[]} models - Names of the models that suggested them
+ */
+
+/**
+ * Record accepted OCR corrections in the document history (teiHeader/revisionDesc). If the last
+ * change of the history is the one `previous` was recorded in, its description is updated, so that
+ * the corrections accepted in a row share one change; otherwise a change is added. The version
+ * label is not changed (no `note[@type="label"]`).
+ *
+ * @param {Document} xmlDoc - The XML DOM Document object
+ * @param {object} options
+ * @param {string} options.persId - The ID of the user who accepted the correction
+ * @param {string} [options.fullName] - The full name of the user
+ * @param {string} options.status - Status of an added change
+ * @param {number} [options.count] - Number of corrections accepted
+ * @param {(string|null)[]} [options.models] - Names of the models that suggested them (null if unknown)
+ * @param {OcrCorrectionsRecord|null} [options.previous] - The record of earlier corrections
+ * @returns {OcrCorrectionsRecord} The record of the change that holds the corrections
+ * @throws {Error} If the TEI header is not found in the document
+ */
+export function recordOcrCorrections(xmlDoc, { persId, fullName, status, count = 1, models: newModels = [], previous = null }) {
+  const changes = xmlDoc.querySelectorAll('teiHeader > revisionDesc > change')
+  const last = changes[changes.length - 1]
+  const continued = Boolean(previous && last && last.getAttribute('when') === previous.when)
+  const models = continued && previous ? [...previous.models] : []
+  for (const model of newModels) {
+    if (model && !models.includes(model)) models.push(model)
+  }
+  if (continued && previous) {
+    const record = { when: previous.when, count: previous.count + count, models }
+    let desc = Array.from(last.children).find(c => c.localName === 'desc')
+    if (!desc) {
+      desc = xmlDoc.createElementNS(teiNamespaceURI, 'desc')
+      last.appendChild(desc)
+    }
+    desc.textContent = describeOcrCorrections(record)
+    return record
+  }
+  const record = { when: '', count, models }
+  addRevisionChange(xmlDoc, { status, persId, fullName, desc: describeOcrCorrections(record) })
+  const added = xmlDoc.querySelectorAll('teiHeader > revisionDesc > change')
+  record.when = added[added.length - 1].getAttribute('when') || ''
+  return record
+}
+
+/**
+ * The description of the revision change that records accepted OCR corrections.
+ * @param {OcrCorrectionsRecord} record
+ * @returns {string} E.g. "Accepted 3 OCR corrections suggested by Gemini Flash"
+ */
+export function describeOcrCorrections(record) {
+  const what = `Accepted ${record.count} OCR correction${record.count === 1 ? '' : 's'}`
+  return record.models.length ? `${what} suggested by ${record.models.join(', ')}` : `${what} suggested by a language model`
+}
+
+/**
  * Returns the label from the last revisionDesc/change/note[@type="label"], or null if none.
  * Falls back to editionStmt/edition/title for backward compatibility.
  * @param {Document} xmlDoc

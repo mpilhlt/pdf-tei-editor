@@ -18,6 +18,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pikepdf
+from lxml import etree
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -323,6 +324,13 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         assert content is not None
         self.assertEqual(content.decode("utf-8"), result["xml"])
         self.assertIn(f'<idno type="pdf-hash">{pdf.id}</idno>', result["xml"])
+        # a revision change records the corrections and labels the version
+        changes = etree.fromstring(content).findall("{*}teiHeader/{*}revisionDesc/{*}change")
+        self.assertEqual(len(changes), 1)
+        self.assertEqual((changes[0].get("who"), changes[0].get("status")), ("#rev", "draft"))
+        self.assertEqual(changes[0].findtext("{*}note[@type='label']"), ocr_router.TEXT_CORRECTIONS_LABEL)
+        self.assertEqual(changes[0].findtext("{*}desc"), "Wrote 1 text correction into the text layer of a new PDF and attached this version to it")
+        self.assertEqual(version.label, ocr_router.TEXT_CORRECTIONS_LABEL)
         # locked for the session that wrote the corrections
         self.assertTrue(check_lock(version.stable_id, "other-session", self.tmp, ocr_router.logger)["is_locked"])
         self.assertFalse(check_lock(version.stable_id, SESSION, self.tmp, ocr_router.logger)["is_locked"])
@@ -332,6 +340,23 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.assertEqual(tei.pdf_stable_id, "pdf1")
         self.assertNotEqual(self.preview(stable_id=version.stable_id)["reason"], ocr_router.LOCKED_MESSAGE)
         self.assertIsNone(self.preview()["reason"])
+
+    def test_version_keeps_history_and_status_of_its_source(self):
+        header = ('<teiHeader><fileDesc><titleStmt><title>T</title></titleStmt></fileDesc><idno type="pdf-hash">OLD-HASH</idno>'
+                  '<revisionDesc><change when="2026-01-01T00:00:00Z" status="extraction" who="#grobid"><note type="label">Extraction</note><desc>Extracted</desc></change></revisionDesc></teiHeader>')
+        xml = tei_xml(corrected(LINES)).replace('<teiHeader><idno type="pdf-hash">OLD-HASH</idno></teiHeader>', header)
+        self.insert(self.save(xml.encode(), "tei"), "tei", stable_id="tei3", variant=VARIANT, doc_collections=["c1"], version=3, label="Extraction")
+        self.user = {**REVIEWER, "fullname": "Rita Reviewer"}
+        response = self.apply(stable_id="tei3")
+        self.assertEqual(response.status_code, 200, response.text)
+        root = etree.fromstring(response.json()["xml"].encode())
+        changes = root.findall("{*}teiHeader/{*}revisionDesc/{*}change")
+        self.assertEqual([c.findtext("{*}note[@type='label']") for c in changes], ["Extraction", ocr_router.TEXT_CORRECTIONS_LABEL])
+        self.assertEqual((changes[1].get("who"), changes[1].get("status")), ("#rev", "extraction"))
+        self.assertEqual(root.findtext(".//{*}titleStmt/{*}respStmt/{*}persName"), "Rita Reviewer")
+        version = self.repo.get_file_by_stable_id(response.json()["tei_stable_id"])
+        assert version is not None
+        self.assertEqual((version.label, version.status), (ocr_router.TEXT_CORRECTIONS_LABEL, "extraction"))
 
     def test_unchanged_pdf_is_refused(self):
         with patch.object(ocr_router, "_patch_pdf", lambda source, target, corrections: shutil.copyfile(source, target)):

@@ -48,6 +48,7 @@ import {
   diagnosticKey,
   dismissDiagnostics,
   fixChanges,
+  notifyFixesApplied,
   replacesDiagnostics,
   revealsDiagnostics
 } from '../modules/lint-utils.js'
@@ -241,6 +242,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
       return tr.docChanged && tr.newDoc.sliceString(changes[i].from, changes[i].from + changes[i].insert.length) === changes[i].insert
     })
     if (accepted.length) {
+      notifyFixesApplied(accepted)
       // dismiss first, while the diagnostics still cover the text they are keyed by
       for (const d of accepted) this.#checked.delete(diagnosticKey(view.state, d))
       dismissDiagnostics(view, accepted)
