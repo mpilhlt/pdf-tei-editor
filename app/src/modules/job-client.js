@@ -262,6 +262,15 @@ export class JobClient {
   }
 
   /**
+   * The id of this browser tab as lease holder of client jobs, created once per tab and kept
+   * across reloads (session storage).
+   * @returns {string}
+   */
+  get holder() {
+    return this.#holder()
+  }
+
+  /**
    * The id of this browser tab as lease holder of client jobs, created once per tab.
    * @returns {string}
    */

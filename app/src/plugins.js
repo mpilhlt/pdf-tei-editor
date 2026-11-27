@@ -43,6 +43,7 @@ import {
   MoveFilesPlugin,
   PdfViewerPlugin,
   ProgressPlugin,
+  JobsPlugin,
   RbacManagerPlugin,
   ServicesPlugin,
   SsePlugin,
@@ -130,6 +131,7 @@ const plugins = [
   MoveFilesPlugin,
   SsePlugin,
   ProgressPlugin,
+  JobsPlugin,           // job progress widgets, cancel, resume after reload — depends on ProgressPlugin
   AccessControlPlugin,
   HeartbeatPlugin,
   StartPlugin

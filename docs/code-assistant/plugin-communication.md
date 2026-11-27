@@ -129,6 +129,10 @@ A `PanelContribution` (`app/src/modules/panels/base-panel.js`) has `element`, `p
 
 Backend plugins can add boxes to the login dashboard by implementing `dashboard.contributions` in a frontend extension. See [fastapi_app/plugins/dashboard/README.md](../../fastapi_app/plugins/dashboard/README.md) for the contribution format and the layout rules.
 
+### Resuming client jobs
+
+`jobs.resume` (host: `JobsPlugin`) lets a plugin resume its client jobs after a page reload. The handler returns `{ type, resume: (job) => Promise<void> }` (or an array of them); `resume` typically calls `getDependency('jobs').runClientJob(job.type, job.params, body, { jobId: job.id })`. See [jobs.md](jobs.md#frontend-the-jobs-plugin).
+
 ### Auto-discovered extension points
 
 The base class auto-mounts these without any declaration:

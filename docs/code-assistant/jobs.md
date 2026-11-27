@@ -98,6 +98,45 @@ async with run_request_job(job_id, principal) as job:  # principal: Depends(curr
 - `wait(jobId, {signal})`: resolves `job.result`; rejects `JobFailedError` (`.status`, `.message`) for `error`/`expired` and `JobCancelledError` for `cancelled`. It polls every 2 s while the stream is in error. Aborting the signal only stops waiting.
 - `runClientJob(type, params, body, {resources, inputHash, jobId})`: submits (or resumes `jobId`), claims with the tab's holder (`sessionStorage['job-holder']`), heartbeats every 10 s and calls `body({job, step, report})`. `step(key, fn)` returns a saved result instead of running `fn`; `report(progress)` throws `JobCancelledError` after a cancel request, which finishes the job as cancelled. Other errors finish it `error` with status 500.
 - `formatJobProgress(job, heading?)`: "Recognizing text, pages 12 of 71, about 2 minutes left".
+- `holder`: the tab's lease holder id.
+
+## Frontend: the `jobs` Plugin
+
+`app/src/plugins/jobs.js` (`getDependency('jobs')`, `window.jobs` in tests) builds the `JobClient` after login, rebuilds it when the session changes and drops it on logout. Use it instead of constructing a `JobClient`:
+
+- `client` (the `JobClient`; throws before login), `submit(type, params, options)`, `wait(jobId, {signal})`, `cancel(jobId)`, `runClientJob(type, params, body, options)`.
+- **Widgets**: every unfinished job of the user (`queued`, `active`, `interrupted`) is shown as a progress widget with id `job-<job id>`, the type's title, `formatJobProgress(job)` (or `job.message` when the job reports no progress) and `progress.value` (null: indeterminate). The cancel button cancels the job; the widget shows "Cancelling…" until the job is finished. A job submitted with `data.minimized === true` starts minimized. Callers must not show widgets of their own for jobs: the plugin already does, in every tab of the user.
+- **Errors**: a failed job is notified (`notify(error.message, 'danger')`) unless this tab waits for it with `wait()` or runs it with `runClientJob()`; then the caller reports the error. Finished, cancelled and expired jobs only remove their widget.
+- **Reload**: the stream's snapshot re-creates the widgets. Then the plugin lists the resumable client jobs (`list({mine: true, resumable: true})`): jobs whose lease holder is this tab are resumed without asking, interrupted jobs of other tabs after the user confirmed (otherwise cancelled); active jobs that another tab holds are left alone. Jobs of a type without a `jobs.resume` contribution are cancelled.
+
+```javascript
+import ep from '../extension-points.js'
+
+class MyPlugin extends Plugin {
+  static extensionPoints = [ep.jobs.resume];
+
+  /**
+   * Extension point handler for `ep.jobs.resume`.
+   * Called by JobsPlugin after login to resume interrupted client jobs.
+   * Delegates to {@link MyPlugin#getResumeContribution}.
+   * @returns {JobResumeContribution}
+   */
+  [ep.jobs.resume](...args) { return this.getResumeContribution(...args) }
+
+  getResumeContribution() {
+    return { type: 'my-plugin.review', resume: (job) => this.#review(job.params, job.id) }
+  }
+
+  /** Runs the review; with a `jobId`, resumes it and skips the saved steps. */
+  async #review(params, jobId) {
+    return this.getDependency('jobs').runClientJob('my-plugin.review', params, async ({ step, report }) => {
+      // ...
+    }, { jobId })
+  }
+}
+```
+
+The E2E tests in `tests/e2e/tests/jobs-progress.spec.js` use the core type `test.progress`.
 
 ## Testing
 

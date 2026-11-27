@@ -218,6 +218,7 @@ describe('JobClient.runClientJob', () => {
     assert.strictEqual(holders.length, 2)
     assert.strictEqual(holders[0], holders[1])
     assert.strictEqual(store.get('job-holder'), holders[0])
+    assert.strictEqual(client.holder, holders[0])
   })
 
   test('runClientJob resumes a given job id without submitting', async () => {

@@ -134,6 +134,8 @@ if (applicationMode == 'testing' || applicationMode == 'development' ) {
   window.sse = pluginManager.getDependency('sse');
     // @ts-ignore
   window.progress = pluginManager.getDependency('progress');
+  // @ts-ignore
+  window.jobs = pluginManager.getDependency('jobs');
 }
 // @test-end
 
