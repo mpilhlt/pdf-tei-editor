@@ -185,6 +185,12 @@ Text recognition (the core OCRmyPDF plugin) uses Tesseract. The build argument `
 docker build --build-arg TESSERACT_LANGS="eng deu fra tur" -t pdf-tei-editor .
 ```
 
+These packages contain the `tessdata_fast` models. The build argument `TESSERACT_BEST_LANGS` lists the languages for which the more accurate and slower `tessdata_best` models are also installed (about 10 MB per language, default: the languages of `TESSERACT_LANGS`); the OCR option "Recognition model" chooses between them. Set it to an empty string to install none:
+
+```bash
+docker build --build-arg TESSERACT_BEST_LANGS="eng deu" -t pdf-tei-editor .
+```
+
 The image also contains Ghostscript, which the plugin uses to replace a broken digital text layer while keeping the pages as vector graphics. Ghostscript is licensed under the AGPL and is only run as a separate program. Without Ghostscript, such PDFs are converted to images instead.
 
 ### External Plugins

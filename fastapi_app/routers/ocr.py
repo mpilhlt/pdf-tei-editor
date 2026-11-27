@@ -698,6 +698,8 @@ async def _recognize(
             record["method"] = result.method
         if result.fallback_reason:
             record["fallback_reason"] = result.fallback_reason
+        if result.models:
+            record["models"] = result.models
         file_metadata = {**file.file_metadata, OCR_METADATA_KEY: record}
         result_pdf = _store_pdf(repo, storage, file, output_path.read_bytes(), file_metadata, user)
         logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {result_pdf.stable_id} ({result_pdf.id[:8]})")

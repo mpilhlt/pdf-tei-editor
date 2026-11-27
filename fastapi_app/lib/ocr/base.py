@@ -79,6 +79,9 @@ class OcrResult:
     fallback_reason: Optional[str] = None
     """Why the engine fell back from the preferred method, if it did."""
 
+    models: Optional[list[str]] = None
+    """The recognition models used, if the engine reports them (e.g. Tesseract's `deu`, `best/deu`)."""
+
 
 class OcrEngine(ABC):
     """Base class for OCR engines registered with the OcrEngineRegistry."""

@@ -8,11 +8,17 @@ Registers the text recognition engine "OCRmyPDF (Tesseract)" with the OCR engine
 - The `tesseract` program and the language data of the languages to recognize. On Debian: `apt-get install tesseract-ocr tesseract-ocr-deu ...`, on macOS: `brew install tesseract tesseract-lang`.
 - Optional: the `gs` program (Ghostscript) to replace a broken digital text layer without rasterizing the pages. On Debian: `apt-get install ghostscript`, on macOS: `brew install ghostscript`. Without it, such PDFs are rasterized.
 
-The Docker image installs Ghostscript and the languages listed in the build argument `TESSERACT_LANGS`. The plugin is unavailable if `tesseract` is not installed.
+The Docker image installs Ghostscript and the languages listed in the build argument `TESSERACT_LANGS`, and the `tessdata_best` models of the languages in `TESSERACT_BEST_LANGS` (default: the same languages). The plugin is unavailable if `tesseract` is not installed.
 
 ## Languages
 
 The installed Tesseract models are mapped to the normalized language codes of the application (`deu` → `de`, `chi_sim` → `zh-Hans`, `frk` → `de-Latf`). Script models (`script/Latin`), vertical text models and historical variants with a suffix (`ita_old`) are not offered.
+
+## Recognition models (`fast` / `best`)
+
+The Debian packages `tesseract-ocr-<lang>` contain the `tessdata_fast` models (integer LSTM, e.g. 1.5 MB for `deu`). The more accurate `tessdata_best` models (float LSTM, 8 MB for `deu`, several times slower) are installed in the subdirectory `best/` of the tessdata directory, where Tesseract lists them as `best/<lang>` and selects them with `-l best/deu`. They are not offered as languages; the parameter `model` chooses them for a run (#959). It is only offered if at least one best model is installed. Languages without a best model use the fast one. The models used are recorded in `file_metadata.ocr.models` and named in the result message. The word recognition of the text layer check always uses the fast models.
+
+To install best models outside Docker, download them from <https://github.com/tesseract-ocr/tessdata_best> into `<tessdata>/best/` (the tessdata directory is printed by `tesseract --list-langs`).
 
 ## Parameters
 
@@ -22,6 +28,7 @@ The installed Tesseract models are mapped to the normalized language codes of th
 | `rasterize_fallback` | If `vectorize` is not possible, rasterize the pages instead (default). If unchecked, the run fails instead. |
 | `deskew` | Straighten skewed pages (not in `redo` mode, not applied when the pages are kept as vector graphics) |
 | `rotate_pages` | Fix the orientation of pages; may invalidate annotation coordinates |
+| `model` | `fast` (default) or `best`, see above. Only offered if `tessdata_best` models are installed. |
 
 `auto` chooses:
 

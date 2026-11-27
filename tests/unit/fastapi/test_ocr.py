@@ -465,13 +465,14 @@ class TestOcrRouter(unittest.TestCase):
         self.assertEqual((body["status"], body["layout_checked"]), ("missing", False))
 
     def test_apply_ocr_records_method_and_rebuild(self):
-        self.engine.result = OcrResult(message="rasterized", method="force", fallback_reason="Ghostscript is not installed")
+        self.engine.result = OcrResult(message="rasterized", method="force", fallback_reason="Ghostscript is not installed", models=["best/deu"])
         body = self.ocr_result({"stable_id": "pdf1", "engine": "fake", "rebuild": True})
         self.assertEqual((body["message"], body["method"], body["fallback_reason"]), ("rasterized", "force", "Ghostscript is not installed"))
         self.assertEqual(body["quality"]["ocr_applied"]["method"], "force")
         self.assertEqual(self.engine.rebuild_flags, [True])
         record = self.repo.updates[0][1]["file_metadata"]["ocr"]
         self.assertEqual((record["method"], record["fallback_reason"]), ("force", "Ghostscript is not installed"))
+        self.assertEqual(record["models"], ["best/deu"])
         # engines that return a plain message record no method
         self.engine.result = "done"
         body = self.ocr_result({"stable_id": "pdf1", "engine": "fake"})

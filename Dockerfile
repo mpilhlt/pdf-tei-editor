@@ -13,6 +13,11 @@ ARG NODE_VERSION=26
 # Tesseract language models for text recognition (OCRmyPDF plugin), as Debian package suffixes
 # (tesseract-ocr-<lang>). Example: --build-arg TESSERACT_LANGS="eng deu fra"
 ARG TESSERACT_LANGS="eng deu fra ita spa por nld lat grc ell rus pol ces"
+# The Debian packages contain the tessdata_fast models. These languages also get the more accurate
+# (and slower) tessdata_best models, which the OCR option "Recognition model" selects (~10 MB each).
+# Set to "" to install none.
+ARG TESSERACT_BEST_LANGS="${TESSERACT_LANGS}"
+ARG TESSDATA_BEST_VERSION=4.1.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -32,6 +37,14 @@ RUN apt-get update && apt-get install -y \
     # Clean up package cache
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# tessdata_best models in the subdirectory best/ of the tessdata directory, listed by Tesseract as best/<lang>
+RUN tessdata=$(dirname "$(ls /usr/share/tesseract-ocr/*/tessdata/osd.traineddata | head -1)") \
+    && mkdir -p "${tessdata}/best" \
+    && for lang in ${TESSERACT_BEST_LANGS}; do \
+        curl -fsSL -o "${tessdata}/best/${lang}.traineddata" \
+            "https://github.com/tesseract-ocr/tessdata_best/raw/${TESSDATA_BEST_VERSION}/${lang}.traineddata" || exit 1; \
+    done
 
 # Install Node.js via NodeSource repository (avoids tar permission issues)
 RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \

@@ -15,6 +15,10 @@ in two steps:
 Requires the `tesseract` binary with the language data packages
 (`tesseract-ocr-<lang>` on Debian). Step 1 also requires the `gs` binary
 (Ghostscript); without it, only step 2 is used.
+
+The Debian packages contain the `tessdata_fast` models. Models from `tessdata_best`
+(more accurate, slower) can be installed in the subdirectory `best/` of the tessdata
+directory, where Tesseract lists them as `best/<lang>`; the option `model` selects them.
 """
 
 import csv
@@ -61,6 +65,11 @@ MODE_SKIP = "skip"
 MODE_REDO = "redo"
 MODE_FORCE = "force"
 MODE_VECTORIZE = "vectorize"
+
+MODEL_FAST = "fast"
+MODEL_BEST = "best"
+BEST_MODEL_PREFIX = "best/"
+"""Tesseract names the models in the `best/` subdirectory of the tessdata directory `best/<lang>`."""
 
 METHODS: dict[str, OcrMethod] = {MODE_SKIP: "skip", MODE_REDO: "redo", MODE_FORCE: "force", MODE_VECTORIZE: "vectorize"}
 """The method reported for each mode."""
@@ -120,7 +129,7 @@ class OcrmypdfEngine(OcrEngine):
         self._lock = threading.Lock()
 
     def get_options(self) -> dict[str, OcrOption]:
-        return {
+        options: dict[str, OcrOption] = {
             "mode": {
                 "type": "string",
                 "label": "Mode",
@@ -147,6 +156,19 @@ class OcrmypdfEngine(OcrEngine):
                 "default": False,
             },
         }
+        if self._best_models_installed():
+            options["model"] = {
+                "type": "string",
+                "label": "Recognition model",
+                "description": "fast: the standard Tesseract models; best: the more accurate tessdata_best models, which take several times as long. Languages without a best model use the fast one.",
+                "options": [MODEL_FAST, MODEL_BEST],
+                "default": MODEL_FAST,
+            }
+        return options
+
+    def _best_models_installed(self) -> bool:
+        """Return whether any tessdata_best model is installed."""
+        return any(code.startswith(BEST_MODEL_PREFIX) for code in self._get_tesseract_codes())
 
     def _get_tesseract_codes(self) -> list[str]:
         """Return the installed Tesseract language models, cached."""
@@ -174,9 +196,14 @@ class OcrmypdfEngine(OcrEngine):
         languages = {tesseract_to_language(code) for code in self._get_tesseract_codes()}
         return sorted(lang for lang in languages if lang)
 
-    def _tesseract_languages(self, languages: list[str]) -> list[str]:
+    def _tesseract_languages(self, languages: list[str], model: str = MODEL_FAST) -> list[str]:
         """
         Map normalized language codes to installed Tesseract models.
+
+        Args:
+            languages: Normalized language codes
+            model: MODEL_FAST or MODEL_BEST. With MODEL_BEST, the tessdata_best model is used
+                where one is installed, the fast model otherwise.
 
         Raises:
             ValueError: If a language is not installed
@@ -187,6 +214,8 @@ class OcrmypdfEngine(OcrEngine):
             code = language_to_tesseract(language, available)
             if code is None:
                 raise ValueError(f"Language '{language}' is not installed for Tesseract")
+            if model == MODEL_BEST and BEST_MODEL_PREFIX + code in available:
+                code = BEST_MODEL_PREFIX + code
             codes.append(code)
         return codes
 
@@ -262,7 +291,7 @@ class OcrmypdfEngine(OcrEngine):
         options: dict[str, OcrOptionValue],
         rebuild: bool,
     ) -> OcrResult:
-        tesseract_languages = self._tesseract_languages(languages)
+        tesseract_languages = self._tesseract_languages(languages, str(options.get("model") or MODEL_FAST))
         mode = str(options.get("mode") or MODE_AUTO)
         if mode == MODE_AUTO:
             report_progress("Analyzing the text layer")
@@ -281,7 +310,7 @@ class OcrmypdfEngine(OcrEngine):
             source = self._decrypt(input_path, tmp_dir)
             if mode != MODE_VECTORIZE:
                 repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, mode, deskew, options)
-                return OcrResult(message=self._message(mode, tesseract_languages, repaired), method=METHODS[mode])
+                return OcrResult(message=self._message(mode, tesseract_languages, repaired), method=METHODS[mode], models=tesseract_languages)
 
             reason = self._vectorize(input_path, source, tmp_dir)
             if reason is None:
@@ -289,14 +318,14 @@ class OcrmypdfEngine(OcrEngine):
                 message = self._message(MODE_VECTORIZE, tesseract_languages, repaired)
                 if deskew:
                     message += " Skewed pages were not straightened, since the pages were kept as vector graphics."
-                return OcrResult(message=message, method="vectorize")
+                return OcrResult(message=message, method="vectorize", models=tesseract_languages)
 
             if not options.get("rasterize_fallback", True):
                 raise ValueError(f"The text layer could not be replaced without rasterizing the pages: {reason}.")
             logger.info(f"Rasterizing {input_path.name} instead of converting the text to outlines: {reason}")
             repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, MODE_FORCE, deskew, options)
             message = self._message(MODE_FORCE, tesseract_languages, repaired) + f" The pages were converted to images, since {reason}."
-            return OcrResult(message=message, method="force", fallback_reason=reason)
+            return OcrResult(message=message, method="force", fallback_reason=reason, models=tesseract_languages)
 
     @staticmethod
     def _message(mode: str, tesseract_languages: list[str], repaired_markers: int = 0) -> str:
@@ -307,7 +336,7 @@ class OcrmypdfEngine(OcrEngine):
             MODE_FORCE: "all pages were rasterized and recognized",
             MODE_VECTORIZE: "the text layer was replaced, the pages were kept as vector graphics",
         }
-        message = f"Text recognition finished: {descriptions.get(mode, mode)} (languages: {', '.join(tesseract_languages)})."
+        message = f"Text recognition finished: {descriptions.get(mode, mode)} (models: {', '.join(tesseract_languages)})."
         if repaired_markers:
             message += f" {repaired_markers} misrecognized footnote markers were corrected."
         return message
