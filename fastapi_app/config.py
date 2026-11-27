@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     CONFIG_DIR: str = ""  # Optional: override default config location (for tests)
     UPLOAD_DIR: str = ""
     LOG_DIR: str = ""  # Optional: override default log directory (default: project_root/log)
+    SHARED_DATA_DIR: str = ""  # Optional: host-wide directory for downloaded/shared data (default: data_root/shared)
 
     # Session
     SESSION_TIMEOUT: int = 3600  # Session timeout in seconds (default: 1 hour)
@@ -145,6 +146,16 @@ class Settings(BaseSettings):
     def annotation_rules_cache_dir(self) -> Path:
         """Annotation-rules fetch cache directory - always data_root/annotation-rules/cache"""
         return self.data_root / "annotation-rules" / "cache"
+
+    @property
+    def shared_data_dir(self) -> Path:
+        """
+        Host-wide directory for data that is downloaded or shared by all installations
+        (see lib/core/shared_data.py). Configurable via SHARED_DATA_DIR, default data_root/shared.
+        """
+        if self.SHARED_DATA_DIR:
+            return Path(self.SHARED_DATA_DIR)
+        return self.data_root / "shared"
 
     @property
     def log_dir(self) -> Path:

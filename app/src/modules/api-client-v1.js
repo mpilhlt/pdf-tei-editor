@@ -468,6 +468,7 @@
  * @property {string} applied_by - Username
  * @property {OcrMethod=} method - How the text layer was created, if the engine reports it
  * @property {string=} fallback_reason - Why the engine fell back from the preferred method
+ * @property {Array<string>=} models - Recognition models used, if the engine reports them (e.g. `deu`, `best/deu`)
  */
 
 /**
