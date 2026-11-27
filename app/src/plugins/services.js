@@ -161,6 +161,25 @@ class ServicesPlugin extends Plugin {
   }
 
   /**
+   * Shows another PDF of the open document in the viewer, at the page shown before, and makes it
+   * `state.pdf`, without reloading the XML document. Used when the open version was attached to
+   * another PDF, e.g. after writing text corrections of some pages into the PDF.
+   * @param {string} pdf - stable_id of the PDF
+   * @returns {Promise<void>}
+   */
+  async showPdf(pdf) {
+    const page = this.#pdfViewer.pdfViewer?.currentPageNumber ?? 1
+    this.#shownPdf = pdf
+    await this.#pdfViewer.load(`/api/files/${pdf}`)
+    testLog('PDF_SHOWN', { pdf })
+    await this.#pdfViewer.pagesLoadedPromise
+    if (this.#pdfViewer.pdfDoc && page > 1 && page <= this.#pdfViewer.pdfDoc.numPages) {
+      await this.#pdfViewer.goToPage(page)
+    }
+    await this.dispatchStateChange({ pdf })
+  }
+
+  /**
    * Loads the given XML and/or PDF file(s) into the editor and viewer. If another XML document is
    * loaded before this load completes, the outdated XML document is not made the current one.
    * @param {{xml?: string | null, pdf?: string | null}} files An Object with one or more of the keys "xml" and "pdf"

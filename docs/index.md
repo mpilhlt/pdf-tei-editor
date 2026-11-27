@@ -8,6 +8,7 @@ A viewer/editor web application for comparing PDF sources with TEI extraction an
 - **[Interface Overview](user-manual/interface-overview.md)** - Understanding the interface
 - **[Extraction Workflow](user-manual/extraction-workflow.md)** - Creating TEI from PDFs
 - **[Editing Workflow](user-manual/editing-workflow.md)** - Editing and validating TEI
+- **[Editing with a Language Model](user-manual/llm-editing-workflow.md)** - Working through a document unit by unit with the annotation review and the OCR correction of a language model
 - **[Review Workflow](user-manual/review-workflow.md)** - Recommended division of labour between annotators and reviewers, from extraction to approval
 - **[Unit Review](user-manual/unit-review.md)** - Marking the units of a document as reviewed OK or not OK
 - **[Unit Comments](user-manual/unit-comments.md)** - Commenting on elements of a document, with replies

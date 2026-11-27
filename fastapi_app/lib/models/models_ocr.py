@@ -89,6 +89,7 @@ class TextCorrectionsRequest(BaseModel):
     stable_id: str = Field(..., min_length=1, description="stable_id of the TEI document")
     skip_unwritable: bool = Field(False, description="Write the corrections even though some differences cannot be written (they are skipped)")
     progress_id: str | None = Field(None, description="Id of a progress widget of the client that shows the steps of the request (via SSE)")
+    pages: list[int] | None = Field(None, description="Only the corrections on these pages (0-based page indices of the PDF, see OcrReviewPlanResponse.pages). Writing them updates the given version instead of creating a new one")
 
 
 class TextCorrectionItem(BaseModel):
@@ -116,16 +117,18 @@ class TextCorrectionsPreview(BaseModel):
     corrections: list[TextCorrectionItem] = Field(default_factory=list, description="Corrections that would be written")
     unwritable: list[UnwritableItem] = Field(default_factory=list, description="Differences that cannot be written")
     reason: Optional[str] = Field(default=None, description="Why the corrections cannot be written; set means the action is not possible")
+    update_pending: bool = Field(default=False, description="Corrections were written page by page without updating the document for the corrected PDF (the data of the extractor, such as GROBID's feature file). Writing the whole document does this, even if there are no corrections left")
 
 
 class TextCorrectionsResult(BaseModel):
     """Result of writing the text corrections into the PDF."""
 
-    xml: str = Field(..., description="The TEI document updated for the corrected PDF, as stored in the new version")
-    tei_stable_id: str = Field(..., description="stable_id of the new version of the document, which is attached to the corrected PDF")
+    xml: str = Field(..., description="The TEI document updated for the corrected PDF, as stored in the new version (or in the given version if only some pages were written)")
+    tei_stable_id: str = Field(..., description="stable_id of the version that is attached to the corrected PDF: the new version, or the given one if only some pages were written")
     pdf_stable_id: str = Field(..., description="stable_id of the corrected PDF, a new PDF of the document (#944)")
     source_pdf_stable_id: str = Field(..., description="stable_id of the PDF the corrections were derived from; it is not changed")
     corrections: int = Field(..., description="Number of corrections written")
+    new_version: bool = Field(default=True, description="False if the corrections of some pages were written into the given version, which is now attached to the corrected PDF; true if a new version was created")
 
 
 TextQualityStatus = Literal["missing", "poor", "good"]
@@ -200,6 +203,7 @@ class OcrReviewPlanResponse(BaseModel):
     """The number of page windows the review needs."""
 
     window_count: int = Field(..., description="Number of windows; request each `window_index` below it in turn")
+    pages: list[int] = Field(default_factory=list, description="The pages of the windows (0-based page indices of the PDF); with a scope, the pages the node lies on")
 
 
 class OcrReviewRequest(BaseModel):

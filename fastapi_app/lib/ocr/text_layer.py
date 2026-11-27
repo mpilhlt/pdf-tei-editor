@@ -8,7 +8,7 @@ For the LLM review of OCR errors (#931), the words are grouped into lines (one t
 import importlib.util
 import io
 import zlib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from functools import cache
@@ -287,11 +287,17 @@ PageCallback = Callable[[int, int], None]
 """`callback(done, total)`: called after each page of a loop over the pages of a document."""
 
 
-def read_text_layer(pdf: pikepdf.Pdf, on_page: PageCallback | None = None) -> list[LayerPage]:
-    """Read the words of the OCR text layer of every page; `on_page` is called after each page."""
+def read_text_layer(pdf: pikepdf.Pdf, on_page: PageCallback | None = None, page_indices: Collection[int] | None = None) -> list[LayerPage]:
+    """
+    Read the words of the OCR text layer of every page, or only of the pages with the given
+    indices (0-based; indices beyond the document are ignored); `on_page` is called after each
+    page read.
+    """
     pages: list[LayerPage] = []
-    total = len(pdf.pages)
-    for index, page in enumerate(pdf.pages):
+    indices = range(len(pdf.pages)) if page_indices is None else sorted(i for i in set(page_indices) if 0 <= i < len(pdf.pages))
+    total = len(indices)
+    for done, index in enumerate(indices, start=1):
+        page = pdf.pages[index]
         reader = _Reader(index)
         reader.walk_page(page)
         if reader.visible:
@@ -306,7 +312,7 @@ def read_text_layer(pdf: pikepdf.Pdf, on_page: PageCallback | None = None) -> li
             reader.result.unpatchable = REASON_NO_LAYER
         pages.append(reader.result)
         if on_page is not None:
-            on_page(index + 1, total)
+            on_page(done, total)
     return pages
 
 

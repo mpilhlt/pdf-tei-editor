@@ -6,6 +6,8 @@ text layer (#931).
 @testCovers fastapi_app/routers/ocr.py::apply_text_corrections
 @testCovers fastapi_app/lib/repository/file_repository.py::get_current_pdf_teis
 @testCovers fastapi_app/lib/models/models_ocr.py
+@testCovers fastapi_app/lib/ocr/text_layer.py::read_text_layer
+@testCovers fastapi_app/lib/ocr/text_corrections.py::tei_words
 """
 
 import gc
@@ -177,7 +179,7 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         record = pdf.file_metadata["text_corrections"][-1]
         self.assertEqual(record["applied_by"], "rev")
         self.assertEqual(record["tei_stable_id"], "tei1")
-        self.assertEqual(record["corrections"], [{"page": 0, "old": "Regel’).", "new": "Regel12)."}])
+        self.assertEqual(record["corrections"], [{"page": 0, "line": 0, "old": "Regel’).", "new": "Regel12)."}])
         self.assertIn("applied_at", record)
         # the handler got the corrected PDF and the corrected lines
         _, doc_id, pdf_path, pdf_hash, lines = self.handler_calls[0]
@@ -391,6 +393,71 @@ class TestTextCorrectionRoutes(unittest.TestCase):
                 response = self.apply()
         self.assertEqual(response.status_code, 500)
         self.assertIn("The corrections were written to the PDF", response.json()["detail"])
+
+    def test_page_write_updates_the_version_in_place(self):
+        response = self.apply(pages=[0])
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        self.assertEqual((result["tei_stable_id"], result["new_version"], result["corrections"]), ("tei1", False, 1))
+        pdf = self.repo.get_file_by_stable_id(result["pdf_stable_id"])
+        assert pdf is not None
+        self.assertNotEqual(pdf.stable_id, "pdf1")
+        # the extractor is not asked to update the document: it keeps the data of the old PDF
+        self.assertEqual(self.handler_calls, [])
+        self.assertIn("OLD-HASH", result["xml"])
+        # no new version: the edited version is attached to the corrected PDF and stores the xml
+        self.assertEqual(self.repo.get_latest_tei_version("doc1", VARIANT).stable_id, "tei2")  # type: ignore[union-attr]
+        tei = self.repo.get_file_by_stable_id("tei1")
+        assert tei is not None
+        self.assertEqual((tei.pdf_stable_id, tei.label), (pdf.stable_id, "Version 1"))
+        content = self.storage.read_file(tei.id, "tei")
+        assert content is not None
+        self.assertEqual(content.decode("utf-8"), result["xml"])
+        changes = etree.fromstring(content).findall("{*}teiHeader/{*}revisionDesc/{*}change")
+        self.assertEqual(len(changes), 1)
+        self.assertIsNone(changes[0].find("{*}note[@type='label']"))
+        self.assertEqual(changes[0].findtext("{*}desc"), "Wrote 1 text correction on page 1 into the text layer of a new PDF and attached this version to it")
+        self.assertEqual(tei.status, "draft")
+        record = pdf.file_metadata["text_corrections"][-1]
+        self.assertEqual((record["pages"], record["corrections"]), ([0], [{"page": 0, "line": 0, "old": "Regel’).", "new": "Regel12)."}]))
+        # the other version stays on the old PDF
+        self.assertEqual(self.repo.get_file_by_stable_id("tei2").pdf_stable_id, "pdf1")  # type: ignore[union-attr]
+
+    def test_page_write_only_reads_its_pages(self):
+        preview = self.preview(pages=[1], progress_id="p1")
+        self.assertEqual((preview["corrections"], preview["reason"]), ([], ocr_router.NO_PAGE_CORRECTIONS_MESSAGE))
+        self.assertNotIn("Reading the text layer of the PDF: page 1 of 1", self.progress_labels("p1"))
+        response = self.apply(pages=[1])
+        self.assertEqual((response.status_code, response.json()["detail"]), (409, ocr_router.NO_PAGE_CORRECTIONS_MESSAGE))
+
+    def test_whole_document_write_updates_the_document_after_page_writes(self):
+        self.assertEqual(self.apply(pages=[0]).status_code, 200)
+        preview = self.preview()
+        self.assertEqual((preview["corrections"], preview["reason"], preview["update_pending"]), ([], None, True))
+        response = self.apply()
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        tei = self.repo.get_file_by_stable_id("tei1")
+        assert tei is not None
+        # a new version on the same PDF, updated by the extractor for it
+        self.assertTrue(result["new_version"])
+        self.assertEqual((result["pdf_stable_id"], result["corrections"]), (tei.pdf_stable_id, 0))
+        pdf = self.repo.get_file_by_stable_id(result["pdf_stable_id"])
+        assert pdf is not None
+        _, _, _, pdf_hash, lines = self.handler_calls[0]
+        self.assertEqual((pdf_hash, lines), (pdf.id, frozenset({0})))
+        self.assertIn(pdf.id, result["xml"])
+        changes = etree.fromstring(result["xml"].encode()).findall("{*}teiHeader/{*}revisionDesc/{*}change")
+        self.assertEqual(changes[-1].findtext("{*}desc"), "Updated the document for the text corrections written into the text layer of its PDF page by page")
+        # done: nothing is pending any more
+        self.assertNotIn("pages", pdf.file_metadata["text_corrections"][-1])
+        self.assertFalse(self.preview(stable_id=result["tei_stable_id"])["update_pending"])
+
+    def test_page_write_of_frozen_version_is_refused(self):
+        self.insert(self.save(tei_xml(LINES).encode(), "tei"), "tei", stable_id="tei3", variant=VARIANT, doc_collections=["c1"], version=3, parent_stable_id="tei1")
+        response = self.apply(pages=[0])
+        self.assertEqual((response.status_code, response.json()["detail"]), (409, ocr_router.FROZEN_MESSAGE))
+        self.assertEqual(self.repo.get_file_by_stable_id("tei1").pdf_stable_id, "pdf1")  # type: ignore[union-attr]
 
 
 if __name__ == "__main__":

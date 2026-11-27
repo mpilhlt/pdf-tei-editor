@@ -4,9 +4,12 @@
  * are mocked (the real layout needs a GROBID feature file the test environment lacks; the review
  * itself is covered by the backend tests): a failing window keeps the findings of the earlier
  * windows and is named in the notification, a complete run reports the number of findings, and an
- * accepted correction is recorded in the document history.
+ * accepted correction is recorded in the document history. The focus action reviews the focused
+ * node without asking, then writes its corrections to the PDF without creating a new version.
  *
  * @testCovers app/src/plugins/ocr-review.js
+ * @testCovers app/src/plugins/text-corrections.js
+ * @testCovers app/src/plugins/services.js
  * @testCovers app/src/modules/llm-findings.js
  */
 
@@ -222,6 +225,73 @@ test.describe('OCR review', () => {
       const text = await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString());
       expect(text).toContain('<p>the text</p>');
       expect(text).toMatch(/<desc>Accepted 1 OCR correction suggested by Mock provider\/Mock model<\/desc>/);
+    } finally {
+      stopErrorMonitoring();
+      await cleanUp(page, created);
+    }
+  });
+
+  test('the focus action reviews the node without asking and then writes its corrections', async ({ page }) => {
+    test.setTimeout(120000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {string[]} */
+    const created = [];
+    try {
+      await mockRoutes(page, okWindow);
+      await page.route('**/api/v1/ocr/llm-review/plan', route => route.fulfill({ json: { window_count: 1, pages: [0] } }));
+      /** @type {any[]} */
+      const requests = [];
+      await page.route('**/api/v1/ocr/text-corrections/preview', route => {
+        requests.push({ preview: route.request().postDataJSON() });
+        return route.fulfill({ json: { corrections: [{ page: 0, line: 0, old: 'teh', new: 'the' }], unwritable: [], reason: null, update_pending: false } });
+      });
+      /** @type {{stableId: string, pdfId: string}|null} */
+      let own = null;
+      await page.route('**/api/v1/ocr/text-corrections/apply', async route => {
+        const body = route.request().postDataJSON();
+        requests.push({ apply: body });
+        const xml = await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString());
+        const updated = xml.replace('</teiHeader>', '<revisionDesc><change when="2026-11-27T00:00:00Z" status="draft" who="#testreviewer"><desc>Wrote 1 text correction on page 1</desc></change></revisionDesc></teiHeader>');
+        return route.fulfill({ json: { xml: updated, tei_stable_id: body.stable_id, pdf_stable_id: own?.pdfId, source_pdf_stable_id: own?.pdfId, corrections: 1, new_version: false } });
+      });
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      own = await createOwnDocument(page);
+      created.push(own.stableId, own.pdfId);
+      await page.evaluate(() => /** @type {any} */ (window).app.updateState({ xpath: '(//tei:text//tei:p)[1]' }));
+      const isFocusMode = () => page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').isFocusMode());
+      // the document has no variant and thus no node navigation, which would switch focus mode on
+      await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').setFocusMode(true));
+      await expect.poll(isFocusMode).toBe(true);
+
+      const reviewButton = page.locator('.cm-focus-action', { hasText: 'OCR auto-corrections' });
+      await expect(reviewButton).toBeVisible({ timeout: 15000 });
+      await reviewButton.click();
+      const done = await waitForTestMessage(consoleLogs, 'OCR_REVIEW_DONE', 20000);
+      expect(done.value.findings).toBe(1);
+      // no confirmation for a node
+      await expect(page.locator('sl-dialog[name="dialog"]')).not.toHaveAttribute('open', '');
+
+      await page.locator('.diagnostics-drawer-item', { hasText: 'transposed letters' }).locator('.diagnostics-drawer-action', { hasText: 'Apply fix' }).click();
+      await waitForTestMessage(consoleLogs, 'OCR_CORRECTION_RECORDED', 10000);
+
+      const writeButton = page.locator('.cm-focus-action', { hasText: 'Write text corrections to PDF' });
+      await expect(writeButton).toBeVisible({ timeout: 10000 });
+      await writeButton.click();
+      const applied = await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_APPLIED', 20000);
+      expect(applied.value).toMatchObject({ newFileId: own.stableId, newVersion: false });
+      expect(requests).toEqual([
+        { preview: expect.objectContaining({ stable_id: own.stableId, pages: [0] }) },
+        { apply: expect.objectContaining({ stable_id: own.stableId, pages: [0], skip_unwritable: false }) }
+      ]);
+      // the editor shows the version with the recorded write, which is still the open one
+      const state = await page.evaluate(() => {
+        const app = /** @type {any} */ (window).app;
+        return { xml: app.getCurrentState().xml, text: app.getDependency('xmleditor').getView().state.doc.toString() };
+      });
+      expect(state.xml).toBe(own.stableId);
+      expect(state.text).toContain('Wrote 1 text correction on page 1');
+      await expect(reviewButton).toBeVisible({ timeout: 10000 });
     } finally {
       stopErrorMonitoring();
       await cleanUp(page, created);

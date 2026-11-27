@@ -4,6 +4,12 @@
  * the backend, which saves the updated TEI as a new version based on the corrected PDF. The new
  * version and the corrected PDF are then loaded.
  *
+ * {@link TextCorrectionsPlugin#writePages} writes only the corrections on some pages (the focus
+ * action "Write text corrections to PDF" of the OCR review, see ocr-review.js): the open version is
+ * attached to the corrected PDF instead of a new version being created, the backend records the
+ * write in its revision history, and the editor and the viewer are updated in place. The dialog is
+ * only shown if some changes cannot be written.
+ *
  * Each step is shown in a progress widget; the backend reports its steps and the pages it has done
  * to that widget via SSE (`progress_id` of the requests).
  *
@@ -31,6 +37,12 @@ const BUSY_MESSAGE = 'Text corrections are being written to the PDF. Please wait
 
 /** Shown when the document is open read-only */
 const READ_ONLY_MESSAGE = 'The document is open read-only (it is edited in another session, or you cannot edit it). Text corrections can only be written from a document you are editing.'
+
+/** Note of the dialog when the whole document is written */
+const VERSION_NOTE = 'The corrections are written into a copy of the PDF, which the new version is attached to. This version and its PDF are not changed.'
+
+/** Note of the dialog when the corrections of some pages are written */
+const PAGES_NOTE = 'The corrections are written into a copy of the PDF, which this version is then attached to. Other versions keep their PDF.'
 
 /** Shown when the editor content could not be saved */
 const UNSAVED_MESSAGE = 'The document has changes that could not be saved, for example because the XML is not well-formed. Fix and save the document before writing text corrections.'
@@ -118,12 +130,80 @@ class TextCorrectionsPlugin extends Plugin {
   }
 
   /**
+   * Write the corrections on the given pages of the open document into the PDF, without creating
+   * a new version: the open version is attached to the corrected PDF, which the viewer then shows.
+   * Writes without asking unless some changes cannot be written; then the dialog asks to skip them.
+   * @param {number[]} pages - 0-based page indices of the PDF
+   * @returns {Promise<'written'|'nothing'|'failed'>} 'nothing' if there is nothing to write on
+   *   these pages, 'failed' if the corrections were not written for another reason
+   */
+  async writePages(pages) {
+    const stableId = this.state.xml
+    if (!stableId) return 'failed'
+    if (this.#busy) {
+      notify(BUSY_MESSAGE, 'primary', 'info-circle')
+      return 'failed'
+    }
+    if (this.state.editorReadOnly) {
+      notify(READ_ONLY_MESSAGE, 'warning', 'lock')
+      testLog('TEXT_CORRECTIONS_REFUSED', { reason: 'read-only' })
+      return 'failed'
+    }
+    this.#busy = true
+    try {
+      const preview = await this.#preview(stableId, pages)
+      if (!preview) return 'failed'
+      testLog('TEXT_CORRECTIONS_PREVIEW', {
+        corrections: preview.corrections.length,
+        unwritable: preview.unwritable.length,
+        reason: preview.reason ?? null,
+        pages
+      })
+      /** @type {TextCorrectionsResult|null} */
+      let result
+      if (preview.reason) {
+        notify(summarizePreview(preview).text, 'warning', 'exclamation-triangle')
+        return 'nothing'
+      } else if (preview.unwritable.length) {
+        result = await this.#showDialog(preview, stableId, pages)
+      } else {
+        result = await this.#write(stableId, false, pages)
+      }
+      if (!result) return 'failed'
+      await this.#loadResult(result)
+      return 'written'
+    } finally {
+      this.#busy = false
+    }
+  }
+
+  /**
+   * Write the corrections, showing the steps in a progress widget.
+   * @param {string} stableId
+   * @param {boolean} skipUnwritable
+   * @param {number[]|null} pages - Only the corrections on these pages; null for the whole document
+   * @returns {Promise<TextCorrectionsResult>}
+   */
+  async #write(stableId, skipUnwritable, pages) {
+    const progressId = `text-corrections-write-${stableId}`
+    testLog('TEXT_CORRECTIONS_WRITING', { stableId, pages })
+    // the backend shows its steps in the widget
+    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Writing the corrections to the PDF…', value: null, cancellable: false })
+    try {
+      return await this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipUnwritable, progress_id: progressId, pages })
+    } finally {
+      this.#progress.hide(progressId)
+    }
+  }
+
+  /**
    * Save the document and find the corrections that can be written, showing the steps in a
    * progress widget.
    * @param {string} stableId
+   * @param {number[]|null} [pages] - Only the corrections on these pages; null for the whole document
    * @returns {Promise<TextCorrectionsPreview|null>} The preview, or null if the document could not be saved
    */
-  async #preview(stableId) {
+  async #preview(stableId, pages = null) {
     const progressId = `text-corrections-preview-${stableId}`
     this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Saving the document…', value: null, cancellable: false })
     testLog('TEXT_CORRECTIONS_PROGRESS', { step: 'preview' })
@@ -138,7 +218,7 @@ class TextCorrectionsPlugin extends Plugin {
       }
       // the backend shows its steps in the widget
       this.#progress.setLabel(progressId, 'Comparing the document with the text layer of the PDF…')
-      return await this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId, progress_id: progressId })
+      return await this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId, progress_id: progressId, pages })
     } finally {
       this.#progress.hide(progressId)
     }
@@ -149,10 +229,11 @@ class TextCorrectionsPlugin extends Plugin {
    * stays open with the Write button in loading state, and the steps are shown in a progress widget.
    * @param {TextCorrectionsPreview} preview
    * @param {string} stableId
+   * @param {number[]|null} [pages] - Only the corrections on these pages; null for the whole document
    * @returns {Promise<TextCorrectionsResult|null>} The result of writing, or null if the user did not confirm
    * @throws {Error} If writing failed
    */
-  async #showDialog(preview, stableId) {
+  async #showDialog(preview, stableId, pages = null) {
     const dlg = this.#dialogUi
     const summary = summarizePreview(preview)
     dlg.summary.textContent = summary.text
@@ -170,6 +251,7 @@ class TextCorrectionsPlugin extends Plugin {
     dlg.write.disabled = summary.needsSkip
     dlg.write.loading = false
     dlg.close.disabled = false
+    dlg.versionNote.textContent = pages ? PAGES_NOTE : VERSION_NOTE
 
     const skipBox = dlg.unwritableSection.skipUnwritable
     const onSkipChange = () => { dlg.write.disabled = !skipBox.checked }
@@ -177,7 +259,6 @@ class TextCorrectionsPlugin extends Plugin {
     dlg.show()
     testLog('TEXT_CORRECTIONS_DIALOG_OPENED', { stableId, canApply: summary.canApply, needsSkip: summary.needsSkip })
     const controller = new AbortController()
-    const progressId = `text-corrections-write-${stableId}`
     try {
       return await new Promise((resolve, reject) => {
         let writing = false
@@ -193,16 +274,13 @@ class TextCorrectionsPlugin extends Plugin {
           dlg.write.loading = true
           dlg.close.disabled = true
           skipBox.disabled = true
-          dlg.summary.textContent = 'Writing the corrections to the PDF and updating the document. This can take a minute.'
-          testLog('TEXT_CORRECTIONS_WRITING', { stableId })
-          // the backend shows its steps in the widget
-          this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Writing the corrections to the PDF…', value: null, cancellable: false })
-          this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipBox.checked, progress_id: progressId })
-            .then(resolve, reject)
+          dlg.summary.textContent = pages
+            ? 'Writing the corrections to the PDF.'
+            : 'Writing the corrections to the PDF and updating the document. This can take a minute.'
+          this.#write(stableId, skipBox.checked, pages).then(resolve, reject)
         }, { signal: controller.signal })
       })
     } finally {
-      this.#progress.hide(progressId)
       controller.abort()
       skipBox.removeEventListener('sl-change', onSkipChange)
       dlg.write.loading = false
@@ -217,6 +295,10 @@ class TextCorrectionsPlugin extends Plugin {
    * @returns {Promise<void>}
    */
   async #loadResult(result) {
+    if (result.new_version === false) {
+      await this.#loadPageResult(result)
+      return
+    }
     const progressId = `text-corrections-load-${result.tei_stable_id}`
     this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Loading the new version and the corrected PDF…', value: null, cancellable: false })
     try {
@@ -228,6 +310,38 @@ class TextCorrectionsPlugin extends Plugin {
     } catch (error) {
       const reason = /** @type {Error} */ (error)?.message ?? String(error)
       notify(`The corrections were written to the PDF and a new version based on the corrected PDF was created, but it could not be opened (${reason}). Open the newest version of the document from the file selection.`, 'danger', 'exclamation-octagon', 15000)
+      testLog('TEXT_CORRECTIONS_FAILED', { message: reason, afterApply: true })
+    } finally {
+      this.#progress.hide(progressId)
+    }
+  }
+
+  /**
+   * Show the version updated by writing the corrections of some pages, which is still the open
+   * one, and the corrected PDF it is now attached to.
+   * @param {TextCorrectionsResult} result
+   * @returns {Promise<void>}
+   */
+  async #loadPageResult(result) {
+    const progressId = `text-corrections-load-${result.tei_stable_id}`
+    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Loading the corrected PDF…', value: null, cancellable: false })
+    try {
+      const xmlEditor = this.getDependency('xmleditor')
+      // the editor keeps its position and folds; if the changes cannot be applied, the version is loaded again
+      const applied = this.state.xml === result.tei_stable_id && await xmlEditor.applyRemoteContent(result.xml)
+      await this.getDependency('file-selection').reload({ refresh: true })
+      const services = this.getDependency('services')
+      if (applied) {
+        xmlEditor.markAsClean()
+        await services.showPdf(result.pdf_stable_id)
+      } else {
+        await services.load({ pdf: result.pdf_stable_id, xml: result.tei_stable_id })
+      }
+      notify(`${result.corrections} correction${result.corrections === 1 ? '' : 's'} written to the PDF.`, 'success', 'check-circle')
+      testLog('TEXT_CORRECTIONS_APPLIED', { newFileId: result.tei_stable_id, pdf: result.pdf_stable_id, corrections: result.corrections, newVersion: false })
+    } catch (error) {
+      const reason = /** @type {Error} */ (error)?.message ?? String(error)
+      notify(`The corrections were written to the PDF, but the corrected PDF could not be shown (${reason}). Open the document again from the file selection.`, 'danger', 'exclamation-octagon', 15000)
       testLog('TEXT_CORRECTIONS_FAILED', { message: reason, afterApply: true })
     } finally {
       this.#progress.hide(progressId)

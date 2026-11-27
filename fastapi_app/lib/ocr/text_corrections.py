@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import difflib
 import unicodedata
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -79,10 +79,11 @@ class CorrectionPlan:
     unwritable: list[UnwritableChange] = field(default_factory=list)
 
 
-def tei_words(xml: str, variant_id: str, layout: LineLayout) -> dict[int, list[TeiWord]]:
+def tei_words(xml: str, variant_id: str, layout: LineLayout, page_indices: Collection[int] | None = None) -> dict[int, list[TeiWord]]:
     """
-    The words of the TEI by page; raises ValueError if the variant has no zone labels. Lines
-    beyond `layout.pages` have no page and are skipped.
+    The words of the TEI by page (0-based page index), or only those of the given pages; raises
+    ValueError if the variant has no zone labels. Lines beyond `layout.pages` have no page and are
+    skipped.
     """
     labels = get_zone_labels(variant_id)
     if labels is None:
@@ -93,6 +94,8 @@ def tei_words(xml: str, variant_id: str, layout: LineLayout) -> dict[int, list[T
         if line.index >= len(layout.pages):
             continue
         page = layout.pages[line.index]
+        if page_indices is not None and page not in page_indices:
+            continue
         result.setdefault(page, []).extend(TeiWord(page, line.index, word) for word in line.text.split())
     return result
 

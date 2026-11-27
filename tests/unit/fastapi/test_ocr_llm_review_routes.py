@@ -109,7 +109,12 @@ class TestOcrLlmReviewRoutes(unittest.TestCase):
     def test_plan_counts_windows(self):
         response = self.plan()
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json(), {"window_count": 1})
+        self.assertEqual(response.json(), {"window_count": 1, "pages": [0, 1]})
+
+    def test_plan_reports_the_pages_of_a_scope(self):
+        response = self.plan(scope=LINES[2])
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json(), {"window_count": 1, "pages": [1]})
 
     def test_review_returns_findings_and_range(self):
         self.provider.response = json.dumps([{"line": "0001", "old": "Regel’).", "new": "Regel12).", "rationale": "OCR"}])
