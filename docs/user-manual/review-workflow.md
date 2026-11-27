@@ -122,7 +122,7 @@ Work in your copy as described in [Document Editing](editing-workflow.md). Your 
 
 **Work unit by unit in focus mode.** Choose the unit element (for example `<bibl>`) in the XPath dropdown in the status bar of the editor, and step through the units with **‹** and **›**. Focus mode (magnifier button next to the counter) is on by default: the current unit is centred and everything else is dimmed, so you can concentrate on one unit at a time. `Esc` turns focus mode off. See [Node Navigation](editing-workflow.md#xpath-navigation) and [Focus Mode](editing-workflow.md#focus-mode).
 
-![Focus mode: the current &lt;bibl&gt; is highlighted, the rest of the document is dimmed. The "LLM Review" button is in the bottom right corner of the unit](../images/review-workflow-03b-focus-mode.png)
+![Focus mode: the current &lt;bibl&gt; is highlighted, the rest of the document is dimmed. The "Annotation auto-review" button is in the bottom right corner of the unit](../images/review-workflow-03b-focus-mode.png)
 
 *Focus mode.*
 

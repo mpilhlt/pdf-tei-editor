@@ -1,7 +1,7 @@
 /**
  * Tools action "Find OCR errors (LLM)": reviews the open TEI document page window by page window
  * with an LLM through the backend and shows the suggested corrections as diagnostics, each with a
- * "Propose fix" action that opens the merge view. In focus mode, the "LLM OCR review" button
+ * "Propose fix" action that opens the merge view. In focus mode, the "OCR auto-corrections" button
  * reviews the pages of the focused node. The corrections the reviewer accepts are written to the
  * PDF with Tools > Write text corrections to PDF (see text-corrections.js).
  *
@@ -63,7 +63,7 @@ class OcrReviewPlugin extends Plugin {
 
   /** Button shown on the focused node in the XML editor's focus mode */
   #focusAction = {
-    label: 'LLM OCR review',
+    label: 'OCR auto-corrections',
     title: 'Find OCR errors in the pages of this node',
     run: () => { this.run().catch(error => this.#fail(error)) }
   }
@@ -130,14 +130,20 @@ class OcrReviewPlugin extends Plugin {
     this.#updateMenuState()
   }
 
-  /** Enable the menu item and the focus action when a document with a layout is open. */
+  /** Button shown, disabled, while a review runs */
+  #focusActionBusy = { ...this.#focusAction, disabled: true, title: 'An OCR review is running' }
+
+  /**
+   * Enable the menu item and the focus action when a document with a layout is open; while a
+   * review runs, both are disabled.
+   */
   #updateMenuState() {
     if (!this.#menuItem) return
     const enabled = Boolean(this.state?.xml) && this.#layoutOk
-    this.#menuItem.disabled = !enabled
+    this.#menuItem.disabled = !enabled || this.#busy
     this.#menuItem.title = enabled ? TOOLTIP : `${TOOLTIP} ${this.#layoutMissing ?? NO_DOCUMENT_MESSAGE}`
     try {
-      this.getDependency('xmleditor').setFocusAction(SOURCE, enabled ? this.#focusAction : null)
+      this.getDependency('xmleditor').setFocusAction(SOURCE, enabled ? (this.#busy ? this.#focusActionBusy : this.#focusAction) : null)
     } catch {
       // the editor is not ready yet: editorReady calls again
     }
@@ -217,6 +223,7 @@ class OcrReviewPlugin extends Plugin {
     let total = 0
     let count = 0
     this.#busy = true
+    this.#updateMenuState()
     progress.show(progressId, { title: 'Finding OCR errors', label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
     try {
       try {
@@ -269,6 +276,7 @@ class OcrReviewPlugin extends Plugin {
       testLog('OCR_REVIEW_DONE', { findings: count, windows: windowsDone })
     } finally {
       this.#busy = false
+      this.#updateMenuState()
       progress.hide(progressId)
     }
   }
