@@ -30,6 +30,8 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view';
  * @property {string} label - Button text
  * @property {string} [title] - Button tooltip
  * @property {(view: EditorView) => void} run - Called when the button is clicked
+ * @property {boolean} [disabled] - Shows the button disabled, e.g. while the action runs. Pass a
+ *   new action object to change it, since the buttons are only redrawn for changed objects
  */
 
 /** @type {StateEffect<FocusRange|null>} */
@@ -70,6 +72,7 @@ class FocusActionsWidget extends WidgetType {
       button.className = 'cm-focus-action';
       button.textContent = action.label;
       if (action.title) button.title = action.title;
+      button.disabled = Boolean(action.disabled);
       // keep the cursor where it is
       button.addEventListener('mousedown', evt => evt.preventDefault());
       button.addEventListener('click', evt => {
@@ -157,7 +160,8 @@ const focusModeTheme = EditorView.baseTheme({
     color: 'white',
     borderRadius: '3px',
     cursor: 'pointer'
-  }
+  },
+  '.cm-focus-action:disabled': { opacity: '0.5', cursor: 'default' }
 });
 
 export const focusModeExtension = [focusRangeField, focusModeTheme];
