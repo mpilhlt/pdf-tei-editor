@@ -41,17 +41,28 @@ export class JobCancelledError extends Error {
  */
 
 /**
+ * A source of job events that the client uses instead of opening an EventSource of its own, e.g.
+ * the `job` events of the editor's SSE stream.
+ * @typedef {Object} JobEventFeed
+ * @property {(listener: (event: JobEvent) => void) => () => void} subscribe - Returns a function that removes the listener
+ * @property {() => boolean} connected - Whether events arrive; while false, {@link JobClient#wait} polls
+ */
+
+/**
  * @typedef {Object} JobClientOptions
  * @property {ApiClientV1} api
- * @property {(url: string) => EventSource} eventSourceFactory
  * @property {Pick<Storage, 'getItem' | 'setItem'>} sessionStorage
- * @property {string} eventsUrl - `/api/v1/jobs/events?mine=true&sessionId=<id>`
+ * @property {JobEventFeed} [feed] - Source of the events; without it, the client opens `eventsUrl` with `eventSourceFactory`
+ * @property {(url: string) => EventSource} [eventSourceFactory] - Required without `feed`
+ * @property {string} [eventsUrl] - `/api/v1/jobs/events?mine=true&sessionId=<id>`; required without `feed`
  * @property {number} [pollInterval] - Milliseconds between polls while the stream is in error (default 2000)
  * @property {number} [reconnectBase] - First reconnect delay in milliseconds, doubled up to 30 s (default 1000)
  */
 
 export class JobClient {
   #api
+  /** @type {JobEventFeed|null} */
+  #feed
   #eventSourceFactory
   #sessionStorage
   #eventsUrl
@@ -71,8 +82,10 @@ export class JobClient {
   #types = null
 
   /** @param {JobClientOptions} options */
-  constructor({ api, eventSourceFactory, sessionStorage, eventsUrl, pollInterval = 2000, reconnectBase = 1000 }) {
+  constructor({ api, feed, eventSourceFactory, sessionStorage, eventsUrl, pollInterval = 2000, reconnectBase = 1000 }) {
+    if (!feed && (!eventSourceFactory || !eventsUrl)) throw new Error('JobClient needs a feed, or an eventSourceFactory and an eventsUrl')
     this.#api = api
+    this.#feed = feed ?? null
     this.#eventSourceFactory = eventSourceFactory
     this.#sessionStorage = sessionStorage
     this.#eventsUrl = eventsUrl
@@ -136,12 +149,14 @@ export class JobClient {
   }
 
   /**
-   * Listen to the job events of the user. All listeners share one EventSource, which is opened for
-   * the first listener and closed after the last one is removed.
+   * Listen to the job events of the user. With a feed, the listener is added to it. Otherwise all
+   * listeners share one EventSource, which is opened for the first listener and closed after the
+   * last one is removed.
    * @param {(event: JobEvent) => void} listener
    * @returns {() => void} Function that removes the listener
    */
   subscribe(listener) {
+    if (this.#feed) return this.#feed.subscribe(listener)
     this.#listeners.add(listener)
     if (!this.#source && this.#reconnectTimer === null) this.#open()
     return () => {
@@ -150,13 +165,21 @@ export class JobClient {
     }
   }
 
+  /**
+   * Whether events may be missed, so that {@link JobClient#wait} must poll.
+   * @returns {boolean}
+   */
+  #inError() {
+    return this.#feed ? !this.#feed.connected() : this.#streamInError
+  }
+
   /** Open the EventSource, resuming after the last event seen. */
   #open() {
-    let url = this.#eventsUrl
+    let url = /** @type {string} */ (this.#eventsUrl)
     if (this.#lastEventId !== null) {
       url += `${url.includes('?') ? '&' : '?'}last_event_id=${encodeURIComponent(this.#lastEventId)}`
     }
-    const source = this.#eventSourceFactory(url)
+    const source = /** @type {(url: string) => EventSource} */ (this.#eventSourceFactory)(url)
     this.#source = source
     source.addEventListener('job', (message) => {
       this.#streamInError = false
@@ -256,7 +279,7 @@ export class JobClient {
       })
       this.get(jobId).then(check, fail)
       pollTimer = setInterval(() => {
-        if (this.#streamInError) this.get(jobId).then(check, () => {})
+        if (this.#inError()) this.get(jobId).then(check, () => {})
       }, this.#pollInterval)
     })
   }

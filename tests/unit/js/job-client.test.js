@@ -37,7 +37,7 @@ class FakeEventSource {
   fail() { this.onerror?.(new Event('error')) }
 }
 
-function setup({ jobs = {}, api = {} } = {}) {
+function setup({ jobs = {}, api = {}, feed } = {}) {
   const sources = []
   const calls = []
   const store = new Map()
@@ -56,6 +56,7 @@ function setup({ jobs = {}, api = {} } = {}) {
   }
   const client = new JobClient({
     api: fakeApi,
+    feed,
     eventSourceFactory: (url) => { const s = new FakeEventSource(url); sources.push(s); return s },
     sessionStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) },
     eventsUrl: '/api/v1/jobs/events?mine=true&sessionId=abc',
@@ -159,6 +160,66 @@ describe('JobClient.subscribe', () => {
     assert.strictEqual(sources[0].closed, false)
     off2()
     assert.strictEqual(sources[0].closed, true)
+  })
+})
+
+/** Feed that tests drive by hand */
+function makeFeed() {
+  const listeners = new Set()
+  const feed = {
+    isConnected: true,
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
+    connected() { return feed.isConnected },
+    emit(event) { for (const l of [...listeners]) l(event) },
+    listeners
+  }
+  return feed
+}
+
+describe('JobClient with a feed', () => {
+  test('subscribe uses the feed and opens no EventSource', () => {
+    const feed = makeFeed()
+    const { client, sources } = setup({ feed })
+    const events = []
+    const off = client.subscribe(e => events.push(e))
+    feed.emit(makeEvent())
+    assert.strictEqual(events.length, 1)
+    assert.strictEqual(sources.length, 0)
+    off()
+    assert.strictEqual(feed.listeners.size, 0)
+  })
+
+  test('wait resolves from a feed event', async () => {
+    const feed = makeFeed()
+    const { client, sources } = setup({ feed })
+    const p = client.wait('j1')
+    await tick()
+    feed.emit(makeEvent({ status: 'done', result: { ok: 2 } }))
+    assert.deepStrictEqual(await p, { ok: 2 })
+    assert.strictEqual(sources.length, 0)
+    assert.strictEqual(feed.listeners.size, 0)
+  })
+
+  test('wait polls while the feed is not connected', async () => {
+    const feed = makeFeed()
+    feed.isConnected = false
+    let n = 0
+    const { client } = setup({ feed, jobs: { j1: () => (++n >= 3 ? makeJob({ status: 'done', result: 7 }) : makeJob()) } })
+    assert.strictEqual(await client.wait('j1'), 7)
+  })
+
+  test('wait does not poll while the feed is connected', async () => {
+    const feed = makeFeed()
+    const { client, calls } = setup({ feed })
+    const p = client.wait('j1')
+    await tick(50)
+    assert.strictEqual(calls.filter(c => c[0] === 'jobsGet').length, 1)
+    feed.emit(makeEvent({ status: 'done', result: 1 }))
+    await p
+  })
+
+  test('the constructor needs a feed or an events URL', () => {
+    assert.throws(() => new JobClient({ api: {}, sessionStorage: { getItem: () => null, setItem: () => {} } }), /feed/)
   })
 })
 

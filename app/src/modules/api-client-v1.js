@@ -1798,6 +1798,7 @@
  * @property {JobErrorInfo|null=} error - Only in the 'error' event
  * @property {boolean} cancel_requested
  * @property {string} at
+ * @property {string=} owner - The job's owner; set in the `job` events of the editor's SSE stream (`/api/v1/sse/subscribe`)
  */
 
 /**

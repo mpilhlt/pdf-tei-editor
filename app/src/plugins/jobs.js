@@ -4,14 +4,20 @@
  * Owns the {@link JobClient} of the logged-in session and shows every unfinished job of the user
  * as a progress widget (id `job-<job id>`), with a cancel button. Failed jobs are notified unless
  * this tab waits for them through {@link JobsPlugin#wait} or runs them through
- * {@link JobsPlugin#runClientJob}, in which case the caller reports the error. After a reload,
- * the event stream's snapshot re-creates the widgets, and interrupted client jobs are resumed
- * through the `jobs.resume` extension point. See docs/code-assistant/jobs.md.
+ * {@link JobsPlugin#runClientJob}, in which case the caller reports the error.
+ *
+ * The events arrive as `job` events of the SSE stream of the `sse` plugin (forwarded by the
+ * backend's job SSE bridge); the plugin opens no stream of its own, since browsers allow only six
+ * connections per host on HTTP/1.1. The events may also concern jobs of other users (admins);
+ * only the user's own jobs get widgets. After login, after each (re)connection of the SSE stream
+ * and on `jobsResync`, the plugin lists the unfinished jobs again, since events of the gap are
+ * lost. After login, interrupted client jobs are resumed through the `jobs.resume` extension
+ * point. See docs/code-assistant/jobs.md.
  *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { Job, JobEvent } from '../modules/api-client-v1.js'
- * @import { JobRun } from '../modules/job-client.js'
+ * @import { JobRun, JobEventFeed } from '../modules/job-client.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -52,13 +58,34 @@ class JobsPlugin extends Plugin {
 
   #appReady = false
 
+  /** @type {Set<(event: JobEvent) => void>} Listeners of the feed of the job client */
+  #feedListeners = new Set()
+
+  /** @type {JobEventFeed} The `job` events of the SSE stream */
+  #feed = {
+    subscribe: (listener) => {
+      this.#feedListeners.add(listener)
+      return () => { this.#feedListeners.delete(listener) }
+    },
+    connected: () => this.getDependency('sse').readyState === EventSource.OPEN
+  }
+
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'jobs', deps: ['client', 'progress', 'logger', 'dialog'] })
+    super(context, { name: 'jobs', deps: ['client', 'sse', 'progress', 'logger', 'dialog'] })
   }
 
   get #logger() { return this.getDependency('logger') }
   get #progress() { return this.getDependency('progress') }
+
+  /** @param {ApplicationState} state */
+  async install(state) {
+    await super.install(state)
+    const sse = this.getDependency('sse')
+    sse.addEventListener('job', (/** @type {MessageEvent} */ message) => this.#handleMessage(message))
+    sse.addEventListener('jobsResync', () => { this.#relist() })
+    sse.onConnectionChange((/** @type {boolean} */ connected) => { if (connected) this.#relist() })
+  }
 
   /**
    * @param {string[]} changedKeys
@@ -150,9 +177,8 @@ class JobsPlugin extends Plugin {
   async #start(sessionId) {
     const client = new JobClient({
       api: this.getDependency('client').apiClient,
-      eventSourceFactory: (url) => new EventSource(url),
-      sessionStorage: window.sessionStorage,
-      eventsUrl: `/api/v1/jobs/events?mine=true&sessionId=${encodeURIComponent(sessionId)}`
+      feed: this.#feed,
+      sessionStorage: window.sessionStorage
     })
     this.#client = client
     this.#sessionId = sessionId
@@ -163,6 +189,8 @@ class JobsPlugin extends Plugin {
     }
     if (this.#client !== client) return
     this.#unsubscribe = client.subscribe((event) => this.#handleEvent(event))
+    await this.#relist()
+    if (this.#client !== client) return
     testLog('JOBS_SUBSCRIBED')
     await this.#resumeClientJobs(client)
   }
@@ -178,11 +206,72 @@ class JobsPlugin extends Plugin {
     this.#sessionId = null
   }
 
+  // ── Events ───────────────────────────────────────────────────────────────
+
+  /**
+   * A `job` event of the SSE stream: pass it to the listeners of the feed.
+   * @param {MessageEvent} message
+   */
+  #handleMessage(message) {
+    /** @type {JobEvent} */
+    let event
+    try {
+      event = JSON.parse(message.data)
+    } catch {
+      this.#logger.warn('Could not parse a job event')
+      return
+    }
+    for (const listener of [...this.#feedListeners]) listener(event)
+  }
+
+  /**
+   * List the unfinished jobs of the user again and update the widgets, since events were missed
+   * (login, reconnection of the SSE stream, `jobsResync`). Widgets of jobs that finished in the
+   * meantime are handled with the job's final state.
+   */
+  async #relist() {
+    const client = this.#client
+    if (!client) return
+    try {
+      const jobs = await client.list({ mine: true, status: UNFINISHED })
+      if (this.#client !== client) return
+      const listed = new Set(jobs.map(job => job.id))
+      for (const job of jobs) this.#handleEvent(this.#eventOf(job), true)
+      for (const jobId of [...this.#jobs.keys()]) {
+        if (listed.has(jobId)) continue
+        const job = await client.get(jobId)
+        if (this.#client === client) this.#handleEvent(this.#eventOf(job), true)
+      }
+    } catch (error) {
+      this.#logger.warn(`Could not list the jobs: ${error}`)
+    }
+  }
+
+  /**
+   * A job in the shape of an event of the stream.
+   * @param {Job} job
+   * @returns {JobEvent}
+   */
+  #eventOf(job) {
+    return {
+      id: null, seq: job.seq, job_id: job.id, type: job.type, status: job.status, progress: job.progress,
+      message: job.message, data: job.data, result: job.result, error: job.error,
+      cancel_requested: job.cancel_requested, at: job.updated_at, owner: job.owner
+    }
+  }
+
   // ── Widgets ──────────────────────────────────────────────────────────────
 
-  /** @param {JobEvent} event */
-  #handleEvent(event) {
+  /**
+   * @param {JobEvent} event
+   * @param {boolean} [listed] - The event was made from a listed job, which may be older than the last event
+   */
+  #handleEvent(event, listed = false) {
     const jobId = event.job_id
+    const user = /** @type {ApplicationState} */ (this.state).user
+    if (event.owner && event.owner !== user?.username) return
+    const known = this.#jobs.get(jobId)
+    if (listed && known && known.seq > event.seq) return
     if (UNFINISHED.includes(event.status)) {
       this.#jobs.set(jobId, event)
       this.#render(event)

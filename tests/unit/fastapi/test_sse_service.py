@@ -217,6 +217,21 @@ class TestSSEService(unittest.TestCase):
         # Verify queue was removed
         self.assertNotIn(client_id, self.service.message_queues)
 
+    def test_old_stream_of_a_session_keeps_the_queue_of_the_new_one(self):
+        """After a page reload, the old stream of the session ends after the new one started; messages still reach the new stream."""
+        client_id = 'reloaded_client'
+        old_stream = self.service.event_stream(client_id)
+        next(old_stream)
+        new_stream = self.service.event_stream(client_id)
+        next(new_stream)
+
+        old_stream.close()
+
+        self.assertTrue(self.service.send_message(client_id, 'testEvent', 'after reload'))
+        self.assertIn('data: after reload', next(new_stream))
+        new_stream.close()
+        self.assertNotIn(client_id, self.service.message_queues)
+
     def test_get_active_clients(self):
         """Test getting list of active clients."""
         # Initially empty

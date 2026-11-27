@@ -11,6 +11,7 @@ from .hooks import EditorJobHooks, job_lock_refresher
 from .manager import create_job_manager, get_job_manager, set_job_manager
 from .registry import JobTypeInfo, job_type, job_types, register_client_type
 from .request_job import RequestJob, RequestJobCancelled, run_request_job
+from .sse_bridge import job_sse_bridge
 
 __all__ = [
     "EditorJobHooks",
@@ -23,6 +24,7 @@ __all__ = [
     "get_job_manager",
     "job_file_url",
     "job_lock_refresher",
+    "job_sse_bridge",
     "job_output_dir",
     "job_type",
     "job_types",

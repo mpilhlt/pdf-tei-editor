@@ -91,23 +91,30 @@ async with run_request_job(job_id, principal) as job:  # principal: Depends(curr
 
 ## Frontend: `JobClient`
 
-`app/src/modules/job-client.js` has no plugin imports; the `jobs` plugin constructs it with `{ api, eventSourceFactory, sessionStorage, eventsUrl }` (`eventsUrl` = `/api/v1/jobs/events?mine=true&sessionId=<id>`). `api` is the `ApiClientV1`, whose `jobs*` methods mirror `/api/v1/jobs` (`jobsSubmit` takes an `idempotencyKey` option, sent as `Idempotency-Key` through the `headers` argument of `callApi`).
+`app/src/modules/job-client.js` has no plugin imports. It gets its events either from a `feed` (`{subscribe(listener) -> unsubscribe, connected() -> boolean}`), which the `jobs` plugin passes, or, without a feed, from an EventSource of its own: `{ api, sessionStorage, eventSourceFactory, eventsUrl }` (`eventsUrl` = `/api/v1/jobs/events?mine=true&sessionId=<id>`). `api` is the `ApiClientV1`, whose `jobs*` methods mirror `/api/v1/jobs` (`jobsSubmit` takes an `idempotencyKey` option, sent as `Idempotency-Key` through the `headers` argument of `callApi`).
 
 - `submit(type, params, {resources, inputHash, idempotencyKey})`, `get`, `list`, `cancel`, `types()` (cached).
-- `subscribe(listener)`: one shared EventSource (event `job`), opened for the first listener, closed after the last. After an error it reconnects with `last_event_id` after 1, 2, 4 ... max 30 s.
+- `subscribe(listener)`: adds the listener to the feed; without a feed, one shared EventSource (event `job`), opened for the first listener, closed after the last. After an error it reconnects with `last_event_id` after 1, 2, 4 ... max 30 s.
 - `wait(jobId, {signal})`: resolves `job.result`; rejects `JobFailedError` (`.status`, `.message`) for `error`/`expired` and `JobCancelledError` for `cancelled`. It polls every 2 s while the stream is in error. Aborting the signal only stops waiting.
 - `runClientJob(type, params, body, {resources, inputHash, jobId})`: submits (or resumes `jobId`), claims with the tab's holder (`sessionStorage['job-holder']`), heartbeats every 10 s and calls `body({job, step, report})`. `step(key, fn)` returns a saved result instead of running `fn`; `report(progress)` throws `JobCancelledError` after a cancel request, which finishes the job as cancelled. Other errors finish it `error` with status 500.
 - `formatJobProgress(job, heading?)`: "Recognizing text, pages 12 of 71, about 2 minutes left".
 - `holder`: the tab's lease holder id.
 
+## Event Delivery to the Browser
+
+A browser tab receives job events through the editor's SSE stream (`/api/v1/sse/subscribe`), not through a stream of its own: browsers allow only six connections per host on HTTP/1.1, and every tab already holds one for the SSE stream. `job_sse_bridge()` (`fastapi_app/lib/jobs/sse_bridge.py`, in the app lifespan next to `job_lock_refresher`) subscribes in each worker to the manager's event bus and sends each event as SSE event `job` to the sessions whose SSE stream this worker serves and whose user may see the job (the owner, admins, everyone for visibility `users`; the rule of `JobManager.can_view`). The data is the event JSON of `/api/v1/jobs/events` plus the job's `owner`. If the bridge's queue overflows, it drops events and sends `jobsResync` to all sessions, which then list the jobs again.
+
+`/api/v1/jobs/events` and `/api/v1/jobs/{job_id}/events` remain for the CLI and other clients.
+
 ## Frontend: the `jobs` Plugin
 
-`app/src/plugins/jobs.js` (`getDependency('jobs')`, `window.jobs` in tests) builds the `JobClient` after login, rebuilds it when the session changes and drops it on logout. Use it instead of constructing a `JobClient`:
+`app/src/plugins/jobs.js` (`getDependency('jobs')`, `window.jobs` in tests) builds the `JobClient` after login, with the `job` events of the `sse` plugin as its feed (it opens no EventSource; `wait()` polls while the SSE stream is not open), rebuilds it when the session changes and drops it on logout. Use it instead of constructing a `JobClient`:
 
 - `client` (the `JobClient`; throws before login), `submit(type, params, options)`, `wait(jobId, {signal})`, `cancel(jobId)`, `runClientJob(type, params, body, options)`.
-- **Widgets**: every unfinished job of the user (`queued`, `active`, `interrupted`) is shown as a progress widget with id `job-<job id>`, the type's title, `formatJobProgress(job)` (or `job.message` when the job reports no progress) and `progress.value` (null: indeterminate). The cancel button cancels the job; the widget shows "Cancelling…" until the job is finished. A job submitted with `data.minimized === true` starts minimized. Callers must not show widgets of their own for jobs: the plugin already does, in every tab of the user.
+- **Widgets**: every unfinished job of the user (`queued`, `active`, `interrupted`) is shown (not the jobs of other users, whose events admins also receive) as a progress widget with id `job-<job id>`, the type's title, `formatJobProgress(job)` (or `job.message` when the job reports no progress) and `progress.value` (null: indeterminate). The cancel button cancels the job; the widget shows "Cancelling…" until the job is finished. A job submitted with `data.minimized === true` starts minimized. Callers must not show widgets of their own for jobs: the plugin already does, in every tab of the user.
 - **Errors**: a failed job is notified (`notify(error.message, 'danger')`) unless this tab waits for it with `wait()` or runs it with `runClientJob()`; then the caller reports the error. Finished, cancelled and expired jobs only remove their widget.
-- **Reload**: the stream's snapshot re-creates the widgets. Then the plugin lists the resumable client jobs (`list({mine: true, resumable: true})`): jobs whose lease holder is this tab are resumed without asking, interrupted jobs of other tabs after the user confirmed (otherwise cancelled); active jobs that another tab holds are left alone. Jobs of a type without a `jobs.resume` contribution are cancelled.
+- **Missed events**: after login, after each (re)connection of the SSE stream and on `jobsResync`, the plugin lists the unfinished jobs (`list({mine: true, status: [...]})`) and updates the widgets; widgets of jobs that finished in the meantime get the job's final state (`get`).
+- **Reload**: the list re-creates the widgets. Then the plugin lists the resumable client jobs (`list({mine: true, resumable: true})`): jobs whose lease holder is this tab are resumed without asking, interrupted jobs of other tabs after the user confirmed (otherwise cancelled); active jobs that another tab holds are left alone. Jobs of a type without a `jobs.resume` contribution are cancelled.
 
 ```javascript
 import ep from '../extension-points.js'

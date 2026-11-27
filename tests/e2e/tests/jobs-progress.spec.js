@@ -52,6 +52,12 @@ test.describe('Jobs progress widgets', () => {
   test('shows a widget for a running job and hides it when done', async ({ page }) => {
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    // the events come through the SSE stream of the sse plugin; the page opens no job stream
+    /** @type {string[]} */
+    const jobStreamRequests = [];
+    page.on('request', request => {
+      if (request.url().includes('/api/v1/jobs/events')) jobStreamRequests.push(request.url());
+    });
     try {
       await navigateAndLogin(page, USERNAME, PASSWORD);
       await waitForTestMessage(consoleLogs, 'JOBS_SUBSCRIBED', 15000);
@@ -61,6 +67,7 @@ test.describe('Jobs progress widgets', () => {
       await expect(widget(page, jobId).locator('[name="titleRow"]')).toHaveText('Progress test');
       await expect(widget(page, jobId).locator('[name="labelRow"]')).toContainText('of 4', { timeout: 10000 });
       await expect(widget(page, jobId)).toHaveCount(0, { timeout: 15000 });
+      expect(jobStreamRequests).toEqual([]);
     } finally {
       stopErrorMonitoring();
     }

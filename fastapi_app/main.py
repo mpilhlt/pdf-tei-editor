@@ -227,9 +227,10 @@ async def lifespan(app: FastAPI):
 
     # Start the job manager after the plugins registered their job types, so that this worker
     # can run every queued job it claims; it stops before the plugins shut down. The refresher
-    # keeps the file locks of waiting jobs, which the manager renews only for active ones
-    from .lib.jobs import get_job_manager, job_lock_refresher
-    async with get_job_manager().lifespan(), job_lock_refresher():
+    # keeps the file locks of waiting jobs, which the manager renews only for active ones. The
+    # bridge forwards job events to the SSE streams of this worker's sessions
+    from .lib.jobs import get_job_manager, job_lock_refresher, job_sse_bridge
+    async with get_job_manager().lifespan(), job_lock_refresher(), job_sse_bridge():
         # Log startup complete
         logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
 
