@@ -950,9 +950,9 @@ test.describe('Unit review', () => {
       });
       expect(lines.cursor).toBe(lines.beta);
 
-      // the text cannot be edited with the keyboard
+      // the text cannot be edited with the keyboard (whitespace editing: xml-annotation-undo.spec.js)
       const before = await editorText(page);
-      for (const key of ['Backspace', 'Delete', 'Enter', 'Tab']) await page.keyboard.press(key);
+      for (const key of ['Delete', 'x']) await page.keyboard.press(key);
       expect(await editorText(page)).toBe(before);
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation')?.dispatchStateChange({ view: null })).catch(() => {});
