@@ -17,7 +17,8 @@ cancel are those of the job API under `/api/v1/jobs`.
 
 import asyncio
 import tempfile
-import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +26,7 @@ from typing import Any
 
 import pikepdf
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi_jobqueue import Job, JobManager
+from fastapi_jobqueue import Job, JobManager, Principal
 from lxml import etree
 from pypdf.errors import PdfReadError
 
@@ -33,7 +34,7 @@ from ..config import get_settings
 from ..lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_authenticated_user, require_reviewer_or_admin, require_session_id
 from ..lib.core.locking import check_lock
 from ..lib.core.sessions import SessionManager
-from ..lib.jobs import get_job_manager
+from ..lib.jobs import RequestJob, RequestJobCancelled, current_principal, get_job_manager, run_request_job
 from ..lib.jobs.hooks import JOB_LOCK_HOLDER_PREFIX
 from ..lib.models import FileMetadata, FileUpdate
 from ..lib.models.models_ocr import (
@@ -56,7 +57,6 @@ from ..lib.models.models_ocr import (
 from ..lib.llm.http_errors import llm_http_error
 from ..lib.llm.model_access import check_model_access
 from ..lib.ocr.base import OcrEngine
-from ..lib.ocr.cancel_requests import CancelRequests
 from ..lib.ocr.job_types import (
     LLM_CORRECTION_JOB_TYPE,
     OCR_JOB_TYPE,
@@ -83,7 +83,7 @@ from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
 from ..lib.services.tei_versions import create_tei_version, emit_document_saved, version_collections
 from ..lib.sse.sse_service import SSEService
-from ..lib.sse.sse_utils import ProgressBar, broadcast_to_other_sessions
+from ..lib.sse.sse_utils import broadcast_to_other_sessions
 from ..lib.storage.file_storage import FileStorage
 from ..lib.tei.zone_lines import window_range
 from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
@@ -99,15 +99,6 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
 
 # OCR_METADATA_KEY: the last OCR run of a PDF; TEXT_CORRECTIONS_METADATA_KEY: the text corrections
 # written into it (keys of the PDF's file_metadata, see lib/ocr/provenance.py)
-
-PAGE_PROGRESS_INTERVAL_SECONDS = 0.2
-"""Least time between two page reports of the text corrections to the client."""
-
-
-def get_text_corrections_cancels() -> CancelRequests:
-    """Return the cancel requests of previewing or writing text corrections, shared by all worker processes."""
-    return CancelRequests(get_settings().tmp_dir / "text-corrections-cancel")
-
 
 def _engine_info(engine: OcrEngine) -> OcrEngineInfo:
     """Build the API description of an engine."""
@@ -297,80 +288,67 @@ def _get_tei(repo: FileRepository, stable_id: str, user: dict[str, Any]) -> File
     return file
 
 
-class _CorrectionsCancelled(Exception):
-    """The user cancelled previewing or writing text corrections (see cancel_text_corrections())."""
-
-
 def _cancelled_error() -> HTTPException:
     """The response to a cancelled request; `code` tells the client that it was cancelled."""
     return HTTPException(status_code=409, detail={"code": CANCELLED_CODE, "message": CANCELLED_MESSAGE})
 
 
+@asynccontextmanager
+async def _correction_job(job_id: str | None, principal: Principal) -> AsyncIterator[RequestJob | None]:
+    """
+    Run the body as the driver of the client job `job_id` (see `run_request_job`); without a job
+    id, run it without a job (None).
+
+    Raises:
+        HTTPException: 404 if the job does not exist or is not visible, 409 if it cannot be claimed
+        RequestJobCancelled: if the user cancelled the job
+    """
+    if job_id is None:
+        yield None
+        return
+    async with run_request_job(job_id, principal) as job:
+        yield job
+
+
 class _CorrectionProgress:
     """
-    Shows the steps of previewing or writing text corrections in a progress widget of the client
-    (via SSE), if the request names one. The client shows and hides the widget.
-
-    Used as a context manager: a request that names a progress widget can then be cancelled with
-    `POST /ocr/text-corrections/cancel/{progress_id}`. Each step and each page report checks
-    whether it was, and raises `_CorrectionsCancelled` if so. A request therefore stops at the
-    next step or page, and only reports a step before it changes the PDF or the document, never
-    while it does.
+    Reports the steps of previewing or writing text corrections to the job of the request, if it
+    has one (the `jobs` plugin of the client shows them), and lets the user cancel it through the
+    job API. Each step and each page report checks whether the job was cancelled and raises
+    `RequestJobCancelled` if so. A request therefore stops at the next step or page, and only
+    reports a step before it changes the PDF or the document, never while it does.
     """
 
-    def __init__(self, sse_service: SSEService, session_id: str, progress_id: str | None, cancels: CancelRequests | None = None) -> None:
-        self._bar = ProgressBar(sse_service, session_id, progress_id) if progress_id else None
-        self._last_page_report = 0.0
-        self._session_id = session_id
-        self._progress_id = progress_id
-        self._cancels = cancels if progress_id else None
-
-    def __enter__(self) -> "_CorrectionProgress":
-        # a request left over from an earlier run with the same widget does not apply
-        if self._cancels is not None and self._progress_id is not None:
-            self._cancels.clear(self._session_id, self._progress_id)
-        return self
-
-    def __exit__(self, *_exc: object) -> None:
-        if self._cancels is not None and self._progress_id is not None:
-            self._cancels.clear(self._session_id, self._progress_id)
+    def __init__(self, job: RequestJob | None) -> None:
+        self._job = job
 
     def check_cancelled(self) -> None:
         """
         Raises:
-            _CorrectionsCancelled: if the user cancelled the request
+            RequestJobCancelled: if the user cancelled the request
         """
-        if self._cancels is not None and self._progress_id is not None and self._cancels.is_requested(self._session_id, self._progress_id):
-            raise _CorrectionsCancelled()
+        if self._job is not None:
+            self._job.check_cancelled()
 
-    def step(self, label: str) -> None:
+    async def step(self, label: str) -> None:
         """
-        Show a step whose duration is unknown.
+        Report a step whose duration is unknown.
 
         Raises:
-            _CorrectionsCancelled: if the user cancelled the request
+            RequestJobCancelled: if the user cancelled the request
         """
-        self.check_cancelled()
-        if self._bar is None:
-            return
-        self._bar.set_label(label)
-        self._bar.set_value(None)
+        if self._job is not None:
+            await self._job.report(phase=label, done=0, total=0)
 
     def pages(self, label: str) -> PageCallback:
         """
-        Return a callback that shows the pages done of a step (called from a worker thread). The
-        callback raises `_CorrectionsCancelled` if the user cancelled the request.
+        Return a callback that reports the pages done of a step (called from a worker thread; the
+        job coalesces the writes). The callback raises `RequestJobCancelled` if the user cancelled
+        the request.
         """
         def report(done: int, total: int) -> None:
-            self.check_cancelled()
-            if self._bar is None:
-                return
-            now = time.monotonic()
-            if done < total and now - self._last_page_report < PAGE_PROGRESS_INTERVAL_SECONDS:
-                return
-            self._last_page_report = now
-            self._bar.set_label(f"{label}: page {done} of {total}")
-            self._bar.set_value(round(done / total * 100) if total else None)
+            if self._job is not None:
+                self._job.report_threadsafe(phase=label, done=done, total=total, unit="pages")
         return report
 
 
@@ -417,7 +395,7 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
     if content is None:
         raise HTTPException(status_code=404, detail=f"TEI content not found: {stable_id}")
     xml = content.decode("utf-8")
-    progress.step("Reading the lines of the document")
+    await progress.step("Reading the lines of the document")
     layout = await asyncio.to_thread(get_line_layout, xml, tei.doc_id, tei.variant)
     if layout is None:
         raise HTTPException(status_code=409, detail=MISSING_LAYOUT_MESSAGE)
@@ -500,7 +478,7 @@ async def _apply_page_corrections(
 
     with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
         output_path = Path(tmp) / "corrected.pdf"
-        progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
+        await progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
         try:
             await asyncio.to_thread(_patch_pdf, context.pdf_path, output_path, plan.corrections)
         except (ValueError, pikepdf.PdfError) as e:
@@ -508,7 +486,7 @@ async def _apply_page_corrections(
             raise HTTPException(status_code=422, detail=f"The text layer of the PDF cannot be changed: {e}")
         content = output_path.read_bytes()
     # the last point at which the request can be cancelled: nothing has been stored yet
-    progress.step("Saving the document")
+    await progress.step("Saving the document")
     new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
     if new_hash == pdf.id:
         raise HTTPException(status_code=409, detail=NO_PAGE_CORRECTIONS_MESSAGE)
@@ -663,8 +641,7 @@ async def preview_text_corrections(
     storage: FileStorage = Depends(get_file_storage),
     current_user: dict[str, Any] = Depends(require_reviewer_or_admin),
     session_id: str = Depends(require_session_id),
-    sse_service: SSEService = Depends(get_sse_service),
-    cancels: CancelRequests = Depends(get_text_corrections_cancels),
+    principal: Principal = Depends(current_principal),
 ) -> TextCorrectionsPreview:
     """
     Show what writing the text corrections of a TEI document into the OCR text layer of its PDF
@@ -675,21 +652,22 @@ async def preview_text_corrections(
     why. This includes a lock of the TEI held by another session.
     A missing TEI file or missing access is reported with 404/403 as usual.
 
-    If `progress_id` is given, the steps are shown in that progress widget of the client, and the
-    preview can be cancelled with `POST /ocr/text-corrections/cancel/{progress_id}`: it then
-    stops at the next page and is answered with 409 and the detail `{"code": "cancelled", ...}`.
+    If `job_id` is given, the preview runs as that client job (type `ocr.text-corrections`, see
+    `fastapi_app/lib/jobs/request_job.py`): it reports its steps to the job, and the job's cancel
+    route stops the preview at the next page; it is then answered with 409 and the detail
+    `{"code": "cancelled", ...}`.
     """
-    progress = _CorrectionProgress(sse_service, session_id, request.progress_id, cancels)
-    with progress:
-        try:
-            context = await _correction_context(request.stable_id, repo, storage, current_user, session_id, progress, request.pages)
-        except HTTPException as e:
-            if e.status_code not in (409, 423):
-                raise
-            return TextCorrectionsPreview(reason=str(e.detail))
-        except _CorrectionsCancelled:
-            logger.info(f"Preview of the text corrections of {request.stable_id} was cancelled")
-            raise _cancelled_error()
+    try:
+        async with _correction_job(request.job_id, principal) as job:
+            try:
+                context = await _correction_context(request.stable_id, repo, storage, current_user, session_id, _CorrectionProgress(job), request.pages)
+            except HTTPException as e:
+                if e.status_code not in (409, 423):
+                    raise
+                return TextCorrectionsPreview(reason=str(e.detail))
+    except RequestJobCancelled:
+        logger.info(f"Preview of the text corrections of {request.stable_id} was cancelled")
+        raise _cancelled_error()
     # writing the whole document updates it for corrections written page by page before
     update_pending = request.pages is None and context.update_pending
     return TextCorrectionsPreview(
@@ -711,7 +689,7 @@ async def apply_text_corrections(
     session_id: str = Depends(require_session_id),
     sse_service: SSEService = Depends(get_sse_service),
     session_manager: SessionManager = Depends(get_session_manager),
-    cancels: CancelRequests = Depends(get_text_corrections_cancels),
+    principal: Principal = Depends(current_principal),
 ) -> TextCorrectionsResult:
     """
     Write the text corrections of a TEI document into the OCR text layer of a copy of its PDF,
@@ -738,37 +716,21 @@ async def apply_text_corrections(
     the whole document updates the document for it, also when no corrections are left: the
     preview then reports `update_pending`. Refused with 409 if the version is frozen.
 
-    If `progress_id` is given, the steps are shown in that progress widget of the client, and the
-    write can be cancelled with `POST /ocr/text-corrections/cancel/{progress_id}`. It then stops
-    at the next page or step and is answered with 409 and the detail `{"code": "cancelled", ...}`;
+    If `job_id` is given, the write runs as that client job (type `ocr.text-corrections`, see
+    `fastapi_app/lib/jobs/request_job.py`): it reports its steps to the job, and the job's cancel
+    route stops it at the next page or step. It is then answered with 409 and the detail `{"code": "cancelled", ...}`;
     no PDF and no version is created. Cancelling has no effect once the corrected PDF is stored
     (whole document: after the extractor plugin is finished; pages: after the PDF is written).
     """
-    progress = _CorrectionProgress(sse_service, session_id, request.progress_id, cancels)
-    with progress:
-        try:
-            return await _apply_text_corrections(request, http_request, repo, storage, current_user, session_id, sse_service, session_manager, progress)
-        except _CorrectionsCancelled:
-            logger.info(f"Writing the text corrections of {request.stable_id} was cancelled")
-            raise _cancelled_error()
-
-
-@router.post("/text-corrections/cancel/{progress_id}")
-async def cancel_text_corrections(
-    progress_id: str,
-    current_user: dict[str, Any] = Depends(require_reviewer_or_admin),
-    session_id: str = Depends(require_session_id),
-    cancels: CancelRequests = Depends(get_text_corrections_cancels),
-) -> dict[str, bool]:
-    """
-    Cancel the preview or the write of text corrections of this session that reports its steps to
-    the progress widget `progress_id`. The request stops at its next page or step and is answered
-    with 409 and the detail `{"code": "cancelled", ...}`; the PDF and the document stay unchanged.
-    If it is already past the point where it stores its result, it finishes as usual.
-    Answered with `{"requested": true}`.
-    """
-    cancels.request(session_id, progress_id)
-    return {"requested": True}
+    try:
+        async with _correction_job(request.job_id, principal) as job:
+            result = await _apply_text_corrections(request, http_request, repo, storage, current_user, session_id, sse_service, session_manager, _CorrectionProgress(job))
+            if job is not None:
+                job.set_result({"tei_stable_id": result.tei_stable_id, "pdf_stable_id": result.pdf_stable_id, "corrections": result.corrections})
+            return result
+    except RequestJobCancelled:
+        logger.info(f"Writing the text corrections of {request.stable_id} was cancelled")
+        raise _cancelled_error()
 
 
 async def _apply_text_corrections(
@@ -786,7 +748,7 @@ async def _apply_text_corrections(
     Write the text corrections (see apply_text_corrections()).
 
     Raises:
-        _CorrectionsCancelled: if the user cancelled the write before anything was stored
+        RequestJobCancelled: if the user cancelled the write before anything was stored
     """
     settings = get_settings()
     context = await _correction_context(request.stable_id, repo, storage, current_user, session_id, progress, request.pages)
@@ -809,7 +771,7 @@ async def _apply_text_corrections(
     else:
         with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
             output_path = Path(tmp) / "corrected.pdf"
-            progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
+            await progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
             try:
                 await asyncio.to_thread(_patch_pdf, context.pdf_path, output_path, plan.corrections)
             except (ValueError, pikepdf.PdfError) as e:
@@ -828,11 +790,11 @@ async def _apply_text_corrections(
     # the lines corrected page by page since the document was last updated for its PDF
     corrected_lines = frozenset(c.line for c in plan.corrections) | _pending_lines(pdf)
     try:
-        progress.step("Updating the document for the corrected PDF. This can take a minute.")
+        await progress.step("Updating the document for the corrected PDF. This can take a minute.")
         xml = await asyncio.to_thread(context.handler, context.xml, tei.doc_id, new_path, new_hash, corrected_lines)
         # the plugin cannot be interrupted; the last point at which the write can be cancelled
-        progress.step("Saving the new version of the document")
-    except _CorrectionsCancelled:
+        await progress.step("Saving the new version of the document")
+    except RequestJobCancelled:
         if new_file:
             storage.delete_file(new_hash, "pdf", decrement_ref=False)
         raise

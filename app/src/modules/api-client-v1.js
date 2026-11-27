@@ -511,7 +511,7 @@
  * @typedef {Object} TextCorrectionsRequest
  * @property {string} stable_id - stable_id of the TEI document
  * @property {boolean=} skip_unwritable - Write the corrections even though some differences cannot be written (they are skipped)
- * @property {string|null=} progress_id - Id of a progress widget of the client that shows the steps of the request (via SSE)
+ * @property {string|null=} job_id - Id of a client job (type `ocr.text-corrections`) of the user that the request runs as: it reports its steps to the job, and the job's cancel makes the request fail with 409 `{code: 'cancelled'}`
  * @property {Array<number>|null=} pages - Only the corrections on these pages (0-based page indices of the PDF, see OcrReviewPlanResponse.pages). Writing them updates the given version instead of creating a new one
  */
 
@@ -2668,21 +2668,6 @@ export class ApiClientV1 {
   async ocrTextCorrectionsApply(requestBody) {
     const endpoint = `/ocr/text-corrections/apply`
     return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Cancel the preview or the write of text corrections of this session that reports its steps to
-   * the progress widget `progressId`. The request stops at its next page or step and is rejected
-   * with 409 and the detail `{code: 'cancelled', message}`; the PDF and the document stay
-   * unchanged. A request past the point where it stores its result finishes as usual.
-   * Requires the reviewer role.
-   *
-   * @param {string} progressId
-   * @returns {Promise<{requested: boolean}>}
-   */
-  async ocrTextCorrectionsCancel(progressId) {
-    const endpoint = `/ocr/text-corrections/cancel/${encodeURIComponent(progressId)}`
-    return this.callApi(endpoint, 'POST');
   }
 
   /**

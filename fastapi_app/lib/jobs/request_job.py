@@ -61,6 +61,7 @@ class RequestJob:
         self._last_write = 0.0
         self._write_lock = asyncio.Lock()
         self._delayed_flush: asyncio.Task[None] | None = None
+        self._closing = False
 
     def check_cancelled(self) -> None:
         """Raise `RequestJobCancelled` if a cancel was requested. Safe to call from other threads."""
@@ -143,7 +144,7 @@ class RequestJob:
 
     async def _delayed(self) -> None:
         # Loops so that a state that changed during a wait or a write is written as well
-        while self._dirty:
+        while self._dirty and not self._closing:
             await asyncio.sleep(self._due_in())
             try:
                 await self._flush()
@@ -176,10 +177,13 @@ class RequestJob:
                 self._cancelled = True
 
     async def _drain(self) -> None:
-        """Write what is still pending."""
-        if self._delayed_flush is not None:
-            self._delayed_flush.cancel()
-            await asyncio.gather(self._delayed_flush, return_exceptions=True)
+        """Write what is still pending. A write that is in progress is not interrupted, since it may carry the latest state."""
+        self._closing = True
+        task = self._delayed_flush
+        if task is not None and not task.done():
+            if not self._write_lock.locked():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         try:
             await self._flush()
         except Exception as e:

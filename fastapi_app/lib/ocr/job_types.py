@@ -27,7 +27,7 @@ from fastapi_jobqueue import Job, JobContext, JobManager, ResourceBusy
 from fastapi_jobqueue.errors import JobCancelled
 
 from fastapi_app.lib.core.dependencies import get_db, get_file_storage
-from fastapi_app.lib.jobs import job_type, job_user
+from fastapi_app.lib.jobs import job_type, job_user, register_client_type
 from fastapi_app.lib.llm import LLMProvider, LLMProviderRegistry
 from fastapi_app.lib.llm.http_errors import llm_http_error
 from fastapi_app.lib.llm.model_access import check_model_access
@@ -51,6 +51,7 @@ logger = get_logger(__name__)
 
 OCR_JOB_TYPE = "ocr"
 LLM_CORRECTION_JOB_TYPE = "ocr.llm-correction"
+TEXT_CORRECTIONS_JOB_TYPE = "ocr.text-corrections"
 
 OCR_BUSY_MESSAGE = "Text recognition is already running for this PDF"
 """The response (409) to a job for a PDF whose lock another job or a user holds."""
@@ -547,3 +548,9 @@ async def run_llm_correction(ctx: JobContext, params: OcrLlmCorrectionJobParams)
     _check_resource(ctx, params.stable_id)
     result = await correct_for_job(ctx, params, job_user(ctx.job))
     return result.model_dump(mode="json")
+
+
+# The client job of previewing or writing text corrections (`routers/ocr.py`). The route needs the
+# user's session, so the client submits the job (`params: {stable_id, mode: "preview" | "apply"}`, no
+# resources: the user's own session holds the TEI lock) and passes its id to the route, which drives it.
+register_client_type(TEXT_CORRECTIONS_JOB_TYPE, title="Writing text corrections")

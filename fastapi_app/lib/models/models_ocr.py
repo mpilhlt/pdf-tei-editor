@@ -88,7 +88,7 @@ class TextCorrectionsRequest(BaseModel):
 
     stable_id: str = Field(..., min_length=1, description="stable_id of the TEI document")
     skip_unwritable: bool = Field(False, description="Write the corrections even though some differences cannot be written (they are skipped)")
-    progress_id: str | None = Field(None, description="Id of a progress widget of the client that shows the steps of the request (via SSE)")
+    job_id: str | None = Field(None, description="Id of a client job (type ocr.text-corrections) of the user that the request runs as: it reports its steps to the job, and the job can be cancelled through the job API")
     pages: list[int] | None = Field(None, description="Only the corrections on these pages (0-based page indices of the PDF, see OcrReviewPlanResponse.pages). Writing them updates the given version instead of creating a new one")
 
 
