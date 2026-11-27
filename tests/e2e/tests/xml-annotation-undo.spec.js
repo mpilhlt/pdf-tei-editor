@@ -1,5 +1,5 @@
 /**
- * E2E test: undo and redo in the visual annotation mode (#824).
+ * E2E test: undo and redo, and whitespace editing, in the visual annotation mode (#824).
  *
  * The visual mode makes CodeMirror's editing commands read-only, which must not stop undo and
  * redo of the annotations made in it, neither from the toolbar buttons nor from the keyboard.
@@ -7,6 +7,7 @@
  * @testCovers app/src/plugins/xml-annotation.js
  * @testCovers app/src/plugins/xmleditor.js
  * @testCovers app/src/modules/codemirror/command-read-only.js
+ * @testCovers app/src/modules/codemirror/whitespace-keys.js
  */
 
 /**
@@ -102,8 +103,25 @@ test.describe('Visual annotation mode', () => {
       await expect.poll(() => editorText(page)).toContain(ANNOTATED);
 
       // the other editing commands stay read-only
-      for (const key of ['Backspace', 'Delete', 'Enter']) await page.keyboard.press(key);
+      for (const key of ['Backspace', 'Delete', 'a']) await page.keyboard.press(key);
       expect(await editorText(page)).toContain(ANNOTATED);
+
+      // except for whitespace: Enter breaks the line keeping its indentation, Tab/Shift-Tab indent and outdent
+      await page.mouse.click(alpha.x, alpha.y);
+      const before = await editorText(page);
+      const cursor = await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xmleditor').getView().state.selection.main.head);
+      const lineStart = before.lastIndexOf('\n', cursor - 1) + 1;
+      const indent = /^[ \t]*/.exec(before.slice(lineStart))?.[0] ?? '';
+      await page.keyboard.press('Enter');
+      await expect.poll(() => editorText(page)).toBe(before.slice(0, cursor) + '\n' + indent + before.slice(cursor));
+      const afterEnter = await editorText(page);
+      await page.keyboard.press('Tab');
+      await expect.poll(() => editorText(page)).not.toBe(afterEnter);
+      await page.keyboard.press('Shift+Tab');
+      await expect.poll(() => editorText(page)).toBe(afterEnter);
+      // undo history may group the whitespace edits: undo until nothing is left of them
+      for (let i = 0; i < 3 && await editorText(page) !== before; i++) await page.keyboard.press('ControlOrMeta+z');
+      expect(await editorText(page)).toBe(before);
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation')?.dispatchStateChange({ view: null })).catch(() => {});
       await releaseAllLocks(page);

@@ -23,6 +23,7 @@ import { syntaxTree } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
 import { commandReadOnly } from '../modules/codemirror/command-read-only.js'
+import { whitespaceKeys } from '../modules/codemirror/whitespace-keys.js'
 
 /**
  * @typedef {{ attrs: Record<string,string>, description?: string|null }} AnnotationTagVariant
@@ -115,7 +116,9 @@ class XmlAnnotationPlugin extends Plugin {
    * keeps the content focusable, so that keyboard shortcuts (review marks, F7, search) still reach
    * the editor. {@link commandReadOnly} then stops the built-in editing commands (Enter, Backspace,
    * cut, paste) that would otherwise run on key presses, but not undo and redo; programmatic
-   * changes (annotation operations, review marks, comments) are not affected.
+   * changes (annotation operations, review marks, comments) are not affected. As exceptions,
+   * {@link whitespaceKeys} lets Enter insert a line break that keeps the indentation of the
+   * previous line and Tab/Shift-Tab indent and outdent lines, unless the document is read-only.
    * @returns {Extension[]}
    */
   #annotationExtensions() {
@@ -125,6 +128,7 @@ class XmlAnnotationPlugin extends Plugin {
       this.#navField,
       EditorView.contentAttributes.of({ tabindex: '0' }),
       commandReadOnly(),
+      whitespaceKeys(() => !this.state?.editorReadOnly),
       EditorView.domEventHandlers({ mouseup: (e, view) => this.#onEditorMouseUp(e, view) })
     ]
   }
