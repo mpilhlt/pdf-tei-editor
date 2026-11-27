@@ -52,7 +52,7 @@ from ..lib.models.models_ocr import (
     TextQualityReport,
     UnwritableItem,
 )
-from ..lib.llm import LLMProvider, LLMProviderRegistry
+from ..lib.llm import LLMImage, LLMProvider, LLMProviderRegistry
 from ..lib.llm.http_errors import llm_http_error
 from ..lib.llm.model_access import check_model_access
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
@@ -60,7 +60,8 @@ from ..lib.ocr.jobs import ACTIVE_STATUSES, OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr import llm_correction
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
-from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window
+from ..lib.ocr.page_images import render_page_images
+from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window, window_page_indices
 from ..lib.ocr.provenance import OCR_METADATA_KEY, TEXT_CORRECTIONS_METADATA_KEY
 from ..lib.ocr.progress import OcrCancelled, ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
@@ -446,7 +447,8 @@ def _pages(count: int) -> str:
 def _llm_correction_message(run: llm_correction.CorrectionRun, model_id: str) -> str:
     """The sentences about the LLM correction pass appended to the message of the OCR run."""
     count = len(run.corrections)
-    corrected = f"Corrected {count} OCR {'error' if count == 1 else 'errors'} with {model_id}."
+    with_images = " and the page images" if run.page_images else ""
+    corrected = f"Corrected {count} OCR {'error' if count == 1 else 'errors'} with {model_id}{with_images}."
     if run.error:
         message = (corrected + " " if count else "") + f"The LLM correction failed: {run.error}"
     elif count:
@@ -1303,6 +1305,38 @@ def _review_source(tei: FileMetadata, xml: str, scope: str | None) -> OcrReviewS
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
+async def _review_images(
+    tei: FileMetadata,
+    source: OcrReviewSource,
+    window_index: int,
+    provider: LLMProvider,
+    model_id: str,
+    repo: FileRepository,
+    storage: FileStorage,
+    user: dict[str, Any],
+) -> list[LLMImage] | None:
+    """
+    The images of the pages of a review window from the TEI's PDF, or None (text only) if the model
+    accepts no images or the PDF is missing, not readable by the user or cannot be rendered.
+    """
+    if not await asyncio.to_thread(provider.supports_image_input, model_id):
+        return None
+    pdf = repo.get_pdf_for_file(tei)
+    if pdf is None or not check_file_access(pdf, user, "read"):
+        logger.info(f"No PDF of {tei.stable_id} to send to {model_id}, reviewing its text only")
+        return None
+    path = storage.get_file_path(pdf.id, "pdf")
+    if path is None or not path.exists():
+        logger.warning(f"The PDF {pdf.stable_id} of {tei.stable_id} is missing, reviewing its text only")
+        return None
+    pages = window_page_indices(source, window_index)
+    try:
+        return await asyncio.to_thread(render_page_images, path, pages)
+    except Exception as e:  # noqa: BLE001 - the window is still reviewed without images
+        logger.warning(f"Cannot render pages {[p + 1 for p in pages]} of {pdf.stable_id}, reviewing them without images: {e!r}")
+        return None
+
+
 @router.post("/llm-review/plan", response_model=OcrReviewPlanResponse)
 async def plan_ocr_llm_review(
     body: OcrReviewPlanRequest,
@@ -1324,12 +1358,14 @@ async def plan_ocr_llm_review(
 async def ocr_llm_review(
     body: OcrReviewRequest,
     repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
     current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> OcrReviewResponse:
     """
     Review one page window of the given (possibly unsaved) content of a zone document for OCR
-    errors with the given provider and model. The response reports how many windows the document
-    has; the client requests each `window_index` in turn. Refused with 422 if the document has no
+    errors with the given provider and model. If the model accepts images, it is also sent the
+    images of the window's pages from the document's PDF (`page_images` in the response). The
+    response reports how many windows the document has; the client requests each `window_index` in turn. Refused with 422 if the document has no
     line layout or is no zone document, 404 for an unknown provider, 428 if the provider needs a
     secret of the user, 403 if the user may not use the model.
     """
@@ -1343,7 +1379,8 @@ async def ocr_llm_review(
     try:
         # may list the provider's models, so its connection errors are handled below
         check_model_access(provider, body.model_id, current_user)
-        findings, window_count, discarded = await review_window(source, body.window_index, provider, body.model_id, min_similarity)
+        images = await _review_images(tei, source, body.window_index, provider, body.model_id, repo, storage, current_user)
+        findings, window_count, discarded = await review_window(source, body.window_index, provider, body.model_id, min_similarity, images)
     except Exception as e:
         http_error = llm_http_error(e, body.provider_id)
         if http_error is None:
@@ -1357,4 +1394,5 @@ async def ocr_llm_review(
         discarded=discarded,
         window_start=start,
         window_end=end,
+        page_images=images is not None,
     )

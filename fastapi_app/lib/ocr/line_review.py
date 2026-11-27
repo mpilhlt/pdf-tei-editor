@@ -6,7 +6,8 @@ line corrections:
 
     [{"line": "0412", "old": "Regel’).", "new": "Regel12).", "rationale": "..."}]
 
-Implausible corrections are dropped (see :func:`parse_corrections`). The adapters (TEI in
+With a vision model, the images of the window's pages are attached (see `page_images`), so that the
+model can compare the text with the scan. Implausible corrections are dropped (see :func:`parse_corrections`). The adapters (TEI in
 `llm_review`, PDF text layer) map the remaining corrections onto their own documents.
 
 Pure module: no FastAPI imports.
@@ -18,7 +19,7 @@ import difflib
 import logging
 from dataclasses import dataclass
 
-from fastapi_app.lib.llm.base import LLMProvider
+from fastapi_app.lib.llm.base import LLMImage, LLMProvider
 from fastapi_app.lib.llm.json_response import extract_json_list
 from fastapi_app.lib.llm.review_call import complete_with_retry
 from fastapi_app.lib.tei.zone_lines import DEFAULT_CONTEXT_LINES, line_id, line_id_width
@@ -60,13 +61,21 @@ class LineCorrection:
 # ── Prompts ──────────────────────────────────────────────────────────
 
 
-def build_system_prompt() -> str:
-    """Instructions for finding the OCR errors of a page window."""
+IMAGES_NOTE = (
+    "The images of the pages are attached, in page order. Compare each line with the printed text in the images "
+    "and correct the text where it differs from the print; the rules below still apply.\n\n"
+)
+"""Added to the system prompt when the page images are attached."""
+
+
+def build_system_prompt(with_images: bool = False) -> str:
+    """Instructions for finding the OCR errors of a page window, with or without its page images."""
     return (
         "You are proofreading the text of a scanned document that was recognized by OCR. You will be given the "
         "document's languages and the lines of one or two of its pages, each as `<id> | <text>`. Lines under a "
         "\"Context\" heading are only shown for orientation: do not correct them.\n\n"
-        "Rules:\n"
+        + (IMAGES_NOTE if with_images else "")
+        + "Rules:\n"
         "- Correct only OCR misreadings, i.e. text that differs from what is printed on the page. Do not modernize spelling, fix the author's errors, normalize historical orthography, resolve hyphenation or change punctuation that is plausibly in the original.\n"
         "- Check that footnote numbers are consecutive, both the markers in the body text and the numbers at the start of the footnotes, across the pages of the window. Footnote markers in the body are usually superscript and often misread as punctuation or merged with the preceding word; the numbers at the start of the footnotes are usually recognized reliably. Use the sequence on one side to correct gaps and misreadings on the other. Body markers appear in the order of the footnotes on the page.\n"
         "- `old` must be the verbatim text of a whole word or run of words on that line; `new` the corrected form.\n"
@@ -202,11 +211,17 @@ def parse_corrections(
 
 
 async def review_lines_window(
-    lines: ReviewLines, index: int, provider: LLMProvider, model_id: str, min_letter_similarity: float
+    lines: ReviewLines,
+    index: int,
+    provider: LLMProvider,
+    model_id: str,
+    min_letter_similarity: float,
+    images: list[LLMImage] | None = None,
 ) -> tuple[list[LineCorrection], int, int]:
     """
     Review one window: `(corrections, window count, discarded)`, where `discarded` counts the
-    corrections of the (last) answer that were dropped.
+    corrections of the (last) answer that were dropped. `images` are the images of the window's
+    pages, in page order; only pass them if `provider.supports_image_input(model_id)`.
 
     Raises:
         UnusableResponseError: the model's answer contains no JSON list.
@@ -222,10 +237,11 @@ async def review_lines_window(
     kept, dropped = await complete_with_retry(
         provider,
         model_id,
-        build_system_prompt(),
+        build_system_prompt(with_images=bool(images)),
         build_user_prompt(lines, window, (index + 1, len(lines.windows))),
         parse,
         build_retry_note,
         LOG_PREFIX,
+        images=images or None,
     )
     return kept, len(lines.windows), len(dropped)

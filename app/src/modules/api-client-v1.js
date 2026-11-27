@@ -588,6 +588,7 @@
  * @property {number} discarded - Proposals of the model that were dropped as implausible or not applicable
  * @property {number|null=} window_start - Start of the window's text in `xml` (UTF-16 code units)
  * @property {number|null=} window_end - End of the window's text in `xml` (UTF-16 code units)
+ * @property {boolean=} page_images - Whether the model was sent the images of the window's pages (it accepts images)
  */
 
 /**
