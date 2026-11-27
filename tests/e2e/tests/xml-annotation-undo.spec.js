@@ -103,6 +103,7 @@ test.describe('Visual annotation mode', () => {
       await expect.poll(() => editorText(page)).toContain(ANNOTATED);
 
       // the other editing commands stay read-only
+      // Backspace after "Al" would delete text, not whitespace
       for (const key of ['Backspace', 'Delete', 'a']) await page.keyboard.press(key);
       expect(await editorText(page)).toContain(ANNOTATED);
 
@@ -119,8 +120,16 @@ test.describe('Visual annotation mode', () => {
       await expect.poll(() => editorText(page)).not.toBe(afterEnter);
       await page.keyboard.press('Shift+Tab');
       await expect.poll(() => editorText(page)).toBe(afterEnter);
+      // Backspace at the start of the new line's text deletes the copied indentation and the line break
+      for (let i = 0; i <= indent.length; i++) await page.keyboard.press('Backspace');
+      await expect.poll(() => editorText(page)).toBe(before);
+      // and then stops at text
+      await page.keyboard.press('Backspace');
+      expect(await editorText(page)).toBe(before);
+      await page.keyboard.press('Enter');
+      await expect.poll(() => editorText(page)).toBe(afterEnter);
       // undo history may group the whitespace edits: undo until nothing is left of them
-      for (let i = 0; i < 3 && await editorText(page) !== before; i++) await page.keyboard.press('ControlOrMeta+z');
+      for (let i = 0; i < 10 && await editorText(page) !== before; i++) await page.keyboard.press('ControlOrMeta+z');
       expect(await editorText(page)).toBe(before);
     } finally {
       await page.evaluate(() => (/** @type {any} */ (window)).app.getDependency('xml-annotation')?.dispatchStateChange({ view: null })).catch(() => {});

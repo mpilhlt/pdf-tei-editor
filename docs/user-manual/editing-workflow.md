@@ -326,7 +326,11 @@ Click the **XML / Visual** toggle switch in the bottom-left of the XML editor st
 
 - Raw XML tags are replaced by colored inline badges (e.g. `AUTHOR`, `TITLE[A]`).
 - Direct text editing is disabled — the editor is read-only for free-form changes. The cursor and the keyboard shortcuts that do not change the text, such as the [review shortcuts](unit-review.md#marking-units), still work.
-- Whitespace can still be changed by hand, unless the document is read-only: **Enter** inserts a line break, and the new line gets the same indentation as the line it was split from. **Tab** indents the selected lines, or the line with the cursor, by one indentation level, **Shift+Tab** outdents them. **Ctrl+Z** undoes these changes like the annotations.
+- Whitespace can still be changed by hand, unless the document is read-only. No text is deleted or overwritten:
+  - **Enter** inserts a line break at the cursor, and the new line gets the same indentation as the line it was split from. With a selection, Enter does nothing.
+  - **Backspace** deletes the space, tab or line break before the cursor, or a selection that contains only whitespace. Before other text, it does nothing.
+  - **Tab** indents the selected lines, or the line with the cursor, by one indentation level, **Shift+Tab** outdents them.
+  - **Ctrl+Z** undoes these changes like the annotations.
 - While node navigation is on, the **↑** and **↓** arrow keys go to the previous or next node, like **‹** and **›**, with or without focus mode, instead of moving the cursor.
 - The XPath navigation header is hidden to keep the view clean.
 - The editor scrolls to the start of the `<text>` element.

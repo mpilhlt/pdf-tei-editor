@@ -14,7 +14,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { EditorState, EditorSelection } from '@codemirror/state';
 import { indentUnit } from '@codemirror/language';
-import { insertNewlineKeepIndent, indentLines, outdentLines } from '../../../app/src/modules/codemirror/whitespace-keys.js';
+import { insertNewlineKeepIndent, deleteWhitespaceBackward, indentLines, outdentLines } from '../../../app/src/modules/codemirror/whitespace-keys.js';
 
 /**
  * Runs a command on a read-only state, as in the visual annotation mode.
@@ -49,9 +49,29 @@ describe('insertNewlineKeepIndent', () => {
     assert.strictEqual(result.doc, '  \n    Alpha');
   });
 
-  it('replaces a selection', () => {
+  it('does not overwrite a selection', () => {
     const result = run(insertNewlineKeepIndent, '  Alpha Beta', EditorSelection.single(7, 8));
-    assert.strictEqual(result.doc, '  Alpha\n  Beta');
+    assert.strictEqual(result.doc, '  Alpha Beta');
+  });
+});
+
+describe('deleteWhitespaceBackward', () => {
+  it('deletes a space or tab before the cursor', () => {
+    assert.deepStrictEqual(run(deleteWhitespaceBackward, 'Alpha \tBeta', EditorSelection.single(7)), { doc: 'Alpha Beta', head: 6 });
+  });
+
+  it('deletes a line break before the cursor', () => {
+    assert.deepStrictEqual(run(deleteWhitespaceBackward, 'Alpha\nBeta', EditorSelection.single(6)), { doc: 'AlphaBeta', head: 5 });
+  });
+
+  it('does not delete other text', () => {
+    assert.strictEqual(run(deleteWhitespaceBackward, 'Alpha Beta', EditorSelection.single(5)).doc, 'Alpha Beta');
+    assert.strictEqual(run(deleteWhitespaceBackward, 'Alpha', EditorSelection.single(0)).doc, 'Alpha');
+  });
+
+  it('deletes a selection of whitespace only', () => {
+    assert.strictEqual(run(deleteWhitespaceBackward, 'Alpha \n  Beta', EditorSelection.single(5, 9)).doc, 'AlphaBeta');
+    assert.strictEqual(run(deleteWhitespaceBackward, 'Alpha Beta', EditorSelection.single(4, 6)).doc, 'Alpha Beta');
   });
 });
 

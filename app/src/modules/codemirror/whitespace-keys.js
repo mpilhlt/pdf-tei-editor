@@ -1,8 +1,9 @@
 /**
  * Whitespace editing for an editor whose editing commands are read-only (see
- * `command-read-only.js`), such as the visual annotation mode: Enter inserts a line break and
- * Tab/Shift-Tab indent and outdent the selected lines, so that users can reformat the text by
- * hand while all other keys stay non-editing.
+ * `command-read-only.js`), such as the visual annotation mode: Enter inserts a line break,
+ * Backspace deletes whitespace and Tab/Shift-Tab indent and outdent the selected lines, so that
+ * users can reformat the text by hand. No other text is deleted or overwritten, and all other keys
+ * stay non-editing.
  *
  * The commands dispatch their changes directly instead of going through CodeMirror's own editing
  * commands, which refuse to run on a read-only state.
@@ -20,23 +21,53 @@ import { indentUnit, getIndentUnit } from '@codemirror/language';
  */
 
 /**
- * Replaces each selection range with a line break followed by the indentation of the line the
- * range starts on, copied verbatim (spaces and tabs as they are). If the range starts inside the
- * indentation, only the part of it before the range is copied.
+ * Inserts a line break at each cursor, followed by the indentation of the cursor's line, copied
+ * verbatim (spaces and tabs as they are). If the cursor is inside the indentation, only the part
+ * of it before the cursor is copied. Does nothing if a range is not empty, since no text must be
+ * overwritten.
  * @type {StateCommand}
  */
 export function insertNewlineKeepIndent({ state, dispatch }) {
+  if (state.selection.ranges.some(range => !range.empty)) return true;
   const tr = state.update(state.changeByRange(range => {
     const line = state.doc.lineAt(range.from);
     const indent = /^[ \t]*/.exec(line.text)?.[0] ?? '';
     const copied = indent.slice(0, range.from - line.from);
     const insert = state.lineBreak + copied;
     return {
-      changes: { from: range.from, to: range.to, insert },
+      changes: { from: range.from, insert },
       range: EditorSelection.cursor(range.from + insert.length)
     };
   }), { scrollIntoView: true, userEvent: 'input' });
   dispatch(tr);
+  return true;
+}
+
+/** Whitespace that {@link deleteWhitespaceBackward} may delete: spaces, tabs and line breaks. */
+const WHITESPACE = /^[ \t\r\n]+$/;
+
+/**
+ * Deletes the whitespace character (space, tab or line break) before each cursor, or each
+ * selected range if it consists of whitespace only. Does nothing if any of them is other text.
+ * @type {StateCommand}
+ */
+export function deleteWhitespaceBackward({ state, dispatch }) {
+  /** @type {ChangeSpec[]} */
+  const deletions = [];
+  for (const range of state.selection.ranges) {
+    let from = range.from;
+    if (range.empty) {
+      if (from === 0) continue;
+      const line = state.doc.lineAt(from);
+      // a line break before the cursor counts as one character, also if it is "\r\n"
+      from = from === line.from ? state.doc.line(line.number - 1).to : from - 1;
+    }
+    if (!WHITESPACE.test(state.doc.sliceString(from, range.to))) return true;
+    deletions.push({ from, to: range.to });
+  }
+  if (deletions.length === 0) return true;
+  // the selection is mapped through the deletions, which collapses each range at its start
+  dispatch(state.update({ changes: deletions, scrollIntoView: true, userEvent: 'delete.backward' }));
   return true;
 }
 
@@ -95,7 +126,7 @@ export function outdentLines({ state, dispatch }) {
 }
 
 /**
- * The key bindings Enter, Tab and Shift-Tab, with the highest precedence so that they run before
+ * The key bindings Enter, Backspace, Tab and Shift-Tab, with the highest precedence so that they run before
  * the read-only editing commands. They do nothing (and let the key through) while
  * `isEditable()` returns false, e.g. for a document the user may not edit.
  * @param {() => boolean} isEditable
@@ -109,6 +140,7 @@ export function whitespaceKeys(isEditable) {
   const guarded = command => view => isEditable() && command({ state: view.state, dispatch: tr => view.dispatch(tr) });
   return Prec.highest(keymap.of([
     { key: 'Enter', run: guarded(insertNewlineKeepIndent) },
+    { key: 'Backspace', run: guarded(deleteWhitespaceBackward) },
     { key: 'Tab', run: guarded(indentLines), shift: guarded(outdentLines) }
   ]));
 }
