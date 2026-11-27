@@ -193,10 +193,11 @@ function nonJsonResponseError(response, method) {
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
  * @param {object|null} body - The request body (optional).  Will be stringified to JSON.
  * @param {Number} [retryAttempts] - The number of retry attempts after a timeout
+ * @param {Record<string, string>} [headers] - Additional request headers, e.g. `Idempotency-Key`
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
+async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3, headers = {}) {
   // If endpoint already starts with /api, use it directly (skip api_base_url prefix)
   let url = endpoint.startsWith('/api') ? endpoint : `${api_base_url}${endpoint}`;
   /** @type {RequestInit} */
@@ -204,6 +205,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     method,
     headers: {
       'X-Session-ID': sessionId || '',
+      ...headers,
     }
   };
 
@@ -241,6 +243,11 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
     // save the last  HTTP status code for later use   
     lastHttpStatus = response.status
+
+    // 204 No Content (e.g. saving a job step) has no body
+    if (response.status === 204) {
+      return null
+    }
 
     let result;
     try {

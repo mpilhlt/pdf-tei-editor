@@ -1730,6 +1730,128 @@
  */
 
 /**
+ * Progress of a job
+ * @typedef {Object} JobProgress
+ * @property {number|null} value - Percentage 0-100, or null if indeterminate
+ * @property {number|null} done - Units done in the current phase
+ * @property {number|null} total - Units of the current phase
+ * @property {string|null} unit - Name of the units, e.g. 'pages'
+ * @property {string|null} phase - Name of the current phase
+ * @property {number|null} eta_seconds - Estimated seconds until the phase is done
+ */
+
+/**
+ * Error of a failed job
+ * @typedef {Object} JobErrorInfo
+ * @property {string} message
+ * @property {number} status - HTTP-like status: below 500 for errors caused by the request, 500 and above for failures
+ */
+
+/**
+ * A checkpoint saved by a client job
+ * @typedef {Object} JobStep
+ * @property {*} result
+ * @property {string} at
+ */
+
+/**
+ * A job of the job queue (`/api/v1/jobs`)
+ * @typedef {Object} Job
+ * @property {string} id
+ * @property {string} type
+ * @property {string} owner
+ * @property {string} visibility - 'owner' or 'shared'
+ * @property {string} driver - 'server' or 'client'
+ * @property {string} status - 'queued', 'active', 'interrupted', 'done', 'error', 'cancelled' or 'expired'
+ * @property {JobProgress} progress
+ * @property {string|null=} message
+ * @property {*=} data
+ * @property {*=} params
+ * @property {string|null=} input_hash
+ * @property {*=} result - Set when the status is 'done'
+ * @property {JobErrorInfo|null=} error - Set when the status is 'error'
+ * @property {Array<string>} resources
+ * @property {{holder: string, expires_at: string}|null=} lease
+ * @property {string|null=} lease_holder - Holder of the lease, if the host adds it
+ * @property {boolean} cancel_requested
+ * @property {number} attempts
+ * @property {number} seq - Sequence number of the latest event
+ * @property {string} created_at
+ * @property {string} updated_at
+ * @property {string|null=} finished_at
+ * @property {string|null=} expires_at
+ * @property {Record<string, JobStep>|null=} steps - Only included where requested
+ */
+
+/**
+ * An event of the job event streams
+ * @typedef {Object} JobEvent
+ * @property {number|null} id - Global event id, null in snapshots
+ * @property {number} seq - Sequence number within the job
+ * @property {string} job_id
+ * @property {string} type
+ * @property {string} status
+ * @property {JobProgress} progress
+ * @property {string|null=} message
+ * @property {*=} data
+ * @property {*=} result - Only in the 'done' event
+ * @property {JobErrorInfo|null=} error - Only in the 'error' event
+ * @property {boolean} cancel_requested
+ * @property {string} at
+ */
+
+/**
+ * A registered job type (`GET /api/v1/jobs/types`)
+ * @typedef {Object} JobTypeInfo
+ * @property {string} name
+ * @property {string} title
+ * @property {string} driver - 'server' or 'client'
+ * @property {Array<string>} roles - Roles allowed to submit the type; empty if every user may
+ */
+
+/**
+ * Request body of {@link ApiClientV1#jobsSubmit}
+ * @typedef {Object} JobSubmitRequest
+ * @property {string} type
+ * @property {*=} params
+ * @property {string=} visibility
+ * @property {Array<string>=} resources
+ * @property {string=} input_hash
+ */
+
+/**
+ * Filter of {@link ApiClientV1#jobsList}
+ * @typedef {Object} JobListFilter
+ * @property {string|Array<string>=} status
+ * @property {string=} type
+ * @property {boolean=} mine
+ * @property {boolean=} resumable
+ */
+
+/**
+ * Filter of the bulk operations {@link ApiClientV1#jobsCancelAll} and {@link ApiClientV1#jobsDeleteAll}
+ * @typedef {Object} JobBulkFilter
+ * @property {string=} type
+ * @property {string=} owner
+ * @property {string|Array<string>=} status
+ */
+
+/**
+ * Build the query string of a jobs request. Array values are repeated, undefined and null are skipped.
+ * @param {Record<string, string|number|boolean|Array<string>|null|undefined>} params
+ * @returns {string} Query string with a leading "?", or an empty string
+ */
+function jobsQuery(params) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue
+    for (const item of Array.isArray(value) ? value : [value]) query.append(key, String(item))
+  }
+  const text = query.toString()
+  return text ? `?${text}` : ''
+}
+
+/**
  * API Client for FastAPI v1 endpoints
  *
  * This client wraps the callApi function to provide typed methods for all API endpoints.
@@ -3879,6 +4001,158 @@ export class ApiClientV1 {
    */
   async files(document_id) {
     const endpoint = `/files/${document_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Submit a job. With `idempotencyKey`, a retry returns the same job.
+   *
+   * @param {JobSubmitRequest} requestBody
+   * @param {{idempotencyKey?: string}} [options]
+   * @returns {Promise<Job>}
+   */
+  async jobsSubmit(requestBody, { idempotencyKey } = {}) {
+    const endpoint = `/jobs`
+    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}
+    return this.callApi(endpoint, 'POST', requestBody, undefined, headers);
+  }
+
+  /**
+   * List the jobs visible to the user, oldest first.
+   *
+   * @param {JobListFilter} [filter]
+   * @returns {Promise<Array<Job>>}
+   */
+  async jobsList({ status, type, mine, resumable } = {}) {
+    const endpoint = `/jobs${jobsQuery({ status, type, mine, resumable })}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Return a job.
+   *
+   * @param {string} jobId
+   * @param {{steps?: boolean}} [options] - `steps`: include the saved steps
+   * @returns {Promise<Job>}
+   */
+  async jobsGet(jobId, { steps = false } = {}) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}${jobsQuery({ steps: steps || undefined })}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Cancel a job: a queued or interrupted one at once, an active one at its driver's next check.
+   *
+   * @param {string} jobId
+   * @returns {Promise<Job>}
+   */
+  async jobsCancel(jobId) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/cancel`
+    return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * Delete a job.
+   *
+   * @param {string} jobId
+   * @returns {Promise<void>}
+   */
+  async jobsDelete(jobId) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Start, take over or resume a client job. Returns the job with its steps.
+   * Rejected with 409 if another holder's lease is valid.
+   *
+   * @param {string} jobId
+   * @param {{holder: string}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsClaim(jobId, { holder }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/claim`
+    return this.callApi(endpoint, 'POST', { holder });
+  }
+
+  /**
+   * Renew the lease of a client job; the job says whether a cancel was requested.
+   *
+   * @param {string} jobId
+   * @param {{holder: string}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsHeartbeat(jobId, { holder }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/heartbeat`
+    return this.callApi(endpoint, 'POST', { holder });
+  }
+
+  /**
+   * Save a step (checkpoint) of a client job.
+   *
+   * @param {string} jobId
+   * @param {string} key
+   * @param {{holder: string, result: *}} requestBody
+   * @returns {Promise<void>}
+   */
+  async jobsSaveStep(jobId, key, { holder, result }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(key)}`
+    return this.callApi(endpoint, 'PUT', { holder, result });
+  }
+
+  /**
+   * Report progress of a client job and renew its lease.
+   *
+   * @param {string} jobId
+   * @param {{holder: string, progress?: Partial<JobProgress>, message?: string, data?: *}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsReport(jobId, { holder, progress, message, data }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/report`
+    return this.callApi(endpoint, 'POST', { holder, progress, message, data });
+  }
+
+  /**
+   * Finish a client job with `{holder, result}`, `{holder, error: {message, status}}` or `{holder, cancelled: true}`.
+   *
+   * @param {string} jobId
+   * @param {{holder: string, result?: *, error?: JobErrorInfo, cancelled?: boolean}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsFinish(jobId, requestBody) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/finish`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Cancel all matching unfinished jobs (admin).
+   *
+   * @param {JobBulkFilter} [filter]
+   * @returns {Promise<{count: number}>}
+   */
+  async jobsCancelAll(filter = {}) {
+    const endpoint = `/jobs/cancel-all`
+    return this.callApi(endpoint, 'POST', filter);
+  }
+
+  /**
+   * Delete all matching jobs (admin).
+   *
+   * @param {JobBulkFilter} [filter]
+   * @returns {Promise<{count: number}>}
+   */
+  async jobsDeleteAll({ type, owner, status } = {}) {
+    const endpoint = `/jobs${jobsQuery({ type, owner, status })}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List the registered job types.
+   *
+   * @returns {Promise<Array<JobTypeInfo>>}
+   */
+  async jobsTypes() {
+    const endpoint = `/jobs/types`
     return this.callApi(endpoint);
   }
 

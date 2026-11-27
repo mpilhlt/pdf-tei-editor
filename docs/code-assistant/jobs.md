@@ -89,6 +89,16 @@ async with run_request_job(job_id, principal) as job:  # principal: Depends(curr
 - `check_cancelled()` is sync and thread-safe; `report_threadsafe(**fields)` writes on the event loop without waiting.
 - `thread_callbacks(report, check_cancelled)` returns `(progress_callback(current, total, label), cancellation_check() -> bool)` for code with such callbacks (e.g. `update_tei_metadata`). It also works with `ctx.report_threadsafe` / `ctx.check_cancelled` of a server job.
 
+## Frontend: `JobClient`
+
+`app/src/modules/job-client.js` has no plugin imports; the `jobs` plugin constructs it with `{ api, eventSourceFactory, sessionStorage, eventsUrl }` (`eventsUrl` = `/api/v1/jobs/events?mine=true&sessionId=<id>`). `api` is the `ApiClientV1`, whose `jobs*` methods mirror `/api/v1/jobs` (`jobsSubmit` takes an `idempotencyKey` option, sent as `Idempotency-Key` through the `headers` argument of `callApi`).
+
+- `submit(type, params, {resources, inputHash, idempotencyKey})`, `get`, `list`, `cancel`, `types()` (cached).
+- `subscribe(listener)`: one shared EventSource (event `job`), opened for the first listener, closed after the last. After an error it reconnects with `last_event_id` after 1, 2, 4 ... max 30 s.
+- `wait(jobId, {signal})`: resolves `job.result`; rejects `JobFailedError` (`.status`, `.message`) for `error`/`expired` and `JobCancelledError` for `cancelled`. It polls every 2 s while the stream is in error. Aborting the signal only stops waiting.
+- `runClientJob(type, params, body, {resources, inputHash, jobId})`: submits (or resumes `jobId`), claims with the tab's holder (`sessionStorage['job-holder']`), heartbeats every 10 s and calls `body({job, step, report})`. `step(key, fn)` returns a saved result instead of running `fn`; `report(progress)` throws `JobCancelledError` after a cancel request, which finishes the job as cancelled. Other errors finish it `error` with status 500.
+- `formatJobProgress(job, heading?)`: "Recognizing text, pages 12 of 71, about 2 minutes left".
+
 ## Testing
 
 ```python
