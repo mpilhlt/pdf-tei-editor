@@ -1,7 +1,7 @@
 /**
  * Tools action "Find OCR errors (LLM)": reviews the open TEI document page window by page window
  * with an LLM through the backend and shows the suggested corrections as diagnostics, each with a
- * "Propose fix" action that opens the merge view. In focus mode, the "LLM OCR review" button
+ * "Propose fix" action that opens the merge view. In focus mode, the "OCR auto-corrections" button
  * reviews the pages of the focused node. The corrections the reviewer accepts are written to the
  * PDF with Tools > Write text corrections to PDF (see text-corrections.js).
  *
@@ -63,7 +63,7 @@ class OcrReviewPlugin extends Plugin {
 
   /** Button shown on the focused node in the XML editor's focus mode */
   #focusAction = {
-    label: 'LLM OCR review',
+    label: 'OCR auto-corrections',
     title: 'Find OCR errors in the pages of this node',
     run: () => { this.run().catch(error => this.#fail(error)) }
   }
