@@ -194,6 +194,10 @@ api_key = require_user_secret(options.get("username"), "anthropic")
 - `unregister_secret_service(id)` removes a service that no longer exists (e.g. a deleted endpoint of the inference-endpoints plugin) from the API Keys dialog; stored keys are kept.
 - Extractors that use this set `"uses_inference_model": False` in `get_info()`, so the client does not add the model chosen under Tools > Default Model to the options.
 
+## Long-Running Jobs
+
+Work that can take longer than a request may wait (imports, LLM passes, batch operations) runs as a job: register a handler with `@job_type(...)` from `fastapi_app.lib.jobs` at import time of the plugin's module, and submit it with `get_job_manager().submit(...)` or let the frontend submit it through `/api/v1/jobs`. See [Long-Running Jobs](./jobs.md).
+
 ## OCR Engines
 
 Plugins provide text recognition by registering an `OcrEngine` (`fastapi_app/lib/ocr/base.py`) with the `OcrEngineRegistry` in `initialize()` and unregistering it in `cleanup()`. The core plugin `fastapi_app/plugins/ocrmypdf/` (OCRmyPDF/Tesseract) is the reference implementation.

@@ -1,0 +1,263 @@
+"""
+Unit tests for the job infrastructure: the manager on fastapi-jobqueue, the editor's authentication, the file-lock resources, the job type registry and the job routes.
+
+@testCovers fastapi_app/lib/jobs/manager.py
+@testCovers fastapi_app/lib/jobs/auth.py
+@testCovers fastapi_app/lib/jobs/hooks.py
+@testCovers fastapi_app/lib/jobs/registry.py
+@testCovers fastapi_app/lib/jobs/files.py
+@testCovers fastapi_app/lib/jobs/routes.py
+@testCovers fastapi_app/lib/jobs/core_types.py
+"""
+
+import asyncio
+import gc
+import logging
+import os
+import shutil
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+from fastapi import APIRouter, FastAPI
+from fastapi.testclient import TestClient
+from fastapi_jobqueue import JobContext, JobManager, MemoryJobStore, SqliteJobStore
+from pydantic import BaseModel
+
+from fastapi_app.config import get_settings
+from fastapi_app.lib.core import locking
+from fastapi_app.lib.core.db_utils import close_all_connections
+from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager
+from fastapi_app.lib.core.locking import acquire_lock, check_lock, reset_locks_db_initialized
+from fastapi_app.lib.jobs import (
+    create_job_manager,
+    job_output_dir,
+    job_type,
+    set_job_manager,
+)
+from fastapi_app.lib.jobs import core_types  # noqa: F401  (registers test.progress)
+from fastapi_app.lib.jobs import manager as manager_module
+from fastapi_app.lib.jobs.routes import include_job_routes
+
+ADMIN = {"username": "admin", "roles": ["admin"]}
+ALICE = {"username": "alice", "roles": ["annotator"]}
+BOB = {"username": "bob", "roles": ["annotator"]}
+USERS = {"admin": ADMIN, "alice": ALICE, "bob": BOB}
+SESSIONS = {"admin-session": ADMIN, "alice-session": ALICE, "bob-session": BOB}
+
+logger = logging.getLogger(__name__)
+
+# Gates that the test handlers wait for, by name
+GATES: dict[str, threading.Event] = {}
+
+
+class GateParams(BaseModel):
+    gate: str
+    fail: bool = False
+    seconds: float = 0
+
+
+@job_type("test-infra.admin-only", title="Admin only", roles=["admin"])
+async def run_admin_only(ctx: JobContext, params: Any) -> dict[str, Any]:
+    return {}
+
+
+@job_type("test-infra.hold", title="Hold a file", params_model=GateParams)
+async def run_hold(ctx: JobContext, params: GateParams) -> dict[str, Any]:
+    """Waits until its gate is set (or `seconds` passed), then fails if asked to."""
+    gate = GATES.setdefault(params.gate, threading.Event())
+    started = time.monotonic()
+    while not gate.is_set() and (not params.seconds or time.monotonic() - started < params.seconds):
+        ctx.check_cancelled()
+        await asyncio.sleep(0.02)
+    if params.fail:
+        raise RuntimeError("Hold failed")
+    return {"held": True}
+
+
+@job_type("test-infra.write-file", title="Write a file")
+async def run_write_file(ctx: JobContext, params: Any) -> dict[str, Any]:
+    (job_output_dir(ctx.job_id) / "x.txt").write_text("content")
+    return {}
+
+
+def headers(session: str) -> dict[str, str]:
+    return {"X-Session-ID": session}
+
+
+class JobsTestCase(unittest.TestCase):
+    """A temp data root, mocked authentication and an app with the job routes on a fresh manager."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp())
+        self.db_dir = self.tmp / "db"
+        self.db_dir.mkdir()
+        self.env = patch.dict(os.environ, {"DATA_ROOT": str(self.tmp)})
+        self.env.start()
+        get_settings.cache_clear()
+        reset_locks_db_initialized()
+        self.saved_manager = manager_module._manager
+
+        self.session_manager = MagicMock()
+        self.session_manager.is_session_valid.return_value = True
+        self.auth_manager = MagicMock()
+        self.auth_manager.get_user_by_session_id.side_effect = lambda session_id, _sm: SESSIONS.get(session_id)
+        self.auth_manager.get_user_by_username.side_effect = USERS.get
+        self.auth_patch = patch("fastapi_app.lib.jobs.auth.get_auth_manager", lambda: self.auth_manager)
+        self.auth_patch.start()
+
+    def tearDown(self) -> None:
+        self.auth_patch.stop()
+        manager_module._manager = self.saved_manager
+        self.env.stop()
+        get_settings.cache_clear()
+        reset_locks_db_initialized()
+        close_all_connections()
+        gc.collect()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def make_manager(self, store: SqliteJobStore | None = None) -> JobManager:
+        manager = create_job_manager(store or MemoryJobStore())
+        manager.poll_interval = 0.05
+        return manager
+
+    def make_client(self, manager: JobManager) -> TestClient:
+        set_job_manager(manager)
+        app = FastAPI(lifespan=manager.lifespan)
+        api_v1 = APIRouter(prefix="/api/v1")
+        include_job_routes(api_v1)
+        app.include_router(api_v1)
+        app.dependency_overrides[get_session_manager] = lambda: self.session_manager
+        app.dependency_overrides[get_auth_manager] = lambda: self.auth_manager
+        return TestClient(app)
+
+    def submit(self, client: TestClient, body: dict[str, Any], session: str = "alice-session") -> dict[str, Any]:
+        response = client.post("/api/v1/jobs", json=body, headers=headers(session))
+        self.assertEqual(response.status_code, 201, response.text)
+        return response.json()
+
+    def wait_for(self, client: TestClient, job_id: str, statuses: tuple[str, ...], timeout: float = 5.0) -> dict[str, Any]:
+        deadline = time.monotonic() + timeout
+        job: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            job = client.get(f"/api/v1/jobs/{job_id}", headers=headers("admin-session")).json()
+            if job.get("status") in statuses:
+                return job
+            time.sleep(0.02)
+        self.fail(f"Job {job_id} did not reach {statuses}: {job}")
+
+    def lock_of(self, stable_id: str) -> locking.LockStatus:
+        return check_lock(stable_id, "other-session", self.db_dir, logger)
+
+
+class TestJobsInfrastructure(JobsTestCase):
+    def test_submit_and_finish_test_progress(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 2, "delay_ms": 1}})
+            done = self.wait_for(client, job["id"], ("done", "error"))
+        self.assertEqual(done["status"], "done")
+        self.assertEqual(done["result"], {"steps": 2})
+        self.assertEqual(done["progress"]["unit"], "steps")
+
+    def test_types_route_lists_titles(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            response = client.get("/api/v1/jobs/types", headers=headers("alice-session"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn({"name": "test.progress", "title": "Progress test", "driver": "server", "roles": None}, response.json())
+
+    def test_may_submit_respects_roles(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            refused = client.post("/api/v1/jobs", json={"type": "test-infra.admin-only"}, headers=headers("alice-session"))
+            self.assertEqual(refused.status_code, 403, refused.text)
+            accepted = client.post("/api/v1/jobs", json={"type": "test-infra.admin-only"}, headers=headers("admin-session"))
+            self.assertEqual(accepted.status_code, 201, accepted.text)
+
+    def test_cancel_from_store_stops_job(self) -> None:
+        path = self.tmp / "jobs.db"
+        manager_a = self.make_manager(SqliteJobStore(path))
+        manager_b = self.make_manager(SqliteJobStore(path))
+        with self.make_client(manager_a) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 100, "delay_ms": 100}})
+            self.wait_for(client, job["id"], ("active",))
+            assert client.portal is not None
+            client.portal.call(manager_b.cancel, job["id"])
+            cancelled = self.wait_for(client, job["id"], ("cancelled", "done", "error"))
+        self.assertEqual(cancelled["status"], "cancelled")
+
+    def test_file_resource_locks_and_releases(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            for case, expected in (("done", "done"), ("fail", "error"), ("cancel", "cancelled")):
+                with self.subTest(case=case):
+                    stable_id = f"file-{case}"
+                    gate = f"gate-{case}"
+                    job = self.submit(client, {"type": "test-infra.hold", "params": {"gate": gate, "fail": case == "fail"}, "resources": [f"file:{stable_id}"]})
+                    self.wait_for(client, job["id"], ("active",))
+                    self.assertEqual(self.lock_of(stable_id), {"is_locked": True, "locked_by": f"job:{job['id']}"})
+                    if case == "cancel":
+                        response = client.post(f"/api/v1/jobs/{job['id']}/cancel", headers=headers("alice-session"))
+                        self.assertEqual(response.status_code, 200, response.text)
+                    else:
+                        GATES.setdefault(gate, threading.Event()).set()
+                    if case == "fail":
+                        with self.assertLogs("fastapi_jobqueue.manager", level="ERROR"):
+                            finished = self.wait_for(client, job["id"], ("done", "error", "cancelled"))
+                    else:
+                        finished = self.wait_for(client, job["id"], ("done", "error", "cancelled"))
+                    self.assertEqual(finished["status"], expected)
+                    self.assertEqual(self.lock_of(stable_id), {"is_locked": False, "locked_by": None})
+
+    def test_lock_renewed_past_timeout(self) -> None:
+        # The lock timestamps have a resolution of one second, so the timeout is 2 s rather than 1 s:
+        # with 1 s, a lock renewed a moment ago can already look stale
+        manager = self.make_manager()
+        manager.lease_ttl = 0.3
+        with patch.object(locking, "LOCK_TIMEOUT_SECONDS", 2), self.make_client(manager) as client:
+            job = self.submit(client, {"type": "test-infra.hold", "params": {"gate": "gate-renew", "seconds": 4}, "resources": ["file:renewed"]})
+            self.wait_for(client, job["id"], ("active",))
+            time.sleep(3)
+            self.assertFalse(acquire_lock("renewed", "other-session", self.db_dir, logger))
+            GATES.setdefault("gate-renew", threading.Event()).set()
+            self.wait_for(client, job["id"], ("done",))
+
+    def test_busy_resource_returns_409(self) -> None:
+        self.assertTrue(acquire_lock("busy", "alice-session", self.db_dir, logger))
+        with self.make_client(self.make_manager()) as client:
+            response = client.post(
+                "/api/v1/jobs",
+                json={"type": "test-infra.hold", "params": {"gate": "gate-busy"}, "resources": ["file:free", "file:busy"]},
+                headers=headers("alice-session"),
+            )
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("busy is being edited by another user or job", response.json()["detail"])
+        # the lock taken before the refusal was given back
+        self.assertEqual(self.lock_of("free"), {"is_locked": False, "locked_by": None})
+
+    def test_deleted_hook_removes_output_dir(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test-infra.write-file"})
+            self.wait_for(client, job["id"], ("done",))
+            output = get_settings().tmp_dir / "jobs" / job["id"]
+            self.assertTrue((output / "x.txt").is_file())
+            response = client.delete(f"/api/v1/jobs/{job['id']}", headers=headers("alice-session"))
+            self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(output.exists())
+
+    def test_job_file_route(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test-infra.write-file"})
+            self.wait_for(client, job["id"], ("done",))
+            url = f"/api/v1/jobs/{job['id']}/files"
+            owner = client.get(f"{url}/x.txt", headers=headers("alice-session"))
+            self.assertEqual(owner.status_code, 200)
+            self.assertEqual(owner.text, "content")
+            self.assertEqual(client.get(f"{url}/x.txt", headers=headers("bob-session")).status_code, 404)
+            self.assertEqual(client.get(f"{url}/..%2Fx", headers=headers("alice-session")).status_code, 404)
+            self.assertEqual(client.get(f"{url}/missing.txt", headers=headers("alice-session")).status_code, 404)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -26,6 +26,7 @@ dependencies = [
     "pypdfium2>=5.15.2",
     "pillow>=13.0.0",
     "pikepdf>=10.18.2",
+    "fastapi-jobqueue @ git+https://github.com/cboulanger/fastapi-jobqueue@8f3feed9db57c3b634f3d1c89e690b12210a1c52",
 ]
 
 [project.optional-dependencies]

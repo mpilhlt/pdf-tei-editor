@@ -225,10 +225,14 @@ async def lifespan(app: FastAPI):
     from .lib.doc_rules.github_pull_request import register_github_secret_service
     register_github_secret_service()
 
-    # Log startup complete
-    logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
+    # Start the job manager after the plugins registered their job types, so that this worker
+    # can run every queued job it claims; it stops before the plugins shut down
+    from .lib.jobs import get_job_manager
+    async with get_job_manager().lifespan():
+        # Log startup complete
+        logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
 
-    yield
+        yield
 
     # Shutdown
     logger.info("Shutting down PDF-TEI Editor API")
@@ -308,6 +312,12 @@ from .routers import (
     files_comments
 )
 
+# The job manager of this worker; created here so that its routes can be mounted before the lifespan runs
+from .lib.jobs import create_job_manager, set_job_manager
+from .lib.jobs import core_types as _core_job_types  # noqa: F401  (registers the core job types)
+from .lib.jobs.routes import include_job_routes
+set_job_manager(create_job_manager())
+
 # Versioned API router (v1)
 # Note: No unversioned compatibility routes - frontend uses client shim (app/src/plugins/client.js)
 api_v1 = APIRouter(prefix="/api/v1", tags=["v1"])
@@ -350,6 +360,7 @@ api_v1.include_router(sse.router)  # SSE stream
 api_v1.include_router(maintenance.router)  # Admin maintenance controls
 api_v1.include_router(plugins_admin.router)  # Plugin management (admin); before plugins router
 api_v1.include_router(plugins.router)  # Plugin system endpoints
+include_job_routes(api_v1)  # Job API (/jobs); before files_serve (catch-all)
 api_v1.include_router(files_serve.router)  # MUST be last - has catch-all /{document_id}
 
 # Health check endpoint (unversioned)
