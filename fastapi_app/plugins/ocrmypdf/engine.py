@@ -17,8 +17,9 @@ Requires the `tesseract` binary with the language data packages
 (Ghostscript); without it, only step 2 is used.
 
 The Debian packages contain the `tessdata_fast` models. Models from `tessdata_best`
-(more accurate, slower) can be installed in the subdirectory `best/` of the tessdata
+(more accurate, slower) are found in the subdirectory `best/` of the tessdata
 directory, where Tesseract lists them as `best/<lang>`; the option `model` selects them.
+The plugin downloads them into the shared data directory and links them (see tessdata.py).
 """
 
 import csv
@@ -165,6 +166,11 @@ class OcrmypdfEngine(OcrEngine):
                 "default": MODEL_FAST,
             }
         return options
+
+    def invalidate_models(self) -> None:
+        """Forget the cached list of installed models, e.g. after a model was downloaded."""
+        with self._lock:
+            self._tesseract_codes = None
 
     def _best_models_installed(self) -> bool:
         """Return whether any tessdata_best model is installed."""

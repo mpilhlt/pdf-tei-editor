@@ -92,7 +92,7 @@ Access at: **<https://editor.company.com>**
 These variables control how the container is deployed:
 
 | Variable | Description | Example |
-|----------|-------------|---------|
+| --- | --- | --- |
 | `DEPLOY_FQDN` | Fully qualified domain name | `editor.company.com` or `localhost` |
 | `DEPLOY_TYPE` | Deployment type | `production` or `demo` |
 | `DEPLOY_DATA_DIR` | Persistent data directory (production only) | `/opt/pdf-tei-editor/data` |
@@ -115,7 +115,7 @@ These variables are passed to the running container:
 #### Authentication (Production Required)
 
 | Variable | Description | Default |
-|----------|-------------|---------|
+| --- | --- | --- |
 | `APP_ADMIN_PASSWORD` | Admin user password | `admin` (demo only) |
 | `APP_DEMO_PASSWORD` | Demo user password | `demo` (demo only) |
 | `APP_LOGIN_MESSAGE` | Custom HTML login message | Security warning |
@@ -144,7 +144,7 @@ See [Plugins in the image](#plugins-in-the-image). `.env.production` documents t
 #### Application Settings
 
 | Variable | Description | Default |
-|----------|-------------|---------|
+| --- | --- | --- |
 | `LOG_LEVEL` | Logging level | `INFO` |
 | `LOG_CATEGORIES` | Log categories | `app,api,plugins` |
 | `DOCS_FROM_GITHUB` | Load docs from GitHub | `false` |
@@ -152,6 +152,8 @@ See [Plugins in the image](#plugins-in-the-image). `.env.production` documents t
 | `WEBDAV_BASE_URL` | WebDAV server URL (`webdav-sync` plugin) | - |
 | `SECRETS_ENCRYPTION_KEY` | Fernet key that encrypts the users' stored API keys (see [User API Keys](./cli.md#user-api-keys)) and the masked settings in `config.json` (see [Encryption of secrets](#encryption-of-secrets)); without it a key file is generated in `data/db` | - |
 | `FASTAPI_PLUGIN_PATHS` | Directories with additional (external) plugins, separated by `:` (see [External Plugins](#external-plugins)) | - |
+| `SHARED_DATA_DIR` | Host-wide directory for downloaded data shared by all instances, e.g. OCR models (see [Shared Data Directory](#shared-data-directory)) | `<DATA_ROOT>/shared` |
+| `TESSERACT_BEST_LANGS` | Languages whose `tessdata_best` OCR models are downloaded at startup (see [OCR Languages](#ocr-languages)) | `TESSERACT_LANGS` of the build |
 
 See `.env.production` for complete list.
 
@@ -185,11 +187,35 @@ Text recognition (the core OCRmyPDF plugin) uses Tesseract. The build argument `
 docker build --build-arg TESSERACT_LANGS="eng deu fra tur" -t pdf-tei-editor .
 ```
 
-These packages contain the `tessdata_fast` models. The build argument `TESSERACT_BEST_LANGS` lists the languages for which the more accurate and slower `tessdata_best` models are also installed (about 10 MB per language, default: the languages of `TESSERACT_LANGS`); the OCR option "Recognition model" chooses between them. Set it to an empty string to install none:
+These packages contain the `tessdata_fast` models. The more accurate and slower `tessdata_best` models (about 10 MB per language), between which the OCR option "Recognition model" chooses, are not part of the image: the application downloads them at startup into the shared data directory (see below). The environment variable `TESSERACT_BEST_LANGS` lists their languages; the image sets it to the value of the build argument of the same name, which defaults to `TESSERACT_LANGS`. Set it to an empty string to download none:
 
 ```bash
-docker build --build-arg TESSERACT_BEST_LANGS="eng deu" -t pdf-tei-editor .
+docker run -e TESSERACT_BEST_LANGS="eng deu" ...
 ```
+
+### Shared Data Directory
+
+Data that the application downloads itself, such as the `tessdata_best` models, is stored in the shared data directory. It does not depend on the instance, so all instances on a host can use one directory and the data is downloaded only once. Without a shared directory, it is stored in `shared/` of the data directory of each instance.
+
+Mount a host directory and set `SHARED_DATA_DIR` to its mount point:
+
+```bash
+mkdir -p /opt/pdf-tei-editor-shared
+docker run -v /opt/pdf-tei-editor-shared:/app/shared -e SHARED_DATA_DIR=/app/shared ...
+```
+
+`scripts/deploy/container.js` does both with `--shared-dir /opt/pdf-tei-editor-shared` (in an env file for `scripts/deploy/deploy.js`: `DEPLOY_SHARED_DIR=/opt/pdf-tei-editor-shared`). With Docker Compose:
+
+```yaml
+services:
+  pdf-tei-editor:
+    environment:
+      SHARED_DATA_DIR: /app/shared
+    volumes:
+      - /opt/pdf-tei-editor-shared:/app/shared
+```
+
+The directory must be writable by the container. Without network access, place the model files in `tesseract/tessdata_best-4.1.0/` of the directory by hand (from <https://github.com/tesseract-ocr/tessdata_best/tree/4.1.0>).
 
 The image also contains Ghostscript, which the plugin uses to replace a broken digital text layer while keeping the pages as vector graphics. Ghostscript is licensed under the AGPL and is only run as a separate program. Without Ghostscript, such PDFs are converted to images instead.
 
