@@ -125,7 +125,7 @@ class TextCorrectionsPlugin extends Plugin {
    */
   async #preview(stableId) {
     const progressId = `text-corrections-preview-${stableId}`
-    this.#progress.show(progressId, { label: 'Saving the document…', value: null, cancellable: false })
+    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Saving the document…', value: null, cancellable: false })
     testLog('TEXT_CORRECTIONS_PROGRESS', { step: 'preview' })
     try {
       const xmlEditor = this.getDependency('xmleditor')
@@ -196,7 +196,7 @@ class TextCorrectionsPlugin extends Plugin {
           dlg.summary.textContent = 'Writing the corrections to the PDF and updating the document. This can take a minute.'
           testLog('TEXT_CORRECTIONS_WRITING', { stableId })
           // the backend shows its steps in the widget
-          this.#progress.show(progressId, { label: 'Writing the corrections to the PDF…', value: null, cancellable: false })
+          this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Writing the corrections to the PDF…', value: null, cancellable: false })
           this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipBox.checked, progress_id: progressId })
             .then(resolve, reject)
         }, { signal: controller.signal })
@@ -218,7 +218,7 @@ class TextCorrectionsPlugin extends Plugin {
    */
   async #loadResult(result) {
     const progressId = `text-corrections-load-${result.tei_stable_id}`
-    this.#progress.show(progressId, { label: 'Loading the new version and the corrected PDF…', value: null, cancellable: false })
+    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Loading the new version and the corrected PDF…', value: null, cancellable: false })
     try {
       await this.getDependency('file-selection').reload({ refresh: true })
       // passing the PDF reloads it in the viewer, although its stable_id did not change
