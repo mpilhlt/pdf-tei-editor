@@ -21,7 +21,11 @@ Accepted suggestions change the open version, so they add a change without a lab
 - the findings carry the label of the model (`Finding.model`), which the change's `desc` names: "Accepted N OCR corrections suggested by <model>"
 - while the change is the last change of the document, later accepted corrections update its count instead of adding changes (per document, per page session)
 
+## Extraction after text recognition
+
+An extraction from a PDF whose text layer was made by text recognition (the PDF's file metadata has an `ocr` record) gets " after OCR" appended to the label of its extraction change, e.g. "Extraction after OCR", and a sentence appended to its `desc`: engine, languages and date, plus the models and the number of LLM corrections recorded in `text_corrections` after the OCR run (`fastapi_app/lib/ocr/provenance.py`, `amend_last_revision_change()` in `tei_utils.py`, `_note_text_layer_provenance()` in `routers/extraction.py`). The extractor's change is amended instead of adding a change, since the text recognition belongs to the extraction and a second change would make the version count as edited (pte-plugins auto-annotation `is_extraction()`). This applies to every extractor and also to later extractions from the same PDF.
+
 ## Not covered
 
-- "Correct OCR errors in PDF without review (LLM)" and text recognition change only the PDF; their corrections are recorded in the PDF's file metadata (`text_corrections`), not in a TEI version.
+- "Correct OCR errors in PDF without review (LLM)" and text recognition on their own change only the PDF; they are recorded in the PDF's file metadata (`ocr`, `text_corrections`), not in a TEI version (Christian: PDF changes belong in the PDF metadata).
 - LLM fixes of the annotation review (pte-plugins annotation-review) are not recorded in the revision history either.

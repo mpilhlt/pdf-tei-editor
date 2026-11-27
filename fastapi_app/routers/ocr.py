@@ -61,6 +61,7 @@ from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr import llm_correction
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
 from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window
+from ..lib.ocr.provenance import OCR_METADATA_KEY, TEXT_CORRECTIONS_METADATA_KEY
 from ..lib.ocr.progress import OcrCancelled, ProgressCallback, progress_reporter
 from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
@@ -84,11 +85,8 @@ from ..lib.utils.logging_utils import get_logger
 logger = get_logger(__name__)
 router = APIRouter(prefix="/ocr", tags=["ocr"])
 
-OCR_METADATA_KEY = "ocr"
-"""Key in the PDF's file_metadata under which the last OCR run is recorded."""
-
-TEXT_CORRECTIONS_METADATA_KEY = "text_corrections"
-"""Key in the PDF's file_metadata under which the text corrections written into it are recorded."""
+# OCR_METADATA_KEY: the last OCR run of a PDF; TEXT_CORRECTIONS_METADATA_KEY: the text corrections
+# written into it (keys of the PDF's file_metadata, see lib/ocr/provenance.py)
 
 PROGRESS_WRITE_INTERVAL_SECONDS = 1.0
 

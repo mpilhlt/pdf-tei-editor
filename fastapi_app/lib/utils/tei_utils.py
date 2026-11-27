@@ -1390,6 +1390,43 @@ def add_revision_change(
     desc_elem.text = desc
 
 
+def amend_last_revision_change(root: etree._Element, label_suffix: str, description: str) -> bool:  # type: ignore[name-defined]
+    """
+    Add to the last change of the document history (teiHeader/revisionDesc): `label_suffix` to its
+    label (`note[@type="label"]`, created from `label_suffix` alone if there is none) and
+    `description` to its `desc`. For facts that belong to the event the change records, such as
+    the source an extraction was made from.
+
+    Args:
+        root: TEI root element, changed in place
+        label_suffix: Appended to the label, separated by a space
+        description: Appended to the description, separated by a space
+
+    Returns:
+        False if the document has no change to amend
+    """
+    changes = get_header_changes(root)
+    if not changes:
+        return False
+    change = changes[-1]
+    ns = change.nsmap.get(None)
+    tag = (lambda name: f"{{{ns}}}{name}") if ns else (lambda name: name)
+    note = next((c for c in change if isinstance(c.tag, str) and etree.QName(c).localname == "note" and c.get("type") == "label"), None)
+    if note is None:
+        note = etree.Element(tag("note"), type="label")
+        change.insert(0, note)
+    note.text = f"{(note.text or '').strip()} {label_suffix}".strip()
+    desc = next((c for c in change if isinstance(c.tag, str) and etree.QName(c).localname == "desc"), None)
+    if desc is None:
+        desc = etree.SubElement(change, tag("desc"))
+    if len(desc):
+        last = desc[-1]
+        last.tail = f"{(last.tail or '').rstrip()} {description}"
+    else:
+        desc.text = f"{(desc.text or '').strip()} {description}".strip()
+    return True
+
+
 def extract_change_signatures(content: bytes | etree._Element) -> list[tuple[str, str, str]]:  # type: ignore[name-defined]
     """
     Extract change element signatures from TEI document.

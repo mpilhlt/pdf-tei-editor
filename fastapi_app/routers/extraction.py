@@ -14,7 +14,9 @@ from pathlib import Path
 import asyncio
 import logging
 from datetime import datetime
-from typing import Optional, List
+from typing import Any, Optional, List
+
+from lxml import etree
 
 from ..config import get_settings
 from ..lib.models.models_extraction import (
@@ -39,6 +41,9 @@ from ..lib.core.dependencies import (
 from ..lib.repository.file_repository import FileRepository
 from ..lib.storage.file_storage import FileStorage
 from ..lib.utils.hash_utils import get_storage_path
+from ..lib.ocr.provenance import text_layer_provenance
+from ..lib.utils.tei_utils import amend_last_revision_change, serialize_tei_like_source
+from ..lib.utils.xml_utils import parse_untrusted_xml
 from ..lib.services.language_detection import add_document_language, extract_pdf_text, find_language_conflict
 from ..lib.secrets import MissingSecretError, secret_required_detail
 from ..lib.models import FileCreate, FileUpdate
@@ -278,6 +283,8 @@ async def extract_metadata(
 
         # Save the extraction result
         if pdf_path and file_metadata.file_type == 'pdf':
+            # An extraction from a text layer made by text recognition says so in its label and change
+            tei_xml = _note_text_layer_provenance(tei_xml, file_metadata.file_metadata or {})
             # For PDF-based extraction, save as associated TEI file
             result = _save_pdf_extraction_result(
                 file_metadata,
@@ -318,6 +325,33 @@ async def extract_metadata(
             status_code=500,
             detail=f"Extraction failed: {str(e)}"
         )
+
+
+def _note_text_layer_provenance(tei_xml: str, pdf_file_metadata: dict[str, Any]) -> str:
+    """
+    If the text layer of the PDF was made by text recognition, add this to the label and the
+    description of the extraction's revision change (see `text_layer_provenance()`), e.g.
+    "Extraction after OCR".
+
+    Args:
+        tei_xml: The extracted TEI
+        pdf_file_metadata: The file metadata of the PDF it was extracted from
+
+    Returns:
+        The TEI, unchanged if the text layer is not from text recognition or the TEI has no change
+    """
+    provenance = text_layer_provenance(pdf_file_metadata)
+    if provenance is None:
+        return tei_xml
+    try:
+        root = parse_untrusted_xml(tei_xml)
+    except etree.XMLSyntaxError as e:
+        logger.warning(f"Could not record the text recognition in the extraction result: {e}")
+        return tei_xml
+    if not amend_last_revision_change(root, provenance.label_suffix, provenance.description):
+        logger.warning("The extraction result has no revision change to record the text recognition in")
+        return tei_xml
+    return serialize_tei_like_source(root, tei_xml)
 
 
 def _save_pdf_extraction_result(
