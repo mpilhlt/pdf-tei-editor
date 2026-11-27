@@ -56,6 +56,7 @@ export class JobCancelledError extends Error {
  * @property {(url: string) => EventSource} [eventSourceFactory] - Required without `feed`
  * @property {string} [eventsUrl] - `/api/v1/jobs/events?mine=true&sessionId=<id>`; required without `feed`
  * @property {number} [pollInterval] - Milliseconds between polls while the stream is in error (default 2000)
+ * @property {number} [safetyPollInterval] - Milliseconds between polls of a waited job while the stream seems fine, in case events were missed anyway (default 30000)
  * @property {number} [reconnectBase] - First reconnect delay in milliseconds, doubled up to 30 s (default 1000)
  */
 
@@ -67,6 +68,9 @@ export class JobClient {
   #sessionStorage
   #eventsUrl
   #pollInterval
+  #safetyPollInterval
+  /** @type {Set<() => void>} Functions that fetch the state of a waited job again */
+  #pendingWaits = new Set()
   #reconnectBase
   /** @type {Set<(event: JobEvent) => void>} */
   #listeners = new Set()
@@ -82,7 +86,7 @@ export class JobClient {
   #types = null
 
   /** @param {JobClientOptions} options */
-  constructor({ api, feed, eventSourceFactory, sessionStorage, eventsUrl, pollInterval = 2000, reconnectBase = 1000 }) {
+  constructor({ api, feed, eventSourceFactory, sessionStorage, eventsUrl, pollInterval = 2000, safetyPollInterval = 30000, reconnectBase = 1000 }) {
     if (!feed && (!eventSourceFactory || !eventsUrl)) throw new Error('JobClient needs a feed, or an eventSourceFactory and an eventsUrl')
     this.#api = api
     this.#feed = feed ?? null
@@ -90,6 +94,7 @@ export class JobClient {
     this.#sessionStorage = sessionStorage
     this.#eventsUrl = eventsUrl
     this.#pollInterval = pollInterval
+    this.#safetyPollInterval = safetyPollInterval
     this.#reconnectBase = reconnectBase
     this.#reconnectDelay = reconnectBase
   }
@@ -225,6 +230,15 @@ export class JobClient {
   }
 
   /**
+   * Fetch the state of every waited job again, e.g. after a reconnection of the feed or when the
+   * server reports lost events, since {@link JobClient#wait} would otherwise miss a final state
+   * that was sent in the gap.
+   */
+  recheck() {
+    for (const refetch of [...this.#pendingWaits]) refetch()
+  }
+
+  /**
    * Wait until a job is finished. Aborting the signal only stops waiting; the job keeps running.
    * @param {string} jobId
    * @param {{signal?: AbortSignal}} [options]
@@ -237,11 +251,16 @@ export class JobClient {
       let unsubscribe = null
       /** @type {ReturnType<typeof setInterval>|null} */
       let pollTimer = null
+      /** @type {ReturnType<typeof setInterval>|null} */
+      let safetyTimer = null
 
+      const refetch = () => { this.get(jobId).then(check, () => {}) }
       const cleanup = () => {
         settled = true
         unsubscribe?.()
         if (pollTimer !== null) clearInterval(pollTimer)
+        if (safetyTimer !== null) clearInterval(safetyTimer)
+        this.#pendingWaits.delete(refetch)
         signal?.removeEventListener('abort', onAbort)
       }
       /** @param {Pick<Job, 'status'|'result'|'error'>} state */
@@ -278,9 +297,13 @@ export class JobClient {
         if (event.job_id === jobId) check(event)
       })
       this.get(jobId).then(check, fail)
+      this.#pendingWaits.add(refetch)
       pollTimer = setInterval(() => {
-        if (this.#inError()) this.get(jobId).then(check, () => {})
+        if (this.#inError()) refetch()
       }, this.#pollInterval)
+      // events can be missed although the stream seems fine (e.g. a stream that another page of
+      // the session took over), so a waited job is also polled now and then
+      safetyTimer = setInterval(refetch, this.#safetyPollInterval)
     })
   }
 

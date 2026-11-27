@@ -37,7 +37,7 @@ class FakeEventSource {
   fail() { this.onerror?.(new Event('error')) }
 }
 
-function setup({ jobs = {}, api = {}, feed } = {}) {
+function setup({ jobs = {}, api = {}, feed, safetyPollInterval = 60000 } = {}) {
   const sources = []
   const calls = []
   const store = new Map()
@@ -61,6 +61,7 @@ function setup({ jobs = {}, api = {}, feed } = {}) {
     sessionStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) },
     eventsUrl: '/api/v1/jobs/events?mine=true&sessionId=abc',
     pollInterval: 10,
+    safetyPollInterval,
     reconnectBase: 10
   })
   return { client, sources, calls, store }
@@ -216,6 +217,41 @@ describe('JobClient with a feed', () => {
     assert.strictEqual(calls.filter(c => c[0] === 'jobsGet').length, 1)
     feed.emit(makeEvent({ status: 'done', result: 1 }))
     await p
+  })
+
+  test('recheck settles a wait whose final event the feed missed', async () => {
+    const feed = makeFeed()
+    let state = makeJob()
+    const { client } = setup({ feed, jobs: { j1: () => state } })
+    const p = client.wait('j1')
+    await tick()
+    state = makeJob({ status: 'done', result: 'late' }) // the done event was lost
+    client.recheck()
+    assert.strictEqual(await p, 'late')
+  })
+
+  test('the safety poll settles a wait while the feed seems connected but misses events', async () => {
+    const feed = makeFeed()
+    let state = makeJob()
+    const { client, calls } = setup({ feed, safetyPollInterval: 20, jobs: { j1: () => state } })
+    const p = client.wait('j1')
+    await tick()
+    state = makeJob({ status: 'error', error: { message: 'gone', status: 500 } })
+    await assert.rejects(p, (e) => e instanceof JobFailedError && e.message === 'gone')
+    assert.ok(calls.filter(c => c[0] === 'jobsGet').length >= 2)
+  })
+
+  test('recheck fetches no job after its wait settled', async () => {
+    const feed = makeFeed()
+    const { client, calls } = setup({ feed })
+    const p = client.wait('j1')
+    await tick()
+    feed.emit(makeEvent({ status: 'done', result: 1 }))
+    await p
+    const gets = calls.filter(c => c[0] === 'jobsGet').length
+    client.recheck()
+    await tick()
+    assert.strictEqual(calls.filter(c => c[0] === 'jobsGet').length, gets)
   })
 
   test('the constructor needs a feed or an events URL', () => {

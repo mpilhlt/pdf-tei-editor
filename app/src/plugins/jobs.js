@@ -53,6 +53,9 @@ class JobsPlugin extends Plugin {
   /** @type {Map<string, JobEvent>} Latest event of each unfinished job that has a widget */
   #jobs = new Map()
 
+  /** @type {Set<string>} Jobs whose final state was handled, so that a repeated one (event and fetched state) is ignored */
+  #finished = new Set()
+
   /** @type {Set<string>} Jobs whose errors a caller in this tab reports */
   #waited = new Set()
 
@@ -202,6 +205,7 @@ class JobsPlugin extends Plugin {
     for (const jobId of this.#jobs.keys()) this.#progress.hide(`job-${jobId}`)
     this.#jobs.clear()
     this.#waited.clear()
+    this.#finished.clear()
     this.#client = null
     this.#sessionId = null
   }
@@ -221,29 +225,49 @@ class JobsPlugin extends Plugin {
       this.#logger.warn('Could not parse a job event')
       return
     }
+    this.#emit(event)
+  }
+
+  /**
+   * Pass an event to the listeners of the feed: the plugin's own listener and pending
+   * {@link JobClient#wait} calls.
+   * @param {JobEvent} event
+   */
+  #emit(event) {
     for (const listener of [...this.#feedListeners]) listener(event)
   }
 
   /**
-   * List the unfinished jobs of the user again and update the widgets, since events were missed
-   * (login, reconnection of the SSE stream, `jobsResync`). Widgets of jobs that finished in the
-   * meantime are handled with the job's final state.
+   * Fetch the job states again after events may have been missed (login, reconnection of the SSE
+   * stream, `jobsResync`): list the unfinished jobs of the user, fetch the jobs whose widgets are
+   * no longer listed (they finished in the gap), and pass the states through the feed, so that
+   * the widgets and pending {@link JobClient#wait} calls see them. Waited jobs of other users are
+   * fetched by {@link JobClient#recheck}.
    */
   async #relist() {
     const client = this.#client
     if (!client) return
+    client.recheck()
+    /** @type {Job[]} */
+    let jobs
     try {
-      const jobs = await client.list({ mine: true, status: UNFINISHED })
-      if (this.#client !== client) return
-      const listed = new Set(jobs.map(job => job.id))
-      for (const job of jobs) this.#handleEvent(this.#eventOf(job), true)
-      for (const jobId of [...this.#jobs.keys()]) {
-        if (listed.has(jobId)) continue
-        const job = await client.get(jobId)
-        if (this.#client === client) this.#handleEvent(this.#eventOf(job), true)
-      }
+      jobs = await client.list({ mine: true, status: UNFINISHED })
     } catch (error) {
       this.#logger.warn(`Could not list the jobs: ${error}`)
+      return
+    }
+    if (this.#client !== client) return
+    const listed = new Set(jobs.map(job => job.id))
+    for (const job of jobs) this.#emit(this.#eventOf(job))
+    for (const jobId of [...this.#jobs.keys()]) {
+      if (listed.has(jobId)) continue
+      try {
+        const job = await client.get(jobId)
+        if (this.#client === client) this.#emit(this.#eventOf(job))
+      } catch (error) {
+        this.#logger.warn(`Could not get job ${jobId}: ${error}`)
+        if (/** @type {{statusCode?: number}} */ (error)?.statusCode === 404) this.#removeWidget(jobId)
+      }
     }
   }
 
@@ -263,28 +287,37 @@ class JobsPlugin extends Plugin {
   // ── Widgets ──────────────────────────────────────────────────────────────
 
   /**
+   * Update the widget of a job. Events older than the last one seen (from a list that crossed a
+   * newer event) are ignored.
    * @param {JobEvent} event
-   * @param {boolean} [listed] - The event was made from a listed job, which may be older than the last event
    */
-  #handleEvent(event, listed = false) {
+  #handleEvent(event) {
     const jobId = event.job_id
     const user = /** @type {ApplicationState} */ (this.state).user
     if (event.owner && event.owner !== user?.username) return
     const known = this.#jobs.get(jobId)
-    if (listed && known && known.seq > event.seq) return
+    if (known && known.seq > event.seq) return
     if (UNFINISHED.includes(event.status)) {
+      if (this.#finished.has(jobId)) return
       this.#jobs.set(jobId, event)
       this.#render(event)
       return
     }
-    this.#jobs.delete(jobId)
-    this.#progress.hide(`job-${jobId}`)
+    if (this.#finished.has(jobId)) return
+    this.#finished.add(jobId)
+    this.#removeWidget(jobId)
     const waited = this.#waited.delete(jobId)
     if (event.status === 'error') {
       if (!waited) notify(event.error?.message ?? 'The job failed', 'danger', 'exclamation-octagon')
     } else if (!FINISHED_QUIETLY.includes(event.status)) {
       this.#logger.warn(`Unknown job status "${event.status}" of job ${jobId}`)
     }
+  }
+
+  /** @param {string} jobId */
+  #removeWidget(jobId) {
+    this.#jobs.delete(jobId)
+    this.#progress.hide(`job-${jobId}`)
   }
 
   /** @param {JobEvent} event */
