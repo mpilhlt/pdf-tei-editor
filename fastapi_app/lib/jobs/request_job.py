@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TypedDict
 
 from fastapi import HTTPException
 from fastapi_jobqueue import JobManager, Principal, Progress
@@ -20,17 +20,25 @@ from fastapi_jobqueue.errors import JobQueueError
 from fastapi_jobqueue.models import JobError
 from pydantic import JsonValue
 
+from fastapi_app.lib.core.request_cancellation import SHUTDOWN_DETAIL
 from fastapi_app.lib.utils.logging_utils import get_logger
 
 from .manager import get_job_manager
 
 logger = get_logger(__name__)
 
-PROGRESS_FIELDS = ("done", "total", "unit", "phase")
-
 
 class RequestJobCancelled(Exception):
     """Raised in the request when the user cancelled its job."""
+
+
+class ProgressFields(TypedDict, total=False):
+    """The progress fields of a job that `RequestJob` keeps."""
+
+    done: int
+    total: int
+    unit: str
+    phase: str
 
 
 class RequestJob:
@@ -43,10 +51,16 @@ class RequestJob:
         self._principal = principal
         self._loop = loop
         self._cancelled = False
-        self._progress: dict[str, Any] = {}
+        self._progress: ProgressFields = {}
         self._message: str | None = None
         self._result: JsonValue = None
-        self._pending: set[asyncio.Task[None]] = set()
+        self._heartbeats_task: asyncio.Task[None] | None = None
+        # Progress writes: always the latest state, one at a time, at most one per report_interval
+        self._dirty = False
+        self._urgent = False
+        self._last_write = 0.0
+        self._write_lock = asyncio.Lock()
+        self._delayed_flush: asyncio.Task[None] | None = None
 
     def check_cancelled(self) -> None:
         """Raise `RequestJobCancelled` if a cancel was requested. Safe to call from other threads."""
@@ -67,13 +81,15 @@ class RequestJob:
         message: str | None = None,
     ) -> None:
         """
-        Report progress; omitted fields keep their value. Also renews the lease.
+        Report progress; omitted fields keep their value. Writes are coalesced to one per
+        `report_interval` of the manager; a new phase or message is written at once.
 
         Raises:
             RequestJobCancelled: if a cancel was requested
         """
         self.check_cancelled()
-        await self._write(dict(done=done, total=total, unit=unit, phase=phase, message=message))
+        self._apply(done, total, unit, phase, message)
+        await self._flush_if_due()
 
     def report_threadsafe(
         self,
@@ -92,37 +108,82 @@ class RequestJob:
             RequestJobCancelled: if a cancel was requested
         """
         self.check_cancelled()
-        fields = dict(done=done, total=total, unit=unit, phase=phase, message=message)
-        self._loop.call_soon_threadsafe(self._schedule_write, fields)
+        self._loop.call_soon_threadsafe(self._apply_and_schedule, done, total, unit, phase, message)
 
-    def _schedule_write(self, fields: dict[str, Any]) -> None:
-        task = self._loop.create_task(self._write_logged(fields))
-        self._pending.add(task)
-        task.add_done_callback(self._pending.discard)
+    def _apply(self, done: int | None, total: int | None, unit: str | None, phase: str | None, message: str | None) -> None:
+        if done is not None:
+            self._progress["done"] = done
+        if total is not None:
+            self._progress["total"] = total
+        if unit is not None:
+            self._progress["unit"] = unit
+        if phase is not None:
+            if phase != self._progress.get("phase"):
+                self._urgent = True
+            self._progress["phase"] = phase
+        if message is not None:
+            if message != self._message:
+                self._urgent = True
+            self._message = message
+        self._dirty = True
 
-    async def _write_logged(self, fields: dict[str, Any]) -> None:
-        try:
-            await self._write(fields)
-        except Exception as e:
-            logger.warning(f"Could not report the progress of job {self.job_id}: {e}")
+    def _apply_and_schedule(self, done: int | None, total: int | None, unit: str | None, phase: str | None, message: str | None) -> None:
+        self._apply(done, total, unit, phase, message)
+        self._schedule_flush()
 
-    async def _write(self, fields: dict[str, Any]) -> None:
-        for key in PROGRESS_FIELDS:
-            if fields.get(key) is not None:
-                self._progress[key] = fields[key]
-        if fields.get("message") is not None:
-            self._message = fields["message"]
-        done, total = self._progress.get("done"), self._progress.get("total")
-        value = min(100, round(done * 100 / total)) if done is not None and total else None
-        job = await self._manager.report(
-            self.job_id, self._holder, progress=Progress(value=value, **self._progress), message=self._message, principal=self._principal
-        )
-        if job.cancel_requested:
-            self._cancelled = True
+    def _due_in(self) -> float:
+        """Seconds until a write may happen; 0 if one is due."""
+        if self._urgent:
+            return 0.0
+        return max(0.0, self._last_write + self._manager.report_interval - self._manager.clock())
+
+    def _schedule_flush(self) -> None:
+        if self._delayed_flush is None or self._delayed_flush.done():
+            self._delayed_flush = self._loop.create_task(self._delayed())
+
+    async def _delayed(self) -> None:
+        # Loops so that a state that changed during a wait or a write is written as well
+        while self._dirty:
+            await asyncio.sleep(self._due_in())
+            try:
+                await self._flush()
+            except Exception as e:
+                logger.warning(f"Could not report the progress of job {self.job_id}: {e}")
+                return
+
+    async def _flush_if_due(self) -> None:
+        if not self._dirty:
+            return
+        if self._due_in() == 0:
+            await self._flush()
+        else:
+            self._schedule_flush()
+
+    async def _flush(self) -> None:
+        """Write the latest state if it changed."""
+        async with self._write_lock:
+            if not self._dirty:
+                return
+            self._dirty = False
+            self._urgent = False
+            self._last_write = self._manager.clock()
+            done, total = self._progress.get("done"), self._progress.get("total")
+            value = min(100, round(done * 100 / total)) if done is not None and total else None
+            job = await self._manager.report(
+                self.job_id, self._holder, progress=Progress(value=value, **self._progress), message=self._message, principal=self._principal
+            )
+            if job.cancel_requested:
+                self._cancelled = True
 
     async def _drain(self) -> None:
-        if self._pending:
-            await asyncio.gather(*self._pending, return_exceptions=True)
+        """Write what is still pending."""
+        if self._delayed_flush is not None:
+            self._delayed_flush.cancel()
+            await asyncio.gather(self._delayed_flush, return_exceptions=True)
+        try:
+            await self._flush()
+        except Exception as e:
+            logger.warning(f"Could not report the progress of job {self.job_id}: {e}")
 
     async def _heartbeats(self) -> None:
         """Renew the lease every third of its TTL and record whether a cancel was requested."""
@@ -141,10 +202,16 @@ class RequestJob:
             if job.cancel_requested:
                 self._cancelled = True
 
-    async def _finish(self, **kwargs: Any) -> None:
+    async def _stop_heartbeats(self) -> None:
+        if self._heartbeats_task is not None:
+            self._heartbeats_task.cancel()
+            await asyncio.gather(self._heartbeats_task, return_exceptions=True)
+
+    async def _finish(self, *, result: JsonValue = None, error: JobError | None = None, cancelled: bool = False) -> None:
+        await self._stop_heartbeats()
         await self._drain()
         try:
-            await self._manager.finish(self.job_id, self._holder, principal=self._principal, **kwargs)
+            await self._manager.finish(self.job_id, self._holder, result=result, error=error, cancelled=cancelled, principal=self._principal)
         except Exception:
             logger.exception(f"Could not finish job {self.job_id}")
 
@@ -176,7 +243,7 @@ async def run_request_job(job_id: str, principal: Principal) -> AsyncIterator[Re
     holder = f"request:{uuid.uuid4()}"
     await _claim(manager, job_id, holder, principal)
     job = RequestJob(manager, job_id, holder, principal, asyncio.get_running_loop())
-    heartbeats = asyncio.create_task(job._heartbeats(), name=f"request-job-{job_id}")
+    job._heartbeats_task = asyncio.create_task(job._heartbeats(), name=f"request-job-{job_id}")
     try:
         yield job
         await job._finish(result=job._result)
@@ -186,6 +253,9 @@ async def run_request_job(job_id: str, principal: Principal) -> AsyncIterator[Re
     except Exception as e:
         await job._finish(error=JobError(message=str(e), status=getattr(e, "status_code", 500)))
         raise
+    except BaseException:
+        # The request task was cancelled (server shutdown); a second cancellation must not interrupt the finish
+        await asyncio.shield(job._finish(error=JobError(message=SHUTDOWN_DETAIL, status=503)))
+        raise
     finally:
-        heartbeats.cancel()
-        await asyncio.gather(heartbeats, return_exceptions=True)
+        await job._stop_heartbeats()

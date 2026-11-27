@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fastapi_jobqueue import JobManager, Principal
 
+from fastapi_app.lib.core.request_cancellation import SHUTDOWN_DETAIL
 from fastapi_app.lib.jobs import RequestJob, RequestJobCancelled, register_client_type, run_request_job, thread_callbacks
 from tests.unit.fastapi.test_jobs_infrastructure import JobsTestCase, headers
 
@@ -126,6 +127,59 @@ class TestRequestJob(JobsTestCase):
         # The thread loop would run 5 s if it were not stopped
         self.assertLess(time.monotonic() - started, 4)
         self.assertEqual(job["status"], "cancelled")
+
+
+    def test_request_job_finishes_with_503_when_the_task_is_cancelled(self) -> None:
+        manager = self.make_manager()
+        with self.make_request_client(manager) as client:
+            assert client.portal is not None
+            job_id = self.submit_client_job(client)
+
+            async def run() -> None:
+                task = asyncio.create_task(self.drive(job_id))
+                await asyncio.sleep(0.3)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+
+            client.portal.call(run)
+            job = self.wait_for(client, job_id, ("error",))
+        self.assertEqual(job["error"], {"message": SHUTDOWN_DETAIL, "status": 503})
+
+    async def drive(self, job_id: str) -> None:
+        async with run_request_job(job_id, ALICE):
+            await asyncio.sleep(30)
+
+    def test_report_threadsafe_writes_latest_state_coalesced(self) -> None:
+        manager = self.make_manager()
+        manager.report_interval = 0.2
+        writes: list[int | None] = []
+        original = manager.report
+
+        async def counting_report(*args: Any, **kwargs: Any) -> Any:
+            writes.append(kwargs["progress"].done)
+            return await original(*args, **kwargs)
+
+        manager.report = counting_report  # type: ignore[method-assign]
+        with self.make_client(manager) as client:
+            assert client.portal is not None
+            job_id = self.submit_client_job(client)
+
+            async def run() -> None:
+                async with run_request_job(job_id, ALICE) as job:
+                    def burst() -> None:
+                        for i in range(1, 201):
+                            job.report_threadsafe(done=i, total=200)
+                            time.sleep(0.002)
+
+                    await asyncio.to_thread(burst)
+
+            client.portal.call(run)
+            job = self.wait_for(client, job_id, ("done",))
+        self.assertEqual(job["progress"]["done"], 200)
+        self.assertEqual(writes[-1], 200)
+        self.assertEqual(writes, sorted(w for w in writes if w is not None))
+        self.assertLess(len(writes), 10)
 
 
 class TestThreadCallbacks(unittest.TestCase):
