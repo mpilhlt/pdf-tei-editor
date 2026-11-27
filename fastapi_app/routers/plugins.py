@@ -7,6 +7,7 @@ Provides endpoints for:
 - Serving frontend extension JavaScript bundle
 """
 
+import json
 import logging
 import re
 from typing import Any
@@ -271,10 +272,9 @@ async def get_extensions_bundle():
             if not is_valid:
                 for warning in warnings:
                     logger.warning(f"Extension validation: {warning}")
-                bundle_parts.append(
-                    f"// Skipped {js_file.name} from {plugin_id}: "
-                    f"validation failed ({len(warnings)} warning(s))\n"
-                )
+                # visible in the browser console, since a skipped extension leaves no other trace there
+                message = f"Skipped frontend extension {js_file.name} from {plugin_id}: {'; '.join(warnings)}"
+                bundle_parts.append(f"console.warn({json.dumps(message)});\n")
                 continue
 
             transformed = transform_extension_to_iife(content, js_file.name, plugin_id)

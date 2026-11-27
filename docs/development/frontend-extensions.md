@@ -275,10 +275,10 @@ Extension files are validated before serving. The following patterns are blocked
 - Network access (`fetch`, `XMLHttpRequest`, `WebSocket`) — use `this.callPluginApi()` or `this.fetchText()` instead
 - Dynamic code execution (`eval`, `Function` constructor)
 - Dynamic imports (`import()`)
-- Storage access (`localStorage`, `sessionStorage`, `indexedDB`, `cookies`)
+- Storage access (`localStorage`, `sessionStorage`, `indexedDB`, `cookies`); the names are allowed as keys of object literals, such as the `sessionStorage` option of `FindingsDisplay`
 - Window manipulation (`window.open`, `location.href`)
 
-Extensions containing blocked patterns are skipped with a warning in the server logs. Templates and stylesheets have their own checks, see [HTML Templates and Stylesheets](#html-templates-and-stylesheets).
+Extensions containing blocked patterns are skipped with a warning in the server logs and in the browser console, naming the patterns found. Templates and stylesheets have their own checks, see [HTML Templates and Stylesheets](#html-templates-and-stylesheets).
 
 ## IIFE Transformation
 

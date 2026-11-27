@@ -545,6 +545,10 @@ def escape_html(text: str) -> str:
     )
 
 
+_OBJECT_KEY_STORAGE_NAMES = re.compile(r'([{,]\s*)(?:localStorage|sessionStorage|indexedDB)(?=\s*:)')
+"""A storage name used as an object literal key: after `{` or `,`, before `:`."""
+
+
 def validate_javascript_content(content: str, filename: str) -> tuple[bool, list[str]]:
     """
     Validate JavaScript content for dangerous patterns.
@@ -575,6 +579,10 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
     # Order matters: block comments first, then line comments.
     code = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
     code = re.sub(r'^\s*//[^\n]*', '', code, flags=re.MULTILINE)
+
+    # Keys of object literals are names, not storage access, e.g. the
+    # `{ sessionStorage: new SessionStorage(...) }` option of the shared llm-findings module
+    code = _OBJECT_KEY_STORAGE_NAMES.sub(r'\1_', code)
 
     # Patterns that indicate potential security issues
     dangerous_patterns = [
