@@ -13,6 +13,8 @@ runs the job rewrites the job file with every progress report and would overwrit
 """
 
 import asyncio
+import json
+import logging
 import os
 import re
 import secrets
@@ -25,6 +27,8 @@ from typing import AsyncIterator, Optional
 from fastapi_app.lib.models.models_ocr import OcrJob, OcrJobStatus, OcrProgress, OcrResponse
 from fastapi_app.lib.ocr.progress import OcrCancelled
 from fastapi_app.lib.utils.file_lock import NonBlockingFileLock, exclusive_file_lock
+
+logger = logging.getLogger(__name__)
 
 JOB_MAX_AGE_SECONDS = 24 * 3600
 """Finished and abandoned jobs are deleted after this time."""
@@ -50,6 +54,20 @@ class OcrJobConflict(Exception):
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _migrate(data: dict[str, object]) -> dict[str, object]:
+    """
+    Bring a job file written by an older version up to date, so that the jobs of the last 24
+    hours can still be read after an update.
+
+    - `result.source_stable_id` (#944): before, the result was always stored in the source PDF,
+      so the source is the PDF of the result
+    """
+    result = data.get("result")
+    if isinstance(result, dict) and "source_stable_id" not in result and "stable_id" in result:
+        result["source_stable_id"] = result["stable_id"]
+    return data
 
 
 def _process_alive(pid: int) -> bool:
@@ -188,7 +206,7 @@ class OcrJobStore:
 
     def get(self, job_id: str) -> Optional[OcrJob]:
         """
-        Return a job, or None if there is no such job.
+        Return a job, or None if there is no such job or its file cannot be read.
 
         A queued or running job whose process no longer exists (the worker was restarted) is
         marked as failed.
@@ -203,8 +221,20 @@ class OcrJobStore:
             return None
         try:
             with open(path, encoding="utf-8") as f:
-                job = OcrJob.model_validate_json(f.read())
+                data = json.load(f)
         except FileNotFoundError:
+            return None
+        except ValueError as e:
+            logger.warning(f"Ignoring unreadable OCR job file {path}: {e}")
+            return None
+        try:
+            if not isinstance(data, dict):
+                raise ValueError("not a JSON object")
+            job = OcrJob.model_validate(_migrate(data))
+        except ValueError as e:
+            # e.g. a file of a version with a different job model: it must not break the
+            # lookups of all other jobs; cleanup() deletes it when it is old enough
+            logger.warning(f"Ignoring invalid OCR job file {path}: {e}")
             return None
         if job.status in ACTIVE_STATUSES and not _process_alive(job.pid):
             job = self.fail(job, INTERRUPTED_MESSAGE, 503)
