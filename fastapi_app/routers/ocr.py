@@ -70,9 +70,9 @@ from ..lib.ocr.text_quality import analyze_text_layer
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
 from ..lib.secrets import MissingSecretError, secret_required_detail
-from ..lib.services.tei_versions import create_tei_version, version_collections
+from ..lib.services.tei_versions import create_tei_version, emit_document_saved, version_collections
 from ..lib.sse.sse_service import SSEService
-from ..lib.sse.sse_utils import ProgressBar
+from ..lib.sse.sse_utils import ProgressBar, broadcast_to_other_sessions
 from ..lib.storage.file_storage import FileStorage
 from ..lib.tei.zone_lines import window_range
 from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
@@ -765,6 +765,8 @@ UNSUPPORTED_DOCUMENT_MESSAGE = "Text corrections cannot be written for this kind
 OCR_RUNNING_MESSAGE = "Text recognition is running for the PDF of this document. Please wait until it is finished."
 NO_CORRECTIONS_MESSAGE = "The document has no text corrections to write."
 LOCKED_MESSAGE = "This document is being edited in another session. Text corrections can only be written by the session that edits it."
+NO_PAGE_CORRECTIONS_MESSAGE = "There are no text corrections to write on these pages."
+FROZEN_MESSAGE = "This version is superseded by a newer version and cannot be changed. Save a new version to edit it."
 UNWRITABLE_MESSAGE = "Some differences between the document and the text layer cannot be written. Skip them to write the other corrections."
 
 
@@ -778,6 +780,7 @@ class _CorrectionContext:
     pdf_path: Path
     handler: CorrectedPdfHandler
     plan: CorrectionPlan
+    update_pending: bool
 
 
 def _get_tei(repo: FileRepository, stable_id: str, user: dict[str, Any]) -> FileMetadata:
@@ -826,17 +829,29 @@ class _CorrectionProgress:
         return report
 
 
-def _derive_plan(xml: str, variant_id: str, layout: LineLayout, pdf_path: Path, progress: _CorrectionProgress) -> CorrectionPlan:
-    """Compare the TEI's words with the PDF's text layer (blocking)."""
-    words = tei_words(xml, variant_id, layout)
+def _derive_plan(xml: str, variant_id: str, layout: LineLayout, pdf_path: Path, progress: _CorrectionProgress, pages: list[int] | None = None) -> CorrectionPlan:
+    """Compare the TEI's words with the PDF's text layer, of all pages or only of the given ones (blocking)."""
+    page_set = set(pages) if pages is not None else None
+    words = tei_words(xml, variant_id, layout, page_set)
     with pikepdf.open(pdf_path) as pdf:
-        layer = read_text_layer(pdf, progress.pages("Reading the text layer of the PDF"))
+        layer = read_text_layer(pdf, progress.pages("Reading the text layer of the PDF"), page_set)
     return derive_corrections(words, layer, progress.pages("Comparing the document with the text layer"))
 
 
-async def _correction_context(stable_id: str, repo: FileRepository, storage: FileStorage, jobs: OcrJobStore, user: dict[str, Any], session_id: str, progress: _CorrectionProgress) -> _CorrectionContext:
+def _update_pending(pdf: FileMetadata) -> bool:
     """
-    Check the preconditions of writing a TEI's text corrections into its PDF and derive them.
+    True if the PDF was made by writing the text corrections of some pages (`pages` in its last
+    text-corrections record), which does not update the document for the corrected PDF (the
+    corrected-PDF handler is not called).
+    """
+    records = pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
+    return bool(records) and isinstance(records[-1], dict) and records[-1].get("pages") is not None
+
+
+async def _correction_context(stable_id: str, repo: FileRepository, storage: FileStorage, jobs: OcrJobStore, user: dict[str, Any], session_id: str, progress: _CorrectionProgress, pages: list[int] | None = None) -> _CorrectionContext:
+    """
+    Check the preconditions of writing a TEI's text corrections into its PDF and derive them, of
+    all pages or only of the given ones (0-based).
 
     Raises:
         HTTPException: 404/403 if the TEI or its PDF is missing or not editable, 409 if the
@@ -867,14 +882,119 @@ async def _correction_context(stable_id: str, repo: FileRepository, storage: Fil
         raise HTTPException(status_code=409, detail=OCR_RUNNING_MESSAGE)
     pdf_path = _pdf_path(storage, pdf)
     try:
-        plan = await asyncio.to_thread(_derive_plan, xml, tei.variant, layout, pdf_path, progress)
+        plan = await asyncio.to_thread(_derive_plan, xml, tei.variant, layout, pdf_path, progress, pages)
     except ValueError as e:
         # the variant has no zone labels
         logger.debug(f"Cannot derive text corrections for {stable_id}: {e}")
         raise HTTPException(status_code=409, detail=UNSUPPORTED_DOCUMENT_MESSAGE)
     except pikepdf.PdfError as e:
         raise HTTPException(status_code=422, detail=f"The PDF cannot be read: {e}")
-    return _CorrectionContext(tei, xml, pdf, pdf_path, handler, plan)
+    return _CorrectionContext(tei, xml, pdf, pdf_path, handler, plan, _update_pending(pdf))
+
+
+def _corrections_record(plan: CorrectionPlan, tei: FileMetadata, user: dict[str, Any], pages: list[int] | None) -> dict[str, Any]:
+    """
+    The record of writing text corrections that is added to the file metadata of the corrected
+    PDF (`TEXT_CORRECTIONS_METADATA_KEY`). `pages` (0-based) is set if only the corrections of
+    these pages were written, without updating the document for the corrected PDF.
+    """
+    record: dict[str, Any] = {
+        "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "applied_by": str(user.get("username") or ""),
+        "tei_stable_id": tei.stable_id,
+        "corrections": [{"page": c.page, "line": c.line, "old": c.old, "new": c.new} for c in plan.corrections],
+    }
+    if pages is not None:
+        record["pages"] = pages
+    return record
+
+
+def _pending_lines(pdf: FileMetadata) -> frozenset[int]:
+    """The lines corrected by the page-scoped writes that made the PDF since the document was last updated for its PDF."""
+    lines: set[int] = set()
+    for record in reversed(pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []):
+        if not isinstance(record, dict) or record.get("pages") is None:
+            break
+        lines.update(c["line"] for c in record.get("corrections") or [] if isinstance(c, dict) and isinstance(c.get("line"), int))
+    return frozenset(lines)
+
+
+async def _apply_page_corrections(
+    context: _CorrectionContext,
+    request: TextCorrectionsRequest,
+    repo: FileRepository,
+    storage: FileStorage,
+    user: dict[str, Any],
+    session_id: str,
+    progress: _CorrectionProgress,
+    sse_service: SSEService,
+    session_manager: SessionManager,
+) -> TextCorrectionsResult:
+    """
+    Write the text corrections of the requested pages into a copy of the PDF and attach the given
+    version to it, recording the write in its revision history (see apply_text_corrections()).
+    """
+    plan, pdf, tei = context.plan, context.pdf, context.tei
+    pages = sorted(set(request.pages or []))
+    if repo.is_frozen(tei.stable_id):
+        raise HTTPException(status_code=409, detail=FROZEN_MESSAGE)
+    if not plan.corrections:
+        raise HTTPException(status_code=409, detail=NO_PAGE_CORRECTIONS_MESSAGE)
+    if plan.unwritable and not request.skip_unwritable:
+        raise HTTPException(status_code=409, detail=UNWRITABLE_MESSAGE)
+    try:
+        xml, metadata = _record_page_corrections(context.xml, user, len(plan.corrections), pages)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
+        output_path = Path(tmp) / "corrected.pdf"
+        progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
+        try:
+            await asyncio.to_thread(_patch_pdf, context.pdf_path, output_path, plan.corrections)
+        except (ValueError, pikepdf.PdfError) as e:
+            logger.warning(f"Cannot write text corrections into {pdf.stable_id}: {e}")
+            raise HTTPException(status_code=422, detail=f"The text layer of the PDF cannot be changed: {e}")
+        content = output_path.read_bytes()
+    new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
+    if new_hash == pdf.id:
+        raise HTTPException(status_code=409, detail=NO_PAGE_CORRECTIONS_MESSAGE)
+
+    progress.step("Saving the document")
+    previous = pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
+    file_metadata = {**pdf.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, _corrections_record(plan, tei, user, pages)]}
+    corrected_pdf = repo.create_pdf_version(pdf.stable_id, new_hash, len(content), file_metadata, created_by=str(user.get("username") or "") or None)
+    xml_bytes = xml.encode("utf-8")
+    tei_hash, _ = storage.save_file(xml_bytes, "tei", increment_ref=False)
+    repo.update_file(
+        tei.id,
+        FileUpdate(
+            id=tei_hash,
+            file_size=len(xml_bytes),
+            status=metadata["status"],
+            last_revision=metadata["last_revision"],
+            pdf_stable_id=corrected_pdf.stable_id,
+        ),
+        stable_id=tei.stable_id,
+    )
+    broadcast_to_other_sessions(
+        sse_service=sse_service,
+        session_manager=session_manager,
+        current_session_id=session_id,
+        event_type="fileDataChanged",
+        data={"reason": "file_saved", "stable_id": tei.stable_id},
+        logger=logger,
+    )
+    await emit_document_saved(tei.stable_id, tei.doc_id, user)
+    logger.info(f"Wrote {len(plan.corrections)} text correction(s) on pages {pages} of {tei.stable_id} into a copy of {pdf.stable_id}: new PDF {corrected_pdf.stable_id} ({pdf.id[:8]} -> {new_hash[:8]}), version attached to it")
+    return TextCorrectionsResult(
+        xml=xml,
+        tei_stable_id=tei.stable_id,
+        pdf_stable_id=corrected_pdf.stable_id,
+        source_pdf_stable_id=pdf.stable_id,
+        corrections=len(plan.corrections),
+        new_version=False,
+    )
 
 
 def _patch_pdf(source: Path, target: Path, corrections: list[WordCorrection]) -> None:
@@ -890,7 +1010,47 @@ TEXT_CORRECTIONS_LABEL = "Corrected text layer"
 
 def _text_corrections_desc(count: int) -> str:
     """The description of the revision change of a version created by writing text corrections into the PDF."""
+    if count == 0:
+        return "Updated the document for the text corrections written into the text layer of its PDF page by page"
     return f"Wrote {count} text correction{'' if count == 1 else 's'} into the text layer of a new PDF and attached this version to it"
+
+
+def _page_corrections_desc(count: int, pages: list[int]) -> str:
+    """The description of the revision change that records writing the text corrections of some pages (0-based) into the PDF."""
+    numbers = ", ".join(str(p + 1) for p in pages)
+    return f"Wrote {count} text correction{'' if count == 1 else 's'} on page{'' if len(pages) == 1 else 's'} {numbers} into the text layer of a new PDF and attached this version to it"
+
+
+def _record_page_corrections(xml: str, user: dict[str, Any], count: int, pages: list[int]) -> tuple[str, dict[str, str | None]]:
+    """
+    Record writing the text corrections of some pages in the revision history of a TEI document
+    that stays the same version: an unlabelled change by the user with the status of the last
+    change ("draft" if there is none). The entity encoding is applied as the save route does.
+
+    Returns:
+        The XML and its status and last_revision
+
+    Raises:
+        ValueError: if the XML is not well-formed or has no teiHeader
+    """
+    try:
+        root = etree.fromstring(xml.encode("utf-8"))
+    except etree.XMLSyntaxError as e:
+        raise ValueError(f"The document is not well-formed XML: {e}") from e
+    username = str(user.get("username") or "") or "unknown"
+    has_file_desc = root.find("tei:teiHeader/tei:fileDesc", {"tei": "http://www.tei-c.org/ns/1.0"}) is not None
+    add_revision_change(
+        root,
+        when=datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        status=str(extract_tei_metadata(root).get("status") or "draft"),
+        who=username,
+        desc=_page_corrections_desc(count, pages),
+        full_name=(str(user.get("fullname") or "") or None) if has_file_desc else None,
+    )
+    updated = serialize_tei_with_formatted_header(root, extract_processing_instructions(xml))
+    metadata = extract_tei_metadata(root)
+    updated = stamp_revision_hashes(apply_entity_encoding_from_config(updated), xml)
+    return updated, {"status": metadata.get("status"), "last_revision": metadata.get("last_revision")}
 
 
 def _prepare_version_xml(xml: str, doc_id: str, reference_xml: str, user: dict[str, Any], corrections: int) -> tuple[str, dict[str, str | None]]:
@@ -967,16 +1127,19 @@ async def preview_text_corrections(
     """
     progress = _CorrectionProgress(sse_service, session_id, request.progress_id)
     try:
-        context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress)
+        context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress, request.pages)
     except HTTPException as e:
         if e.status_code not in (409, 423):
             raise
         return TextCorrectionsPreview(reason=str(e.detail))
+    # writing the whole document updates it for corrections written page by page before
+    update_pending = request.pages is None and context.update_pending
     return TextCorrectionsPreview(
         corrections=[TextCorrectionItem(page=c.page, line=c.line, old=c.old, new=c.new) for c in context.plan.corrections],
         unwritable=[UnwritableItem(page=u.page, line=u.line, layer_text=u.layer_text, tei_text=u.tei_text, reason=u.reason) for u in context.plan.unwritable],
         # the unwritable differences explain why there is nothing to write
-        reason=None if context.plan.corrections else NO_CORRECTIONS_MESSAGE,
+        reason=None if context.plan.corrections or update_pending else (NO_CORRECTIONS_MESSAGE if request.pages is None else NO_PAGE_CORRECTIONS_MESSAGE),
+        update_pending=update_pending,
     )
 
 
@@ -1009,33 +1172,51 @@ async def apply_text_corrections(
     document, the response is 422 with `message` and the unmatched `lines`; if its service is
     unreachable or the plugin fails, 502. Nothing is replaced in these cases.
 
+    With `pages`, only the corrections on these pages are written, and quickly: the version is not
+    copied but attached to the corrected PDF, and its revision history records the write in an
+    unlabelled change. The extractor plugin is not called, so the document keeps the data of the
+    previous PDF (such as GROBID's feature file; the positions of the lines do not change). The
+    corrected PDF records this (`pages` in its text-corrections record), and the next write of
+    the whole document updates the document for it, also when no corrections are left: the
+    preview then reports `update_pending`. Refused with 409 if the version is frozen.
+
     If `progress_id` is given, the steps are shown in that progress widget of the client.
     """
     settings = get_settings()
     progress = _CorrectionProgress(sse_service, session_id, request.progress_id)
-    context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress)
+    context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress, request.pages)
+    if request.pages is not None:
+        return await _apply_page_corrections(context, request, repo, storage, current_user, session_id, progress, sse_service, session_manager)
     plan, pdf, tei = context.plan, context.pdf, context.tei
-    if not plan.corrections:
+    # only the document is updated for the corrections written page by page before
+    update_only = not plan.corrections and context.update_pending
+    if not plan.corrections and not update_only:
         raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
     if plan.unwritable and not request.skip_unwritable:
         raise HTTPException(status_code=409, detail=UNWRITABLE_MESSAGE)
     # refuse before anything is changed if the user cannot create the new version
     version_collections(repo, tei.doc_id, current_user, settings.db_dir, logger)
 
-    with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
-        output_path = Path(tmp) / "corrected.pdf"
-        progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
-        try:
-            await asyncio.to_thread(_patch_pdf, context.pdf_path, output_path, plan.corrections)
-        except (ValueError, pikepdf.PdfError) as e:
-            logger.warning(f"Cannot write text corrections into {pdf.stable_id}: {e}")
-            raise HTTPException(status_code=422, detail=f"The text layer of the PDF cannot be changed: {e}")
-        content = output_path.read_bytes()
-    new_hash, new_path = storage.save_file(content, "pdf", increment_ref=False)
-    if new_hash == pdf.id:
-        raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
+    if update_only:
+        new_hash, new_path = pdf.id, context.pdf_path
+        content_size = pdf.file_size
+    else:
+        with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
+            output_path = Path(tmp) / "corrected.pdf"
+            progress.step(f"Writing {len(plan.corrections)} correction{'' if len(plan.corrections) == 1 else 's'} into the PDF")
+            try:
+                await asyncio.to_thread(_patch_pdf, context.pdf_path, output_path, plan.corrections)
+            except (ValueError, pikepdf.PdfError) as e:
+                logger.warning(f"Cannot write text corrections into {pdf.stable_id}: {e}")
+                raise HTTPException(status_code=422, detail=f"The text layer of the PDF cannot be changed: {e}")
+            content = output_path.read_bytes()
+        new_hash, new_path = storage.save_file(content, "pdf", increment_ref=False)
+        content_size = len(content)
+        if new_hash == pdf.id:
+            raise HTTPException(status_code=409, detail=NO_CORRECTIONS_MESSAGE)
 
-    corrected_lines = frozenset(c.line for c in plan.corrections)
+    # the lines corrected page by page since the document was last updated for its PDF
+    corrected_lines = frozenset(c.line for c in plan.corrections) | _pending_lines(pdf)
     progress.step("Updating the document for the corrected PDF. This can take a minute.")
     try:
         xml = await asyncio.to_thread(context.handler, context.xml, tei.doc_id, new_path, new_hash, corrected_lines)
@@ -1054,16 +1235,15 @@ async def apply_text_corrections(
         logger.warning(f"The corrected-PDF handler returned an invalid document for {tei.stable_id}: {e}")
         raise HTTPException(status_code=502, detail=str(e))
 
-    record: dict[str, str | list[dict[str, str | int]]] = {
-        "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "applied_by": str(current_user.get("username") or ""),
-        "tei_stable_id": tei.stable_id,
-        "corrections": [{"page": c.page, "old": c.old, "new": c.new} for c in plan.corrections],
-    }
+    record = _corrections_record(plan, tei, current_user, None)
     previous = pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
     file_metadata = {**pdf.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, record]}
-    # the corrected PDF is a new PDF of the document; the version given stays attached to its PDF
-    corrected_pdf = repo.create_pdf_version(pdf.stable_id, new_hash, len(content), file_metadata, created_by=str(current_user.get("username") or "") or None)
+    if update_only:
+        # the PDF is unchanged; its record is added once the new version exists
+        corrected_pdf = pdf
+    else:
+        # the corrected PDF is a new PDF of the document; the version given stays attached to its PDF
+        corrected_pdf = repo.create_pdf_version(pdf.stable_id, new_hash, content_size, file_metadata, created_by=str(current_user.get("username") or "") or None)
     progress.step("Saving the new version of the document")
 
     # The new version is attached to the corrected PDF. It is created before the response is sent,
@@ -1092,6 +1272,9 @@ async def apply_text_corrections(
         logger.exception(f"Wrote the text corrections of {tei.stable_id} into {pdf.stable_id}, but could not create the new version: {e}")
         reason = e.detail if isinstance(e, HTTPException) else str(e)
         raise HTTPException(status_code=500, detail=f"The corrections were written to the PDF, but the new version of the document could not be created: {reason}")
+    if update_only:
+        # the record says that the document was updated for the PDF
+        repo.update_file(pdf.id, FileUpdate(file_metadata=file_metadata), stable_id=pdf.stable_id)
     logger.info(f"Wrote {len(plan.corrections)} text correction(s) of {tei.stable_id} into a copy of {pdf.stable_id}: new PDF {corrected_pdf.stable_id} ({pdf.id[:8]} -> {new_hash[:8]}), new version {version.file.stable_id}")
     return TextCorrectionsResult(
         xml=version_xml,
@@ -1126,10 +1309,15 @@ async def plan_ocr_llm_review(
     repo: FileRepository = Depends(get_file_repository),
     current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> OcrReviewPlanResponse:
-    """Report how many page windows `/ocr/llm-review` needs for the given document content (no LLM call)."""
+    """
+    Report how many page windows `/ocr/llm-review` needs for the given document content and
+    which pages they cover (no LLM call). With a scope, these are the pages of the node, which
+    `/ocr/text-corrections/apply` takes to write the corrections of the node.
+    """
     tei = _get_tei(repo, body.stable_id, current_user)
     source = await asyncio.to_thread(_review_source, tei, body.xml, body.scope)
-    return OcrReviewPlanResponse(window_count=len(source.windows))
+    pages = sorted({page.number - 1 for window in source.windows for page in window})
+    return OcrReviewPlanResponse(window_count=len(source.windows), pages=pages)
 
 
 @router.post("/llm-review", response_model=OcrReviewResponse)

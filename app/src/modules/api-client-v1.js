@@ -542,6 +542,7 @@
  * @property {string} stable_id - stable_id of the TEI document
  * @property {boolean=} skip_unwritable - Write the corrections even though some differences cannot be written (they are skipped)
  * @property {string|null=} progress_id - Id of a progress widget of the client that shows the steps of the request (via SSE)
+ * @property {Array<number>|null=} pages - Only the corrections on these pages (0-based page indices of the PDF, see OcrReviewPlanResponse.pages). Writing them updates the given version instead of creating a new one
  */
 
 /**
@@ -556,6 +557,7 @@
  * The number of page windows the review needs
  * @typedef {Object} OcrReviewPlanResponse
  * @property {number} window_count - Number of windows; request each `window_index` below it in turn
+ * @property {Array<number>=} pages - The pages of the windows (0-based page indices of the PDF); with a scope, the pages the node lies on
  */
 
 /**
@@ -613,16 +615,18 @@
  * @property {Array<TextCorrectionItem>} corrections - Corrections that would be written
  * @property {Array<UnwritableItem>} unwritable - Differences that cannot be written
  * @property {string|null=} reason - Why the corrections cannot be written; set means the action is not possible. The lists are then empty, except when there are no corrections: `unwritable` explains why
+ * @property {boolean=} update_pending - Corrections were written page by page without updating the document for the corrected PDF (the data of the extractor, such as GROBID's feature file). Writing the whole document does this, even if there are no corrections left
  */
 
 /**
  * Result of writing the text corrections into the PDF
  * @typedef {Object} TextCorrectionsResult
- * @property {string} xml - The TEI document updated for the corrected PDF, as stored in the new version
+ * @property {string} xml - The TEI document updated for the corrected PDF, as stored in the new version (or in the given version if only some pages were written)
  * @property {string} tei_stable_id - stable_id of the new version of the document, which is attached to the corrected PDF
  * @property {string} pdf_stable_id - stable_id of the corrected PDF, a new PDF of the document (#944)
  * @property {string} source_pdf_stable_id - stable_id of the PDF the corrections were derived from; it is not changed
  * @property {number} corrections - Number of corrections written
+ * @property {boolean=} new_version - False if the corrections of some pages were written into the given version, which is now attached to the corrected PDF; true if a new version was created
  */
 
 /**

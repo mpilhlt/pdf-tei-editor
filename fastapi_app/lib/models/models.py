@@ -128,6 +128,7 @@ class FileUpdate(BaseModel):
     doc_collections: Optional[list[str]] = None
     doc_metadata: Optional[dict] = None
     file_metadata: Optional[dict] = None
+    pdf_stable_id: Optional[str] = None  # TEI: attach the file to another PDF of its document (#944)
 
 
 class FileWithDocMetadata(FileMetadata):

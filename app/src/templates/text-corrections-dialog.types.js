@@ -6,6 +6,7 @@
  * @property {HTMLElement} summary
  * @property {HTMLDivElement & correctionsSectionPart} correctionsSection
  * @property {HTMLDivElement & unwritableSectionPart} unwritableSection
+ * @property {HTMLElement} versionNote
  * @property {import('../ui.js').SlButton} close
  * @property {import('../ui.js').SlButton} write
  */

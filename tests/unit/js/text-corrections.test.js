@@ -37,4 +37,17 @@ describe('summarizePreview', () => {
     const s = summarizePreview({ corrections: [correction, correction], unwritable: [], affected_files: [] });
     assert.match(s.text, /2 corrections/);
   });
+
+  it('can apply without corrections when the document must be updated for corrections written page by page', () => {
+    const s = summarizePreview({ corrections: [], unwritable: [], reason: null, update_pending: true });
+    assert.strictEqual(s.canApply, true);
+    assert.match(s.text, /page by page/);
+    assert.doesNotMatch(s.text, /0 corrections/);
+  });
+
+  it('mentions the update along with the corrections', () => {
+    const s = summarizePreview({ corrections: [correction], unwritable: [], reason: null, update_pending: true });
+    assert.match(s.text, /1 correction will be written/);
+    assert.match(s.text, /page by page before/);
+  });
 });

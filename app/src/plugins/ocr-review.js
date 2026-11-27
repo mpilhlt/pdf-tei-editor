@@ -2,8 +2,12 @@
  * Tools action "Find OCR errors (LLM)": reviews the open TEI document page window by page window
  * with an LLM through the backend and shows the suggested corrections as diagnostics, each with a
  * "Propose fix" action that opens the merge view. In focus mode, the "OCR auto-corrections" button
- * reviews the pages of the focused node. The corrections the reviewer accepts are written to the
- * PDF with Tools > Write text corrections to PDF (see text-corrections.js). Each accepted correction
+ * reviews the pages of the focused node without asking (the review of the whole document asks for
+ * confirmation). Once that review found errors, the button of the node becomes "Write text
+ * corrections to PDF", which writes the corrections on these pages into the PDF without creating a
+ * new version (see TextCorrectionsPlugin#writePages); afterwards the node gets "OCR
+ * auto-corrections" again. The corrections of the whole document are written to the PDF with
+ * Tools > Write text corrections to PDF (see text-corrections.js). Each accepted correction
  * is recorded in the document history (`teiHeader/revisionDesc`) by the user, naming the model that
  * suggested it; the corrections accepted one after another share one change. This covers fixes
  * accepted in the merge view ("Propose fix") and fixes applied in the diagnostics drawer.
@@ -17,6 +21,7 @@
  * @import { OcrCorrectionsRecord } from '../modules/tei-utils.js'
  * @import { MergeViewHideEventData } from '../modules/xmleditor.js'
  * @import { FixableDiagnostic } from '../modules/lint-utils.js'
+ * @import { FocusAction } from '../modules/codemirror/focus-mode.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -90,6 +95,26 @@ class OcrReviewPlugin extends Plugin {
     run: () => { this.run().catch(error => this.#fail(error)) }
   }
 
+  /** Button shown instead on a node whose pages were reviewed and not yet written to the PDF */
+  #writeAction = {
+    label: 'Write text corrections to PDF',
+    title: 'Write the corrections on the pages of this node into the text layer of the PDF',
+    run: () => { this.#writeUnit().catch(error => this.#failWrite(error)) }
+  }
+
+  /** The write button, disabled while the corrections are written */
+  #writeActionBusy = { ...this.#writeAction, disabled: true, title: 'The corrections are being written to the PDF' }
+
+  /**
+   * Per document (stable_id): the nodes (XPath) whose pages a review found errors in and whose
+   * corrections have not been written to the PDF yet, with these pages (0-based).
+   * @type {Map<string, Map<string, number[]>>}
+   */
+  #unwrittenUnits = new Map()
+
+  /** True while the corrections of a node are written */
+  #writing = false
+
   async start() {
     const item = /** @type {SlMenuItem} */ (document.createElement('sl-menu-item'))
     item.textContent = 'Find OCR errors (LLM)'
@@ -124,6 +149,7 @@ class OcrReviewPlugin extends Plugin {
    * @param {string|null} [_doc]
    */
   async onXmlChange(_doc) {
+    this.#writing = false
     this.#display?.switchDocument(this.state?.xml || null)
     this.#layoutOk = false
     this.#layoutMissing = null
@@ -154,8 +180,39 @@ class OcrReviewPlugin extends Plugin {
     this.#updateMenuState()
   }
 
+  /**
+   * The focused node changed: show the button that fits it.
+   * @param {string|null} [_xpath]
+   */
+  onXpathChange(_xpath) {
+    this.#updateMenuState()
+  }
+
   /** Button shown, disabled, while a review runs */
   #focusActionBusy = { ...this.#focusAction, disabled: true, title: 'An OCR review is running' }
+
+  /**
+   * The pages of the focused node if a review found errors on them that have not been written to
+   * the PDF yet.
+   * @returns {number[]|null}
+   */
+  #unwrittenPages() {
+    const stableId = this.state?.xml
+    const xpath = this.state?.xpath
+    if (!stableId || !xpath) return null
+    return this.#unwrittenUnits.get(stableId)?.get(xpath) ?? null
+  }
+
+  /**
+   * The button of the focused node: "Write text corrections to PDF" if its pages were reviewed
+   * and not written yet, otherwise "OCR auto-corrections"; disabled while a review or a write runs.
+   * @returns {FocusAction}
+   */
+  #currentFocusAction() {
+    if (this.#writing) return this.#writeActionBusy
+    if (this.#busy) return this.#focusActionBusy
+    return this.#unwrittenPages() ? this.#writeAction : this.#focusAction
+  }
 
   /**
    * Enable the menu item and the focus action when a document with a layout is open; while a
@@ -167,10 +224,44 @@ class OcrReviewPlugin extends Plugin {
     this.#menuItem.disabled = !enabled || this.#busy
     this.#menuItem.title = enabled ? TOOLTIP : `${TOOLTIP} ${this.#layoutMissing ?? NO_DOCUMENT_MESSAGE}`
     try {
-      this.getDependency('xmleditor').setFocusAction(SOURCE, enabled ? (this.#busy ? this.#focusActionBusy : this.#focusAction) : null)
+      this.getDependency('xmleditor').setFocusAction(SOURCE, enabled ? this.#currentFocusAction() : null)
     } catch {
       // the editor is not ready yet: editorReady calls again
     }
+  }
+
+  /**
+   * Write the corrections on the pages of the focused node into the PDF. Afterwards, or if there
+   * is nothing to write, the node gets the "OCR auto-corrections" button again.
+   * @returns {Promise<void>}
+   */
+  async #writeUnit() {
+    const stableId = this.state?.xml
+    const xpath = this.state?.xpath
+    const pages = this.#unwrittenPages()
+    if (!stableId || !xpath || !pages || this.#writing) return
+    this.#writing = true
+    this.#updateMenuState()
+    try {
+      const status = await this.getDependency('text-corrections').writePages(pages)
+      if (status !== 'failed') this.#unwrittenUnits.get(stableId)?.delete(xpath)
+      testLog('OCR_UNIT_WRITE_DONE', { stableId, xpath, pages, status })
+    } finally {
+      this.#writing = false
+      this.#updateMenuState()
+    }
+  }
+
+  /**
+   * Show an error of writing the corrections of a node.
+   * @param {any} error
+   */
+  #failWrite(error) {
+    const lines = error?.detail?.lines
+    let message = error?.message ?? String(error)
+    if (Array.isArray(lines) && lines.length) message += ` (lines: ${lines.join(', ')})`
+    notify(`Writing the text corrections failed: ${message}`, 'danger', 'exclamation-octagon', 10000)
+    testLog('TEXT_CORRECTIONS_FAILED', { message })
   }
 
   /**
@@ -297,12 +388,14 @@ class OcrReviewPlugin extends Plugin {
     }
     const xpath = options.wholeDocument ? null : (this.state?.xpath || null)
     const label = inferenceSettings.getModelLabel(model.providerId, model.modelId)
-    const what = xpath ? 'the pages of the selected node' : 'the document'
-    const confirmed = await this.getDependency('dialog').confirm(
-      `Find OCR errors in ${what} using ${escapeHtml(label)}? The text of the pages is sent to the model.`,
-      'Find OCR errors'
-    )
-    if (!confirmed) return
+    // only the review of the whole document asks; the pages of a node are reviewed right away
+    if (!xpath) {
+      const confirmed = await this.getDependency('dialog').confirm(
+        `Find OCR errors in the document using ${escapeHtml(label)}? The text of the pages is sent to the model.`,
+        'Find OCR errors'
+      )
+      if (!confirmed) return
+    }
 
     const xmlEditor = this.getDependency('xmleditor')
     const xml = xmlEditor.getView().state.doc.toString()
@@ -326,12 +419,16 @@ class OcrReviewPlugin extends Plugin {
     let windowsDone = 0
     let total = 0
     let count = 0
+    /** @type {number[]} */
+    let pages = []
     this.#busy = true
     this.#updateMenuState()
     progress.show(progressId, { title: 'Finding OCR errors', label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
     try {
       try {
-        ({ window_count: total } = await this.#client.apiClient.ocrLlmReviewPlan({ stable_id: stableId, xml, ...scoped }))
+        const plan = await this.#client.apiClient.ocrLlmReviewPlan({ stable_id: stableId, xml, ...scoped })
+        total = plan.window_count
+        pages = plan.pages ?? []
       } catch (error) {
         this.#fail(error)
         return
@@ -371,9 +468,15 @@ class OcrReviewPlugin extends Plugin {
         notify(`Review cancelled after ${windowsDone} of ${total} page windows; ${count} possible OCR error(s) so far.`, 'warning', 'exclamation-triangle')
         return
       }
+      // the node gets the button that writes its corrections
+      if (xpath && count && pages.length) {
+        if (!this.#unwrittenUnits.has(stableId)) this.#unwrittenUnits.set(stableId, new Map())
+        this.#unwrittenUnits.get(stableId)?.set(xpath, pages)
+      }
+      const writeHint = xpath ? 'click "Write text corrections to PDF"' : 'use Tools > Write text corrections to PDF'
       notify(
         count
-          ? `Found ${count} possible OCR error${count === 1 ? '' : 's'}. Accept the ones you agree with, then use Tools > Write text corrections to PDF.`
+          ? `Found ${count} possible OCR error${count === 1 ? '' : 's'}. Accept the ones you agree with, then ${writeHint}.`
           : 'No OCR errors found.',
         count ? 'primary' : 'success',
         count ? 'info-circle' : 'check-circle'

@@ -36,6 +36,11 @@ export function summarizePreview(preview) {
   }
   const corrections = preview.corrections?.length ?? 0
   let text = `${count(corrections, 'correction')} will be written to the PDF.`
+  if (!corrections && preview.update_pending) {
+    text = 'The corrections were written into the PDF page by page. The document will be updated for the corrected PDF in a new version.'
+  } else if (preview.update_pending) {
+    text += ' The document will also be updated for the corrections written page by page before.'
+  }
   if (unwritable) text += ` ${count(unwritable, 'change')} cannot be written and will be skipped.`
   return { canApply: true, needsSkip: unwritable > 0, text }
 }
