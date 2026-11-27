@@ -12,6 +12,7 @@ engine registry and the OCR endpoints.
 """
 
 import io
+import json
 import shutil
 import tempfile
 import time
@@ -656,6 +657,33 @@ class TestOcrJobStore(unittest.TestCase):
         # active jobs are kept, finished ones deleted
         self.assertIsNotNone(self.store.get(active.job_id))
         self.assertIsNone(self.store.get(finished.job_id))
+
+    def _write_raw(self, job_id: str, content: str) -> None:
+        (self.tmp / f"{job_id}.json").write_text(content, encoding="utf-8")
+
+    def test_old_job_file_without_source_stable_id_is_migrated(self):
+        job = self.store.create("pdf1", "alice")
+        data = job.model_dump(mode="json")
+        data.update(status="done", result={"stable_id": "pdf1", "changed": True, "quality": {"status": "good", "summary": "ok"}, "llm_correction_error": "read timeout"})
+        self._write_raw(job.job_id, json.dumps(data))
+        loaded = self.store.get(job.job_id)
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.result.source_stable_id, "pdf1")
+
+    def test_invalid_job_file_does_not_break_lookups(self):
+        active = self.store.create("pdf1", "alice")
+        self._write_raw("broken", "{not json")
+        self._write_raw("invalid", json.dumps({"job_id": "invalid", "stable_id": "pdf1"}))
+        with self.assertLogs("fastapi_app.lib.ocr.jobs", level="WARNING") as cm:
+            self.assertIsNone(self.store.get("broken"))
+            self.assertIsNone(self.store.get("invalid"))
+            self.assertEqual(self.store.find_active("pdf1").job_id, active.job_id)
+        self.assertTrue(any("broken" in line for line in cm.output))
+        # old unreadable files are deleted by the cleanup
+        with self.assertLogs("fastapi_app.lib.ocr.jobs", level="WARNING"):
+            self.store.cleanup(max_age=-1)
+        self.assertFalse((self.tmp / "broken.json").exists())
+        self.assertFalse((self.tmp / "invalid.json").exists())
 
     def test_conflict_and_dead_jobs(self):
         job = self.store.create("pdf1", "alice")
