@@ -7,6 +7,7 @@ Provides endpoints for:
 - Serving frontend extension JavaScript bundle
 """
 
+import json
 import logging
 import re
 from typing import Any
@@ -266,16 +267,13 @@ async def get_extensions_bundle():
         try:
             content = js_file.read_text(encoding="utf-8")
 
-            # Validate content for dangerous patterns
+            # Convention check, not a security boundary: the extension is served anyway
             is_valid, warnings = validate_javascript_content(content, js_file.name)
             if not is_valid:
                 for warning in warnings:
                     logger.warning(f"Extension validation: {warning}")
-                bundle_parts.append(
-                    f"// Skipped {js_file.name} from {plugin_id}: "
-                    f"validation failed ({len(warnings)} warning(s))\n"
-                )
-                continue
+                message = f"Frontend extension {js_file.name} from {plugin_id} breaks the extension conventions: {'; '.join(warnings)}"
+                bundle_parts.append(f"console.warn({json.dumps(message)});\n")
 
             transformed = transform_extension_to_iife(content, js_file.name, plugin_id)
             bundle_parts.append(transformed)

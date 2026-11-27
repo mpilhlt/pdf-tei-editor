@@ -545,11 +545,19 @@ def escape_html(text: str) -> str:
     )
 
 
+_OBJECT_KEY_STORAGE_NAMES = re.compile(r'([{,]\s*)(?:localStorage|sessionStorage|indexedDB)(?=\s*:)')
+"""A storage name used as an object literal key: after `{` or `,`, before `:`."""
+
+
 def validate_javascript_content(content: str, filename: str) -> tuple[bool, list[str]]:
     """
-    Validate JavaScript content for dangerous patterns.
+    Check frontend extension code against the extension conventions.
 
-    Checks for patterns that could introduce security risks:
+    This is a lint, not a security boundary: extensions run with the user's session in the
+    editor's origin, and a plugin's Python code runs on the server, so installing a plugin is the
+    trust decision. The textual patterns are easy to evade. Matches are reported (server log,
+    browser console), and the extension is served anyway; the plugin repositories' tests enforce
+    the conventions. Flagged:
     - Network access (fetch, XMLHttpRequest, WebSocket)
     - Dynamic code execution (eval, Function constructor)
     - Dynamic imports
@@ -575,6 +583,10 @@ def validate_javascript_content(content: str, filename: str) -> tuple[bool, list
     # Order matters: block comments first, then line comments.
     code = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
     code = re.sub(r'^\s*//[^\n]*', '', code, flags=re.MULTILINE)
+
+    # Keys of object literals are names, not storage access, e.g. the
+    # `{ sessionStorage: new SessionStorage(...) }` option of the shared llm-findings module
+    code = _OBJECT_KEY_STORAGE_NAMES.sub(r'\1_', code)
 
     # Patterns that indicate potential security issues
     dangerous_patterns = [

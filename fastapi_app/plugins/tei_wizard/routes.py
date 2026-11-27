@@ -111,16 +111,11 @@ async def get_enhancements_bundle():
         try:
             content = js_file.read_text()
 
-            # Validate content for dangerous patterns
+            # Convention check, not a security boundary: the enhancement is served anyway
             is_valid, warnings = validate_javascript_content(content, js_file.name)
             if not is_valid:
                 for warning in warnings:
                     logger.warning(f"Enhancement validation: {warning}")
-                bundle_parts.append(
-                    f"// Skipped {js_file.name} from {plugin_id}: "
-                    f"validation failed ({len(warnings)} warning(s))\n"
-                )
-                continue
 
             transformed = transform_to_registration(content, js_file.name, plugin_id)
             bundle_parts.append(transformed)
