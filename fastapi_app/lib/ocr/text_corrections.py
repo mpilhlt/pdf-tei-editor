@@ -5,6 +5,13 @@ The words of each TEI page are compared with the words of the PDF's text layer. 
 the layer was replaced by a word of the TEI (same number of words), the difference is a correction
 that can be written back into the layer. Differences that are only tokenization or reading order
 are ignored; all others cannot be written and are reported as unwritable.
+
+Dashes and quotation marks are compared in a folded form (`_fold()`): the TEI of extraction
+services such as GROBID has ASCII hyphens and quotes where the layer has typographic ones, which is
+no error of the text recognition. A correction keeps the layer's characters wherever they only
+differ in this way. A difference with another number of words is still written if, apart from the
+whitespace, it only replaces characters within words of the layer (`_respell()`), such as
+"2021?) — es" corrected to "20212) -es".
 """
 
 from __future__ import annotations
@@ -22,6 +29,12 @@ from fastapi_app.lib.tei.zone_lines import read_zone_document
 DIFFERENT_WORD_COUNT = "different number of words"
 WORDS_DIFFER_TOO_MUCH = "words differ too much"
 NO_LAYER_PAGE = "no text layer page"
+
+_FOLD = str.maketrans({c: "-" for c in "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"} | {c: '"' for c in "\u201c\u201d\u201e\u201f\u2033"} | {c: "'" for c in "\u2018\u2019\u201a\u201b\u2032"})
+"""Dashes and the minus sign to '-', typographic double quotes to '"', single quotes to "'" (one character each)."""
+
+MIN_RESPELL_SIMILARITY = 0.75
+"""A difference with another number of words is respelled only if its texts without whitespace are at least this similar."""
 
 MIN_BLOCK_SIMILARITY = 0.5
 """Replaced blocks of two or more words in which every pair of words is less similar than this are not corrected (unrelated text)."""
@@ -84,16 +97,65 @@ def tei_words(xml: str, variant_id: str, layout: LineLayout) -> dict[int, list[T
     return result
 
 
-def _norm(text: str) -> str:
+def _nfc(text: str) -> str:
     return unicodedata.normalize("NFC", text)
 
 
+def _fold(text: str) -> str:
+    """NFC text with dashes and quotation marks folded (see `_FOLD`); keeps the length of the NFC text."""
+    return _nfc(text).translate(_FOLD)
+
+
 def _similarity(a: str, b: str) -> float:
-    return difflib.SequenceMatcher(None, _norm(a), _norm(b)).ratio()
+    return difflib.SequenceMatcher(None, _fold(a), _fold(b)).ratio()
 
 
 def _joined(words: Sequence[LayerWord] | Sequence[TeiWord]) -> str:
-    return _norm("".join(w.text for w in words))
+    return _fold("".join(w.text for w in words))
+
+
+def _merge(old: str, new: str) -> str:
+    """The TEI's `new`, with the characters of the layer's `old` where they only differ by folding."""
+    old, new = _nfc(old), _nfc(new)
+    parts: list[str] = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, _fold(old), _fold(new), autojunk=False).get_opcodes():
+        parts.append(old[i1:i2] if op == "equal" else new[j1:j2])
+    return "".join(parts)
+
+
+def _respell(old: Sequence[LayerWord], new: Sequence[TeiWord]) -> list[tuple[LayerWord, str]] | None:
+    """
+    New texts for the layer words `old` if the TEI words `new` differ from them, apart from the
+    whitespace and folding, only by characters replaced within single layer words; None otherwise.
+    Inserted or deleted characters (such as a removed hyphen) are not respelled.
+    """
+    if not old or not new:
+        return None
+    layer = _nfc("".join(w.text for w in old))
+    tei = _nfc("".join(w.text for w in new))
+    matcher = difflib.SequenceMatcher(None, _fold(layer), _fold(tei), autojunk=False)
+    if matcher.ratio() < MIN_RESPELL_SIMILARITY:
+        return None
+    ends: list[int] = []
+    for w in old:
+        ends.append((ends[-1] if ends else 0) + len(_nfc(w.text)))
+    texts = [_nfc(w.text) for w in old]
+    replaced = False
+    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+        if op == "equal":
+            continue
+        if op != "replace":
+            return None
+        word = next(k for k, end in enumerate(ends) if i1 < end)
+        start = ends[word] - len(texts[word])
+        if i2 > ends[word]:
+            return None  # the replaced characters span a word boundary of the layer
+        texts[word] = texts[word][: i1 - start] + tei[j1:j2] + texts[word][i2 - start :]
+        ends = [end + (j2 - j1) - (i2 - i1) if k >= word else end for k, end in enumerate(ends)]
+        replaced = True
+    if not replaced:
+        return None
+    return [(w, t) for w, t in zip(old, texts) if t != _nfc(w.text)]
 
 
 def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[LayerPage], on_page: PageCallback | None = None) -> CorrectionPlan:
@@ -110,7 +172,7 @@ def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[Lay
             continue
         tws = list(tei[page.index])
         lws = list(page.words)
-        matcher = difflib.SequenceMatcher(None, [_norm(w.text) for w in lws], [_norm(w.text) for w in tws], autojunk=False)
+        matcher = difflib.SequenceMatcher(None, [_fold(w.text) for w in lws], [_fold(w.text) for w in tws], autojunk=False)
         corrections: list[WordCorrection] = []
         # differences that are not word-for-word replacements: (layer words, tei words)
         leftovers: list[tuple[list[LayerWord], list[TeiWord]]] = []
@@ -125,7 +187,7 @@ def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[Lay
                 if len(old) >= 2 and all(_similarity(o.text, n.text) < MIN_BLOCK_SIMILARITY for o, n in zip(old, new)):
                     unrelated.append((old, new))
                     continue
-                corrections.extend(WordCorrection(page.index, n.line, o.text, n.text, o) for o, n in zip(old, new) if _norm(o.text) != _norm(n.text))
+                corrections.extend(WordCorrection(page.index, n.line, o.text, _merge(o.text, n.text), o) for o, n in zip(old, new) if _fold(o.text) != _fold(n.text))
             else:
                 leftovers.append((old, new))
 
@@ -140,6 +202,16 @@ def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[Lay
                 if not i_old and i not in cancelled and _joined(i_new) == _joined(d_old):
                     cancelled.update((d, i))
                     break
+        # characters replaced within words of the layer, with other whitespace in the TEI
+        remaining: list[tuple[list[LayerWord], list[TeiWord]]] = []
+        for idx, (o, n) in enumerate(leftovers):
+            if idx in cancelled:
+                continue
+            respelled = _respell(o, n)
+            if respelled is None:
+                remaining.append((o, n))
+            else:
+                corrections.extend(WordCorrection(page.index, n[0].line, w.text, text, w) for w, text in respelled)
         unwritable = [
             UnwritableChange(
                 page.index,
@@ -148,8 +220,7 @@ def derive_corrections(tei: Mapping[int, Sequence[TeiWord]], layer: Sequence[Lay
                 " ".join(w.text for w in n),
                 page.unpatchable or DIFFERENT_WORD_COUNT,
             )
-            for idx, (o, n) in enumerate(leftovers)
-            if idx not in cancelled
+            for o, n in remaining
         ]
         unwritable += [
             UnwritableChange(page.index, n[0].line, " ".join(w.text for w in o), " ".join(w.text for w in n), page.unpatchable or WORDS_DIFFER_TOO_MUCH)
