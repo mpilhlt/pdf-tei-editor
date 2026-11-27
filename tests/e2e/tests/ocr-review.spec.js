@@ -3,7 +3,8 @@
  * the suggestions of each window are shown as diagnostics. The backend routes and the layout route
  * are mocked (the real layout needs a GROBID feature file the test environment lacks; the review
  * itself is covered by the backend tests): a failing window keeps the findings of the earlier
- * windows and is named in the notification, a complete run reports the number of findings.
+ * windows and is named in the notification, a complete run reports the number of findings, and an
+ * accepted correction is recorded in the document history.
  *
  * @testCovers app/src/plugins/ocr-review.js
  * @testCovers app/src/modules/llm-findings.js
@@ -165,6 +166,62 @@ test.describe('OCR review', () => {
       expect(done.value.windows).toBe(2);
       await expect(page.locator('sl-alert:has-text("Found 1 possible OCR error.")')).toBeVisible({ timeout: 10000 });
       await expect(page.locator('.cm-lintRange-info')).toHaveCount(1);
+    } finally {
+      stopErrorMonitoring();
+      await cleanUp(page, created);
+    }
+  });
+
+  test('an accepted correction is recorded in the document history', async ({ page }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {string[]} */
+    const created = [];
+    try {
+      await mockRoutes(page, okWindow);
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const own = await createOwnDocument(page);
+      created.push(own.stableId, own.pdfId);
+      await runReview(page);
+      await waitForTestMessage(consoleLogs, 'OCR_REVIEW_DONE', 20000);
+
+      await page.locator('.diagnostics-drawer-item', { hasText: 'transposed letters' }).locator('.diagnostics-drawer-action', { hasText: 'Propose fix' }).click();
+      await page.waitForFunction(() => /** @type {any} */ (window).app.getDependency('xmleditor').isMergeViewActive(), null, { timeout: 10000 });
+      await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').acceptAllDiffs());
+
+      const recorded = await waitForTestMessage(consoleLogs, 'OCR_CORRECTION_RECORDED', 10000);
+      expect(recorded.value.count).toBe(1);
+      const text = await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString());
+      expect(text).toContain('<p>the text</p>');
+      expect(text).toMatch(/<change [^>]*who="#testreviewer"[^>]*>\s*<desc>Accepted 1 OCR correction suggested by Mock provider\/Mock model<\/desc>/);
+    } finally {
+      stopErrorMonitoring();
+      await cleanUp(page, created);
+    }
+  });
+
+  test('a correction applied in the diagnostics drawer is recorded in the document history', async ({ page }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
+    /** @type {string[]} */
+    const created = [];
+    try {
+      await mockRoutes(page, okWindow);
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const own = await createOwnDocument(page);
+      created.push(own.stableId, own.pdfId);
+      await runReview(page);
+      await waitForTestMessage(consoleLogs, 'OCR_REVIEW_DONE', 20000);
+
+      await page.locator('.diagnostics-drawer-item', { hasText: 'transposed letters' }).locator('.diagnostics-drawer-action', { hasText: 'Apply fix' }).click();
+
+      const recorded = await waitForTestMessage(consoleLogs, 'OCR_CORRECTION_RECORDED', 10000);
+      expect(recorded.value.count).toBe(1);
+      const text = await page.evaluate(() => /** @type {any} */ (window).app.getDependency('xmleditor').getView().state.doc.toString());
+      expect(text).toContain('<p>the text</p>');
+      expect(text).toMatch(/<desc>Accepted 1 OCR correction suggested by Mock provider\/Mock model<\/desc>/);
     } finally {
       stopErrorMonitoring();
       await cleanUp(page, created);

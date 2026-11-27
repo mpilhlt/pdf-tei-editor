@@ -18,7 +18,7 @@
 export const CACHE_VERSION = 1;
 
 /**
- * @typedef {{id: number, old: string, new: string, rationale: string}} Finding
+ * @typedef {{id: number, old: string, new: string, rationale: string, model?: string}} Finding
  */
 
 /**

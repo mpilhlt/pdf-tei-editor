@@ -23,6 +23,8 @@ import {
   getPageBreakText,
   getPdfLookupNode,
   addRevisionChange,
+  recordOcrCorrections,
+  describeOcrCorrections,
   getRevisionLabel,
   getRevisionStatus,
 } from '../../../app/src/modules/tei-utils.js';
@@ -656,5 +658,48 @@ describe('getPageBreakHint', () => {
     assert.strictEqual(getPageBreakText(pbs[1]), 'Second page Starts on the second page');
     assert.strictEqual(getPageBreakText(pbs[3]), 'Fourth page');
     assert.strictEqual(getPageBreakText(pbs[1], 6), 'Second');
+  });
+});
+
+describe('recordOcrCorrections', () => {
+  const parse = (header) => new JSDOM(`<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader>${header}</teiHeader><text/></TEI>`, { contentType: 'text/xml' }).window.document;
+  const changes = (doc) => Array.from(doc.querySelectorAll('teiHeader > revisionDesc > change'));
+
+  it('adds a change by the user without a label', () => {
+    const doc = parse('<revisionDesc><change when="2026-01-01" status="extraction"><note type="label">Extraction</note><desc>Extracted</desc></change></revisionDesc>');
+    const record = recordOcrCorrections(doc, { persId: 'rev', status: 'draft', models: ['Model A'] });
+    const all = changes(doc);
+    assert.strictEqual(all.length, 2);
+    assert.strictEqual(all[1].getAttribute('who'), '#rev');
+    assert.strictEqual(all[1].getAttribute('status'), 'draft');
+    assert.strictEqual(all[1].getAttribute('when'), record.when);
+    assert.strictEqual(all[1].querySelector('desc').textContent, 'Accepted 1 OCR correction suggested by Model A');
+    // the version label stays
+    assert.strictEqual(getRevisionLabel(doc), 'Extraction');
+  });
+
+  it('updates the change while it is the last one', () => {
+    const doc = parse('');
+    let record = recordOcrCorrections(doc, { persId: 'rev', status: 'draft', models: ['Model A'] });
+    record = recordOcrCorrections(doc, { persId: 'rev', status: 'draft', models: ['Model B'], previous: record });
+    record = recordOcrCorrections(doc, { persId: 'rev', status: 'draft', count: 2, models: ['Model A', null], previous: record });
+    assert.strictEqual(changes(doc).length, 1);
+    assert.deepStrictEqual([record.count, record.models], [4, ['Model A', 'Model B']]);
+    assert.strictEqual(changes(doc)[0].querySelector('desc').textContent, 'Accepted 4 OCR corrections suggested by Model A, Model B');
+  });
+
+  it('adds a new change after another change', () => {
+    const doc = parse('');
+    const record = recordOcrCorrections(doc, { persId: 'rev', status: 'draft', models: ['Model A'] });
+    addRevisionChange(doc, { persId: 'rev', desc: 'Renamed to X', label: 'X' });
+    changes(doc)[1].setAttribute('when', 'later');
+    recordOcrCorrections(doc, { persId: 'rev', status: 'draft', previous: record });
+    assert.strictEqual(changes(doc).length, 3);
+    // the new change records only the corrections accepted after the other change
+    assert.strictEqual(changes(doc)[2].querySelector('desc').textContent, 'Accepted 1 OCR correction suggested by a language model');
+  });
+
+  it('describes the corrections', () => {
+    assert.strictEqual(describeOcrCorrections({ when: '', count: 2, models: [] }), 'Accepted 2 OCR corrections suggested by a language model');
   });
 });
