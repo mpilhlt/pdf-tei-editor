@@ -261,24 +261,24 @@ async install(state) {
 Rules:
 
 - **Names**: all named elements share the global `ui` tree, and a second element with the same name replaces the first. Top-level `name` attributes must start with the plugin id in camelCase (`my-plugin` → `myPluginDialog`); the server logs a warning otherwise. Access through `ui` is untyped.
-- **No inline code**: templates containing `<script`, an `on*=` attribute or a `javascript:` URL are rejected, since they would execute when inserted and bypass the extension validator. Attach event handlers in the extension.
+- **No inline code**: templates containing `<script`, an `on*=` attribute or a `javascript:` URL are rejected, since they would execute when inserted. Attach event handlers in the extension.
 - **Stylesheets**: rejected if they contain `@import`, `expression(`, `javascript:` or a `url()` with an external scheme (`data:`, relative and `/api/` URLs are allowed). Selectors are not scoped; select by the plugin's own names or classes.
 - **Parameters**: `${param}` placeholders are replaced from the `params` argument, as for app templates.
 - **Icons**: `<sl-icon name="...">` names in templates are bundled by `scripts/build/compile-sl-icons.py`, which scans the plugin directories known at build time (`fastapi_app/plugins`, installed and `FASTAPI_PLUGIN_PATHS` plugins). Plugins outside these (e.g. the test fixtures in `tests/fixtures/plugins`) must use icons the app already bundles; a missing icon is a 404, which fails the E2E console-error check.
 - Templates and stylesheets are delivered to every client while the plugin is active, like extension code, so they must not contain anything sensitive.
 - A rejected or unreadable file is left out with a server log warning and a `// Skipped ...` comment in the bundle; the extension then fails with a "not registered" error naming the template id.
 
-## Security
+## Code Conventions
 
-Extension files are validated before serving. The following patterns are blocked:
+Extension files are checked against these conventions before serving:
 
-- Network access (`fetch`, `XMLHttpRequest`, `WebSocket`) — use `this.callPluginApi()` or `this.fetchText()` instead
-- Dynamic code execution (`eval`, `Function` constructor)
-- Dynamic imports (`import()`)
-- Storage access (`localStorage`, `sessionStorage`, `indexedDB`, `cookies`); the names are allowed as keys of object literals, such as the `sessionStorage` option of `FindingsDisplay`
-- Window manipulation (`window.open`, `location.href`)
+- No direct network access (`fetch` outside `/api/`, `XMLHttpRequest`, `WebSocket`): use `this.callPluginApi()` or `this.fetchText()`
+- No dynamic code execution (`eval`, `Function` constructor)
+- No dynamic imports (`import()`): reach modules through `getDependency()`
+- No direct storage access (`localStorage`, `sessionStorage`, `indexedDB`, cookies): use `this.uiStorage` or the `session-storage` module; the names are allowed as keys of object literals, such as the `sessionStorage` option of `FindingsDisplay`
+- No window manipulation (`window.open`, `location.href`): open links through an `<a target="_blank" rel="noopener">`
 
-Extensions containing blocked patterns are skipped with a warning in the server logs and in the browser console, naming the patterns found. Templates and stylesheets have their own checks, see [HTML Templates and Stylesheets](#html-templates-and-stylesheets).
+The check is a lint, not a security boundary: an extension runs with the user's session in the editor's origin, and the plugin's Python code runs on the server, so installing a plugin is the trust decision. An extension that breaks a convention is served anyway, with a warning in the server log and in the browser console naming the patterns found. The pte-plugins tests (`tests/test_packages.py`) run the same check over every plugin, so that a release cannot break the conventions. Templates and stylesheets have their own checks, see [HTML Templates and Stylesheets](#html-templates-and-stylesheets).
 
 ## IIFE Transformation
 

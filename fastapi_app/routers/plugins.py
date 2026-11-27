@@ -267,15 +267,13 @@ async def get_extensions_bundle():
         try:
             content = js_file.read_text(encoding="utf-8")
 
-            # Validate content for dangerous patterns
+            # Convention check, not a security boundary: the extension is served anyway
             is_valid, warnings = validate_javascript_content(content, js_file.name)
             if not is_valid:
                 for warning in warnings:
                     logger.warning(f"Extension validation: {warning}")
-                # visible in the browser console, since a skipped extension leaves no other trace there
-                message = f"Skipped frontend extension {js_file.name} from {plugin_id}: {'; '.join(warnings)}"
+                message = f"Frontend extension {js_file.name} from {plugin_id} breaks the extension conventions: {'; '.join(warnings)}"
                 bundle_parts.append(f"console.warn({json.dumps(message)});\n")
-                continue
 
             transformed = transform_extension_to_iife(content, js_file.name, plugin_id)
             bundle_parts.append(transformed)

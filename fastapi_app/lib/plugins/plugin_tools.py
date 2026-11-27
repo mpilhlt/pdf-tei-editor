@@ -551,9 +551,13 @@ _OBJECT_KEY_STORAGE_NAMES = re.compile(r'([{,]\s*)(?:localStorage|sessionStorage
 
 def validate_javascript_content(content: str, filename: str) -> tuple[bool, list[str]]:
     """
-    Validate JavaScript content for dangerous patterns.
+    Check frontend extension code against the extension conventions.
 
-    Checks for patterns that could introduce security risks:
+    This is a lint, not a security boundary: extensions run with the user's session in the
+    editor's origin, and a plugin's Python code runs on the server, so installing a plugin is the
+    trust decision. The textual patterns are easy to evade. Matches are reported (server log,
+    browser console), and the extension is served anyway; the plugin repositories' tests enforce
+    the conventions. Flagged:
     - Network access (fetch, XMLHttpRequest, WebSocket)
     - Dynamic code execution (eval, Function constructor)
     - Dynamic imports
