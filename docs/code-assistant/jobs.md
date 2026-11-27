@@ -73,6 +73,22 @@ A job lists the files it works on as resources `file:<stable_id>`. `EditorJobHoo
 
 A job writes downloadable output to `job_output_dir(job_id)` (`data/jobs/<job id>`, created on demand; not in `data/tmp`, which the garbage collection empties) and returns their URLs, made with `job_file_url(job_id, name)` (`/api/v1/jobs/{job_id}/files/{name}`). The route serves a file to the users who may view the job and 404 otherwise. The directory is removed when the job is deleted, by the user or after the retention time.
 
+## Jobs Driven by a Request
+
+A route that needs the user's session (e.g. OCR text corrections) cannot run as a server job. The client registers a client type (`register_client_type`), submits a job of it, and passes the job id to the route. The route runs its work inside `run_request_job`:
+
+```python
+async with run_request_job(job_id, principal) as job:  # principal: Depends(current_principal)
+    await job.report(done=1, total=10, phase="Correcting")  # raises RequestJobCancelled after a cancel
+    await asyncio.to_thread(work, *thread_callbacks(job.report_threadsafe, job.check_cancelled))
+    job.set_result({"pages": 10})
+```
+
+- It claims the job (holder `request:<uuid>`; 404 if it does not exist or is not visible, 409 if it cannot be claimed), renews the lease every `lease_ttl / 3` and records a requested cancel.
+- Normal exit finishes the job `done` with the result; `RequestJobCancelled` finishes it `cancelled` and is re-raised; any other exception finishes it `error` with `{"message", "status"}` (the exception's `status_code`, else 500) and is re-raised.
+- `check_cancelled()` is sync and thread-safe; `report_threadsafe(**fields)` writes on the event loop without waiting.
+- `thread_callbacks(report, check_cancelled)` returns `(progress_callback(current, total, label), cancellation_check() -> bool)` for code with such callbacks (e.g. `update_tei_metadata`). It also works with `ctx.report_threadsafe` / `ctx.check_cancelled` of a server job.
+
 ## Testing
 
 ```python
