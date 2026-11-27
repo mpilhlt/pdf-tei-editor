@@ -11,7 +11,10 @@
  * only shown if some changes cannot be written.
  *
  * Each step is shown in a progress widget; the backend reports its steps and the pages it has done
- * to that widget via SSE (`progress_id` of the requests).
+ * to that widget via SSE (`progress_id` of the requests). The cancel button of the widget cancels
+ * the preview or the write on the backend (`POST /api/v1/ocr/text-corrections/cancel/{progress_id}`),
+ * which then stops at its next page or step without changing the PDF or the document. A write
+ * that has already stored its result finishes as usual.
  *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlMenuItem } from '../ui.js'
@@ -43,6 +46,24 @@ const VERSION_NOTE = 'The corrections are written into a copy of the PDF, which 
 
 /** Note of the dialog when the corrections of some pages are written */
 const PAGES_NOTE = 'The corrections are written into a copy of the PDF, which this version is then attached to. Other versions keep their PDF.'
+
+/** Title of the progress widgets */
+const PROGRESS_TITLE = 'Writing text corrections to PDF'
+
+/** Shown when the user cancelled the preview or the write */
+const CANCELLED_MESSAGE = 'Writing the text corrections was cancelled. The PDF and the document are unchanged.'
+
+/** Shown when the user cancelled a write that had already stored its result */
+const TOO_LATE_MESSAGE = 'The corrections had already been saved when you cancelled, so they were written.'
+
+/**
+ * Whether an error of a preview or write request says that the user cancelled it.
+ * @param {any} error
+ * @returns {boolean}
+ */
+function isCancelledError(error) {
+  return error?.statusCode === 409 && error?.detail?.code === 'cancelled'
+}
 
 /** Shown when the editor content could not be saved */
 const UNSAVED_MESSAGE = 'The document has changes that could not be saved, for example because the XML is not well-formed. Fix and save the document before writing text corrections.'
@@ -135,7 +156,8 @@ class TextCorrectionsPlugin extends Plugin {
    * Writes without asking unless some changes cannot be written; then the dialog asks to skip them.
    * @param {number[]} pages - 0-based page indices of the PDF
    * @returns {Promise<'written'|'nothing'|'failed'>} 'nothing' if there is nothing to write on
-   *   these pages, 'failed' if the corrections were not written for another reason
+   *   these pages, 'failed' if the corrections were not written for another reason (including
+   *   that the user cancelled)
    */
   async writePages(pages) {
     const stableId = this.state.xml
@@ -178,19 +200,59 @@ class TextCorrectionsPlugin extends Plugin {
   }
 
   /**
-   * Write the corrections, showing the steps in a progress widget.
+   * Show a progress widget whose cancel button cancels the request that reports to it.
+   * @param {string} progressId
+   * @param {string} label
+   * @returns {{cancelled: boolean}} `cancelled` becomes true when the user clicks the cancel button
+   */
+  #showProgress(progressId, label) {
+    const run = { cancelled: false }
+    this.#progress.show(progressId, {
+      title: PROGRESS_TITLE,
+      label,
+      value: null,
+      cancellable: true,
+      onCancel: () => {
+        run.cancelled = true
+        testLog('TEXT_CORRECTIONS_CANCEL_REQUESTED', { progressId })
+        this.#client.apiClient.ocrTextCorrectionsCancel(progressId).catch(error => {
+          this.getDependency('logger').warn(`Could not cancel writing the text corrections: ${error}`)
+        })
+      }
+    })
+    return run
+  }
+
+  /** Tell the user that the preview or the write was cancelled. */
+  #notifyCancelled() {
+    notify(CANCELLED_MESSAGE, 'primary', 'info-circle')
+    testLog('TEXT_CORRECTIONS_CANCELLED', {})
+  }
+
+  /**
+   * Write the corrections, showing the steps in a progress widget whose cancel button cancels the
+   * write.
    * @param {string} stableId
    * @param {boolean} skipUnwritable
    * @param {number[]|null} pages - Only the corrections on these pages; null for the whole document
-   * @returns {Promise<TextCorrectionsResult>}
+   * @returns {Promise<TextCorrectionsResult|null>} The result, or null if the user cancelled the write
    */
   async #write(stableId, skipUnwritable, pages) {
     const progressId = `text-corrections-write-${stableId}`
     testLog('TEXT_CORRECTIONS_WRITING', { stableId, pages })
     // the backend shows its steps in the widget
-    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Writing the corrections to the PDF…', value: null, cancellable: false })
+    const run = this.#showProgress(progressId, 'Writing the corrections to the PDF…')
     try {
-      return await this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipUnwritable, progress_id: progressId, pages })
+      const result = await this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipUnwritable, progress_id: progressId, pages })
+      // the backend had stored the result before it saw the cancel request
+      if (run.cancelled) notify(TOO_LATE_MESSAGE, 'primary', 'info-circle')
+      return result
+    } catch (error) {
+      if (isCancelledError(error)) {
+        this.#notifyCancelled()
+        return null
+      }
+      throw error
     } finally {
       this.#progress.hide(progressId)
     }
@@ -201,11 +263,12 @@ class TextCorrectionsPlugin extends Plugin {
    * progress widget.
    * @param {string} stableId
    * @param {number[]|null} [pages] - Only the corrections on these pages; null for the whole document
-   * @returns {Promise<TextCorrectionsPreview|null>} The preview, or null if the document could not be saved
+   * @returns {Promise<TextCorrectionsPreview|null>} The preview, or null if the document could not
+   *   be saved or the user cancelled
    */
   async #preview(stableId, pages = null) {
     const progressId = `text-corrections-preview-${stableId}`
-    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Saving the document…', value: null, cancellable: false })
+    const run = this.#showProgress(progressId, 'Saving the document…')
     testLog('TEXT_CORRECTIONS_PROGRESS', { step: 'preview' })
     try {
       const xmlEditor = this.getDependency('xmleditor')
@@ -216,9 +279,25 @@ class TextCorrectionsPlugin extends Plugin {
         testLog('TEXT_CORRECTIONS_REFUSED', { reason: 'unsaved' })
         return null
       }
+      if (run.cancelled) {
+        this.#notifyCancelled()
+        return null
+      }
       // the backend shows its steps in the widget
       this.#progress.setLabel(progressId, 'Comparing the document with the text layer of the PDF…')
-      return await this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId, progress_id: progressId, pages })
+      const preview = await this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId, progress_id: progressId, pages })
+      // the preview changes nothing: drop it if it finished before the backend saw the cancel request
+      if (run.cancelled) {
+        this.#notifyCancelled()
+        return null
+      }
+      return preview
+    } catch (error) {
+      if (isCancelledError(error)) {
+        this.#notifyCancelled()
+        return null
+      }
+      throw error
     } finally {
       this.#progress.hide(progressId)
     }
@@ -230,7 +309,8 @@ class TextCorrectionsPlugin extends Plugin {
    * @param {TextCorrectionsPreview} preview
    * @param {string} stableId
    * @param {number[]|null} [pages] - Only the corrections on these pages; null for the whole document
-   * @returns {Promise<TextCorrectionsResult|null>} The result of writing, or null if the user did not confirm
+   * @returns {Promise<TextCorrectionsResult|null>} The result of writing, or null if the user did
+   *   not confirm or cancelled the write
    * @throws {Error} If writing failed
    */
   async #showDialog(preview, stableId, pages = null) {
@@ -300,7 +380,7 @@ class TextCorrectionsPlugin extends Plugin {
       return
     }
     const progressId = `text-corrections-load-${result.tei_stable_id}`
-    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Loading the new version and the corrected PDF…', value: null, cancellable: false })
+    this.#progress.show(progressId, { title: PROGRESS_TITLE, label: 'Loading the new version and the corrected PDF…', value: null, cancellable: false })
     try {
       await this.getDependency('file-selection').reload({ refresh: true })
       // passing the PDF reloads it in the viewer, although its stable_id did not change
@@ -324,7 +404,7 @@ class TextCorrectionsPlugin extends Plugin {
    */
   async #loadPageResult(result) {
     const progressId = `text-corrections-load-${result.tei_stable_id}`
-    this.#progress.show(progressId, { title: 'Writing text corrections to PDF', label: 'Loading the corrected PDF…', value: null, cancellable: false })
+    this.#progress.show(progressId, { title: PROGRESS_TITLE, label: 'Loading the corrected PDF…', value: null, cancellable: false })
     try {
       const xmlEditor = this.getDependency('xmleditor')
       // the editor keeps its position and folds; if the changes cannot be applied, the version is loaded again

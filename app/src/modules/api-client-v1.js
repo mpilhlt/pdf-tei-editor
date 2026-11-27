@@ -2603,6 +2603,21 @@ export class ApiClientV1 {
   }
 
   /**
+   * Cancel the preview or the write of text corrections of this session that reports its steps to
+   * the progress widget `progressId`. The request stops at its next page or step and is rejected
+   * with 409 and the detail `{code: 'cancelled', message}`; the PDF and the document stay
+   * unchanged. A request past the point where it stores its result finishes as usual.
+   * Requires the reviewer role.
+   *
+   * @param {string} progressId
+   * @returns {Promise<{requested: boolean}>}
+   */
+  async ocrTextCorrectionsCancel(progressId) {
+    const endpoint = `/ocr/text-corrections/cancel/${encodeURIComponent(progressId)}`
+    return this.callApi(endpoint, 'POST');
+  }
+
+  /**
    * List every resource the posted document content references. Used to build the "Edit document rules" submenu.
    *
    * @param {ListResourcesRequest} requestBody

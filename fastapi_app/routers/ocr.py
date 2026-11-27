@@ -56,6 +56,7 @@ from ..lib.llm import LLMProvider, LLMProviderRegistry
 from ..lib.llm.http_errors import llm_http_error
 from ..lib.llm.model_access import check_model_access
 from ..lib.ocr.base import OcrEngine, OcrOptionValue, OcrResult
+from ..lib.ocr.cancel_requests import CancelRequests
 from ..lib.ocr.jobs import ACTIVE_STATUSES, OcrJobConflict, OcrJobStore
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr import llm_correction
@@ -77,6 +78,7 @@ from ..lib.storage.file_storage import FileStorage
 from ..lib.tei.zone_lines import window_range
 from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
 from ..lib.utils.config_utils import get_config
+from ..lib.utils.hash_utils import generate_file_hash
 from ..lib.utils.revision_hash import stamp_revision_hashes
 from ..lib.utils.tei_utils import add_revision_change, extract_processing_instructions, extract_tei_metadata, serialize_tei_with_formatted_header, update_fileref_in_xml
 from ..lib.utils.xml_utils import apply_entity_encoding_from_config
@@ -101,6 +103,11 @@ _running_jobs: set["asyncio.Task[None]"] = set()
 def get_ocr_job_store() -> OcrJobStore:
     """Return the store of OCR jobs, shared by all worker processes."""
     return OcrJobStore(get_settings().tmp_dir / "ocr-jobs")
+
+
+def get_text_corrections_cancels() -> CancelRequests:
+    """Return the cancel requests of previewing or writing text corrections, shared by all worker processes."""
+    return CancelRequests(get_settings().tmp_dir / "text-corrections-cancel")
 
 
 def _engine_info(engine: OcrEngine) -> OcrEngineInfo:
@@ -768,6 +775,8 @@ LOCKED_MESSAGE = "This document is being edited in another session. Text correct
 NO_PAGE_CORRECTIONS_MESSAGE = "There are no text corrections to write on these pages."
 FROZEN_MESSAGE = "This version is superseded by a newer version and cannot be changed. Save a new version to edit it."
 UNWRITABLE_MESSAGE = "Some differences between the document and the text layer cannot be written. Skip them to write the other corrections."
+CANCELLED_MESSAGE = "Writing the text corrections was cancelled. The PDF and the document are unchanged."
+CANCELLED_CODE = "cancelled"
 
 
 @dataclass
@@ -798,26 +807,72 @@ def _get_tei(repo: FileRepository, stable_id: str, user: dict[str, Any]) -> File
     return file
 
 
+class _CorrectionsCancelled(Exception):
+    """The user cancelled previewing or writing text corrections (see cancel_text_corrections())."""
+
+
+def _cancelled_error() -> HTTPException:
+    """The response to a cancelled request; `code` tells the client that it was cancelled."""
+    return HTTPException(status_code=409, detail={"code": CANCELLED_CODE, "message": CANCELLED_MESSAGE})
+
+
 class _CorrectionProgress:
     """
     Shows the steps of previewing or writing text corrections in a progress widget of the client
     (via SSE), if the request names one. The client shows and hides the widget.
+
+    Used as a context manager: a request that names a progress widget can then be cancelled with
+    `POST /ocr/text-corrections/cancel/{progress_id}`. Each step and each page report checks
+    whether it was, and raises `_CorrectionsCancelled` if so. A request therefore stops at the
+    next step or page, and only reports a step before it changes the PDF or the document, never
+    while it does.
     """
 
-    def __init__(self, sse_service: SSEService, session_id: str, progress_id: str | None) -> None:
+    def __init__(self, sse_service: SSEService, session_id: str, progress_id: str | None, cancels: CancelRequests | None = None) -> None:
         self._bar = ProgressBar(sse_service, session_id, progress_id) if progress_id else None
         self._last_page_report = 0.0
+        self._session_id = session_id
+        self._progress_id = progress_id
+        self._cancels = cancels if progress_id else None
+
+    def __enter__(self) -> "_CorrectionProgress":
+        # a request left over from an earlier run with the same widget does not apply
+        if self._cancels is not None and self._progress_id is not None:
+            self._cancels.clear(self._session_id, self._progress_id)
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        if self._cancels is not None and self._progress_id is not None:
+            self._cancels.clear(self._session_id, self._progress_id)
+
+    def check_cancelled(self) -> None:
+        """
+        Raises:
+            _CorrectionsCancelled: if the user cancelled the request
+        """
+        if self._cancels is not None and self._progress_id is not None and self._cancels.is_requested(self._session_id, self._progress_id):
+            raise _CorrectionsCancelled()
 
     def step(self, label: str) -> None:
-        """Show a step whose duration is unknown."""
+        """
+        Show a step whose duration is unknown.
+
+        Raises:
+            _CorrectionsCancelled: if the user cancelled the request
+        """
+        self.check_cancelled()
         if self._bar is None:
             return
         self._bar.set_label(label)
         self._bar.set_value(None)
 
     def pages(self, label: str) -> PageCallback:
-        """Return a callback that shows the pages done of a step (called from a worker thread)."""
+        """
+        Return a callback that shows the pages done of a step (called from a worker thread). The
+        callback raises `_CorrectionsCancelled` if the user cancelled the request.
+        """
         def report(done: int, total: int) -> None:
+            self.check_cancelled()
             if self._bar is None:
                 return
             now = time.monotonic()
@@ -956,11 +1011,12 @@ async def _apply_page_corrections(
             logger.warning(f"Cannot write text corrections into {pdf.stable_id}: {e}")
             raise HTTPException(status_code=422, detail=f"The text layer of the PDF cannot be changed: {e}")
         content = output_path.read_bytes()
+    # the last point at which the request can be cancelled: nothing has been stored yet
+    progress.step("Saving the document")
     new_hash, _ = storage.save_file(content, "pdf", increment_ref=False)
     if new_hash == pdf.id:
         raise HTTPException(status_code=409, detail=NO_PAGE_CORRECTIONS_MESSAGE)
 
-    progress.step("Saving the document")
     previous = pdf.file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY) or []
     file_metadata = {**pdf.file_metadata, TEXT_CORRECTIONS_METADATA_KEY: [*previous, _corrections_record(plan, tei, user, pages)]}
     corrected_pdf = repo.create_pdf_version(pdf.stable_id, new_hash, len(content), file_metadata, created_by=str(user.get("username") or "") or None)
@@ -1113,6 +1169,7 @@ async def preview_text_corrections(
     current_user: dict[str, Any] = Depends(require_reviewer_or_admin),
     session_id: str = Depends(require_session_id),
     sse_service: SSEService = Depends(get_sse_service),
+    cancels: CancelRequests = Depends(get_text_corrections_cancels),
 ) -> TextCorrectionsPreview:
     """
     Show what writing the text corrections of a TEI document into the OCR text layer of its PDF
@@ -1123,15 +1180,21 @@ async def preview_text_corrections(
     why. This includes a lock of the TEI held by another session.
     A missing TEI file or missing access is reported with 404/403 as usual.
 
-    If `progress_id` is given, the steps are shown in that progress widget of the client.
+    If `progress_id` is given, the steps are shown in that progress widget of the client, and the
+    preview can be cancelled with `POST /ocr/text-corrections/cancel/{progress_id}`: it then
+    stops at the next page and is answered with 409 and the detail `{"code": "cancelled", ...}`.
     """
-    progress = _CorrectionProgress(sse_service, session_id, request.progress_id)
-    try:
-        context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress, request.pages)
-    except HTTPException as e:
-        if e.status_code not in (409, 423):
-            raise
-        return TextCorrectionsPreview(reason=str(e.detail))
+    progress = _CorrectionProgress(sse_service, session_id, request.progress_id, cancels)
+    with progress:
+        try:
+            context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress, request.pages)
+        except HTTPException as e:
+            if e.status_code not in (409, 423):
+                raise
+            return TextCorrectionsPreview(reason=str(e.detail))
+        except _CorrectionsCancelled:
+            logger.info(f"Preview of the text corrections of {request.stable_id} was cancelled")
+            raise _cancelled_error()
     # writing the whole document updates it for corrections written page by page before
     update_pending = request.pages is None and context.update_pending
     return TextCorrectionsPreview(
@@ -1154,6 +1217,7 @@ async def apply_text_corrections(
     session_id: str = Depends(require_session_id),
     sse_service: SSEService = Depends(get_sse_service),
     session_manager: SessionManager = Depends(get_session_manager),
+    cancels: CancelRequests = Depends(get_text_corrections_cancels),
 ) -> TextCorrectionsResult:
     """
     Write the text corrections of a TEI document into the OCR text layer of a copy of its PDF,
@@ -1180,10 +1244,58 @@ async def apply_text_corrections(
     the whole document updates the document for it, also when no corrections are left: the
     preview then reports `update_pending`. Refused with 409 if the version is frozen.
 
-    If `progress_id` is given, the steps are shown in that progress widget of the client.
+    If `progress_id` is given, the steps are shown in that progress widget of the client, and the
+    write can be cancelled with `POST /ocr/text-corrections/cancel/{progress_id}`. It then stops
+    at the next page or step and is answered with 409 and the detail `{"code": "cancelled", ...}`;
+    no PDF and no version is created. Cancelling has no effect once the corrected PDF is stored
+    (whole document: after the extractor plugin is finished; pages: after the PDF is written).
+    """
+    progress = _CorrectionProgress(sse_service, session_id, request.progress_id, cancels)
+    with progress:
+        try:
+            return await _apply_text_corrections(request, http_request, repo, storage, jobs, current_user, session_id, sse_service, session_manager, progress)
+        except _CorrectionsCancelled:
+            logger.info(f"Writing the text corrections of {request.stable_id} was cancelled")
+            raise _cancelled_error()
+
+
+@router.post("/text-corrections/cancel/{progress_id}")
+async def cancel_text_corrections(
+    progress_id: str,
+    current_user: dict[str, Any] = Depends(require_reviewer_or_admin),
+    session_id: str = Depends(require_session_id),
+    cancels: CancelRequests = Depends(get_text_corrections_cancels),
+) -> dict[str, bool]:
+    """
+    Cancel the preview or the write of text corrections of this session that reports its steps to
+    the progress widget `progress_id`. The request stops at its next page or step and is answered
+    with 409 and the detail `{"code": "cancelled", ...}`; the PDF and the document stay unchanged.
+    If it is already past the point where it stores its result, it finishes as usual.
+    Answered with `{"requested": true}`.
+    """
+    cancels.request(session_id, progress_id)
+    return {"requested": True}
+
+
+async def _apply_text_corrections(
+    request: TextCorrectionsRequest,
+    http_request: Request,
+    repo: FileRepository,
+    storage: FileStorage,
+    jobs: OcrJobStore,
+    current_user: dict[str, Any],
+    session_id: str,
+    sse_service: SSEService,
+    session_manager: SessionManager,
+    progress: _CorrectionProgress,
+) -> TextCorrectionsResult:
+    """
+    Write the text corrections (see apply_text_corrections()).
+
+    Raises:
+        _CorrectionsCancelled: if the user cancelled the write before anything was stored
     """
     settings = get_settings()
-    progress = _CorrectionProgress(sse_service, session_id, request.progress_id)
     context = await _correction_context(request.stable_id, repo, storage, jobs, current_user, session_id, progress, request.pages)
     if request.pages is not None:
         return await _apply_page_corrections(context, request, repo, storage, current_user, session_id, progress, sse_service, session_manager)
@@ -1200,6 +1312,7 @@ async def apply_text_corrections(
     if update_only:
         new_hash, new_path = pdf.id, context.pdf_path
         content_size = pdf.file_size
+        new_file = False
     else:
         with tempfile.TemporaryDirectory(prefix="pte-text-corrections-") as tmp:
             output_path = Path(tmp) / "corrected.pdf"
@@ -1210,6 +1323,10 @@ async def apply_text_corrections(
                 logger.warning(f"Cannot write text corrections into {pdf.stable_id}: {e}")
                 raise HTTPException(status_code=422, detail=f"The text layer of the PDF cannot be changed: {e}")
             content = output_path.read_bytes()
+        progress.check_cancelled()
+        # the extractor plugin reads the corrected PDF from the storage; if the write is
+        # cancelled, a file stored only for it is removed again
+        new_file = not storage.file_exists(generate_file_hash(content), "pdf")
         new_hash, new_path = storage.save_file(content, "pdf", increment_ref=False)
         content_size = len(content)
         if new_hash == pdf.id:
@@ -1217,9 +1334,15 @@ async def apply_text_corrections(
 
     # the lines corrected page by page since the document was last updated for its PDF
     corrected_lines = frozenset(c.line for c in plan.corrections) | _pending_lines(pdf)
-    progress.step("Updating the document for the corrected PDF. This can take a minute.")
     try:
+        progress.step("Updating the document for the corrected PDF. This can take a minute.")
         xml = await asyncio.to_thread(context.handler, context.xml, tei.doc_id, new_path, new_hash, corrected_lines)
+        # the plugin cannot be interrupted; the last point at which the write can be cancelled
+        progress.step("Saving the new version of the document")
+    except _CorrectionsCancelled:
+        if new_file:
+            storage.delete_file(new_hash, "pdf", decrement_ref=False)
+        raise
     except CorrectedPdfMismatch as e:
         logger.warning(f"Corrected PDF of {pdf.stable_id} does not match {tei.stable_id} (lines {e.lines}): {e}")
         raise HTTPException(status_code=422, detail={"message": str(e), "lines": e.lines})
@@ -1244,7 +1367,6 @@ async def apply_text_corrections(
     else:
         # the corrected PDF is a new PDF of the document; the version given stays attached to its PDF
         corrected_pdf = repo.create_pdf_version(pdf.stable_id, new_hash, content_size, file_metadata, created_by=str(current_user.get("username") or "") or None)
-    progress.step("Saving the new version of the document")
 
     # The new version is attached to the corrected PDF. It is created before the response is sent,
     # so that a lost response leaves a consistent state
