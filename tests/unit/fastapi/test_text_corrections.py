@@ -75,6 +75,37 @@ class TestDeriveCorrections(unittest.TestCase):
         self.assertEqual([(u.page, u.line, u.layer_text, u.tei_text, u.reason) for u in plan.unwritable], [(3, 7, "", "b c", "no text layer page")])
 
 
+    def test_typographic_dashes_and_quotes_are_not_corrections(self):
+        cases = [
+            ("a -II. b", "a — II. b"),
+            ('"einfache Miteigenthums-und', "„einfache Miteigenthums- und"),
+            ("Erfolgs'\"°) -handelt", "Erfolgs‘“°) — handelt"),
+            ('"das Gemeinschaftsverhältnis"-in', "„das Gemeinschaftsverhältnis“- in"),
+            ("a - b", "a — b"),
+        ]
+        for tei_text, layer_text in cases:
+            with self.subTest(layer=layer_text):
+                self.assertEqual(derive_corrections(tei(0, tei_text), layer(0, layer_text)), CorrectionPlan([], []))
+
+    def test_correction_keeps_typographic_characters_of_the_layer(self):
+        plan = derive_corrections(tei(0, 'x "Regel12)" y'), layer(0, "x „Regel’)“ y"))
+        self.assertEqual([(c.old, c.new) for c in plan.corrections], [("„Regel’)“", "„Regel12)“")])
+
+    def test_replaced_characters_with_other_word_count_are_corrected(self):
+        plan = derive_corrections(tei(0, "a 20212) -es b §15 -ARGE c"), layer(0, "a 2021?) — es b $15 — ARGE c"))
+        self.assertEqual([(c.old, c.new) for c in plan.corrections], [("2021?)", "20212)"), ("$15", "§15")])
+        self.assertEqual(plan.unwritable, [])
+
+    def test_inserted_or_deleted_characters_with_other_word_count_stay_unwritable(self):
+        plan = derive_corrections(tei(0, "x Rechtswissenschaft -y"), layer(0, "x Rechts- wissenschaft — y"))
+        self.assertEqual([u.reason for u in plan.unwritable], ["different number of words"])
+
+    def test_replacement_across_a_layer_word_boundary_stays_unwritable(self):
+        plan = derive_corrections(tei(0, "x abXY z"), layer(0, "x ab cd z"))
+        self.assertEqual(plan.corrections, [])
+        self.assertEqual([u.reason for u in plan.unwritable], ["different number of words"])
+
+
 class TestTeiWords(unittest.TestCase):
     def test_words_are_grouped_by_page_of_their_line(self):
         xml = '<TEI xmlns="http://www.tei-c.org/ns/1.0"><text><body><lb/>eins zwei<lb/>drei<lb/>vier fünf</body></text></TEI>'
