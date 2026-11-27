@@ -36,11 +36,14 @@ def files_input_hash(resources: list[str]) -> str:
 
 def job_output_path(job_id: str) -> Path:
     """The output directory of a job, without creating it."""
-    return get_settings().tmp_dir / "jobs" / job_id
+    return get_settings().data_root / "jobs" / job_id
 
 
 def job_output_dir(job_id: str) -> Path:
-    """The output directory of a job (created on demand); removed when the job is deleted."""
+    """
+    The output directory of a job (created on demand): `data/jobs/<job id>`, outside the tmp dir
+    that the garbage collection empties; removed when the job is deleted.
+    """
     path = job_output_path(job_id)
     path.mkdir(parents=True, exist_ok=True)
     return path

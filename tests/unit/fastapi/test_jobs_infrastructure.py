@@ -19,6 +19,8 @@ import tempfile
 import threading
 import time
 import unittest
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -32,11 +34,14 @@ from fastapi_app.config import get_settings
 from fastapi_app.lib.core import locking
 from fastapi_app.lib.core.db_utils import close_all_connections
 from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager
-from fastapi_app.lib.core.locking import acquire_lock, check_lock, reset_locks_db_initialized
+from fastapi_app.lib.core.locking import acquire_lock, check_lock, release_lock, reset_locks_db_initialized
 from fastapi_app.lib.jobs import (
     create_job_manager,
+    job_lock_refresher,
     job_output_dir,
     job_type,
+    job_types,
+    register_client_type,
     set_job_manager,
 )
 from fastapi_app.lib.jobs import core_types  # noqa: F401  (registers test.progress)
@@ -77,6 +82,10 @@ async def run_hold(ctx: JobContext, params: GateParams) -> dict[str, Any]:
     if params.fail:
         raise RuntimeError("Hold failed")
     return {"held": True}
+
+
+# One at a time, so that a second job waits in "queued"
+job_type("test-infra.single", title="Hold a file, one at a time", params_model=GateParams, max_concurrent=1)(run_hold)
 
 
 @job_type("test-infra.write-file", title="Write a file")
@@ -127,7 +136,13 @@ class JobsTestCase(unittest.TestCase):
 
     def make_client(self, manager: JobManager) -> TestClient:
         set_job_manager(manager)
-        app = FastAPI(lifespan=manager.lifespan)
+
+        @asynccontextmanager
+        async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+            async with manager.lifespan(), job_lock_refresher(interval=0.2):
+                yield
+
+        app = FastAPI(lifespan=lifespan)
         api_v1 = APIRouter(prefix="/api/v1")
         include_job_routes(api_v1)
         app.include_router(api_v1)
@@ -223,6 +238,51 @@ class TestJobsInfrastructure(JobsTestCase):
             GATES.setdefault("gate-renew", threading.Event()).set()
             self.wait_for(client, job["id"], ("done",))
 
+    def test_queued_job_keeps_lock_past_timeout(self) -> None:
+        with patch.object(locking, "LOCK_TIMEOUT_SECONDS", 2), self.make_client(self.make_manager()) as client:
+            first = self.submit(client, {"type": "test-infra.single", "params": {"gate": "gate-first"}})
+            self.wait_for(client, first["id"], ("active",))
+            waiting = self.submit(client, {"type": "test-infra.single", "params": {"gate": "gate-waiting"}, "resources": ["file:waiting"]})
+            time.sleep(3)
+            self.assertEqual(client.get(f"/api/v1/jobs/{waiting['id']}", headers=headers("alice-session")).json()["status"], "queued")
+            self.assertFalse(acquire_lock("waiting", "other-session", self.db_dir, logger))
+            GATES.setdefault("gate-first", threading.Event()).set()
+            GATES.setdefault("gate-waiting", threading.Event()).set()
+            self.wait_for(client, waiting["id"], ("done",))
+
+    def test_lost_lock_cancels_active_job(self) -> None:
+        manager = self.make_manager()
+        manager.lease_ttl = 0.3
+        with self.make_client(manager) as client:
+            job = self.submit(client, {"type": "test-infra.hold", "params": {"gate": "gate-lost"}, "resources": ["file:lost"]})
+            self.wait_for(client, job["id"], ("active",))
+            with self.assertLogs("fastapi_app.lib.jobs.hooks", level="WARNING") as logs:
+                # another session takes the file, e.g. after the job's lock went stale
+                release_lock("lost", f"job:{job['id']}", self.db_dir, logger)
+                self.assertTrue(acquire_lock("lost", "other-session", self.db_dir, logger))
+                finished = self.wait_for(client, job["id"], ("done", "error", "cancelled"))
+        self.assertEqual(finished["status"], "cancelled")
+        self.assertTrue(any("lost the lock of lost" in line for line in logs.output))
+        self.assertEqual(check_lock("lost", "x", self.db_dir, logger), {"is_locked": True, "locked_by": "other-session"})
+
+    def test_registering_a_type_again_replaces_it(self) -> None:
+        async def first(ctx: JobContext, params: Any) -> str:
+            return "first"
+
+        async def second(ctx: JobContext, params: Any) -> str:
+            return "second"
+
+        with self.make_client(self.make_manager()) as client:
+            job_type("test-infra.replaced", title="First")(first)
+            job_type("test-infra.replaced", title="Second")(second)
+            register_client_type("test-infra.client-replaced", title="Client first")
+            register_client_type("test-infra.client-replaced", title="Client second")
+            titles = {info.name: info.title for info in job_types()}
+            self.assertEqual(titles["test-infra.replaced"], "Second")
+            self.assertEqual(titles["test-infra.client-replaced"], "Client second")
+            job = self.submit(client, {"type": "test-infra.replaced"})
+            self.assertEqual(self.wait_for(client, job["id"], ("done",))["result"], "second")
+
     def test_busy_resource_returns_409(self) -> None:
         self.assertTrue(acquire_lock("busy", "alice-session", self.db_dir, logger))
         with self.make_client(self.make_manager()) as client:
@@ -240,7 +300,7 @@ class TestJobsInfrastructure(JobsTestCase):
         with self.make_client(self.make_manager()) as client:
             job = self.submit(client, {"type": "test-infra.write-file"})
             self.wait_for(client, job["id"], ("done",))
-            output = get_settings().tmp_dir / "jobs" / job["id"]
+            output = get_settings().data_root / "jobs" / job["id"]
             self.assertTrue((output / "x.txt").is_file())
             response = client.delete(f"/api/v1/jobs/{job['id']}", headers=headers("alice-session"))
             self.assertEqual(response.status_code, 200, response.text)

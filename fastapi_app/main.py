@@ -226,9 +226,10 @@ async def lifespan(app: FastAPI):
     register_github_secret_service()
 
     # Start the job manager after the plugins registered their job types, so that this worker
-    # can run every queued job it claims; it stops before the plugins shut down
-    from .lib.jobs import get_job_manager
-    async with get_job_manager().lifespan():
+    # can run every queued job it claims; it stops before the plugins shut down. The refresher
+    # keeps the file locks of waiting jobs, which the manager renews only for active ones
+    from .lib.jobs import get_job_manager, job_lock_refresher
+    async with get_job_manager().lifespan(), job_lock_refresher():
         # Log startup complete
         logger.info(f"FastAPI server ready at http://{settings.HOST}:{settings.PORT}")
 

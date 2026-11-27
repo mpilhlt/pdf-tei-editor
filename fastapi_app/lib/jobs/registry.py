@@ -4,7 +4,8 @@ Registry of the editor's job types.
 Core code and plugins register their types here with `job_type` (server jobs, as a decorator of
 the handler) or `register_client_type` (jobs that a client drives). The registry keeps the
 registrations independently of a `JobManager`: they are registered on the current manager at
-once and on every manager that `create_job_manager` creates later.
+once and on every manager that `create_job_manager` creates later. Registering a name again
+replaces the type, e.g. when a plugin is initialized again at runtime.
 """
 
 from __future__ import annotations
@@ -43,10 +44,9 @@ _registrations: dict[str, _Registration] = {}
 
 
 def _register(registration: _Registration) -> None:
-    name = registration.info.name
-    if name in _registrations:
-        raise ValueError(f"Job type already registered: {name}")
-    _registrations[name] = registration
+    # Registering a name again replaces the registration, so that plugins that are initialized
+    # again at runtime (enabled, installed, reloaded) can register their types again
+    _registrations[registration.info.name] = registration
     from .manager import current_job_manager
     manager = current_job_manager()
     if manager is not None:
@@ -54,10 +54,9 @@ def _register(registration: _Registration) -> None:
 
 
 def register_on_manager(manager: JobManager, registration: _Registration) -> None:
-    """Register a job type on a manager (no-op if the manager already has it)."""
+    """Register a job type on a manager, replacing a type of the same name. Running jobs keep their handler."""
     info = registration.info
-    if info.name in manager.types:
-        return
+    manager.types.pop(info.name, None)
     if info.driver == "server":
         assert registration.handler is not None
         manager.handler(

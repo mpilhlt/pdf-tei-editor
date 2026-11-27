@@ -23,7 +23,7 @@ job = await get_job_manager().submit("my-plugin.import", {"collection": "c1"}, o
 
 ## Registering a Job Type
 
-Server jobs register their handler with the `job_type` decorator, at import time of the module (a plugin's `plugin.py` or `routes.py`). Names are namespaced by plugin.
+Server jobs register their handler with the `job_type` decorator, at import time of the module (a plugin's `plugin.py` or `routes.py`). Names are namespaced by plugin. Registering a name again replaces the type and its handler (jobs that already run keep theirs), so a plugin that is initialized again at runtime can register its types again.
 
 ```python
 from pydantic import BaseModel
@@ -63,14 +63,15 @@ async def run_import(ctx: JobContext, params: ImportParams) -> dict:
 A job lists the files it works on as resources `file:<stable_id>`. `EditorJobHooks` maps them to the editor's file locks (`fastapi_app/lib/core/locking.py`) under the holder id `job:<job id>`:
 
 - On submit, it locks each file; if one is locked by a user or another job, it gives back the locks already taken and the submit fails with 409 (`ResourceBusy`).
-- The locks are refreshed with the job's lease (every few seconds), so they do not become stale while the job runs, and released when the job finishes, expires or is deleted.
+- The locks of an active job are refreshed with its lease (every few seconds). Jobs that wait (`queued`, e.g. behind `max_concurrent`, or `interrupted`) have no lease; the lock refresher (`job_lock_refresher`, started with the manager in the app lifespan) refreshes their locks every 30 s. So the locks do not become stale before the job finishes, expires or is deleted, when they are released.
+- If another holder took a file's lock anyway (e.g. after a server pause made it stale), the next renewal of an active job finds it and cancels the job, so that the handler does not write a document someone else edits.
 - A user who opens a locked file sees "This document is locked while a background job runs on it." (registered with `register_lock_holder("job:", ...)`).
 - The user's own editing lock also blocks the job; release it before submitting a job on the open document, or let the job work on a new version.
 - Input check: a job submitted with `input_hash=files_input_hash(resources)` (sha256 over the current content hashes of its files) is not resumed if a file changed in the meantime. Jobs without `file:` resources are never refused this way; a client job checks for changes on the client.
 
 ## Files a Job Produces
 
-A job writes downloadable output to `job_output_dir(job_id)` (`data/tmp/jobs/<job id>`, created on demand) and returns their URLs, made with `job_file_url(job_id, name)` (`/api/v1/jobs/{job_id}/files/{name}`). The route serves a file to the users who may view the job and 404 otherwise. The directory is removed when the job is deleted, by the user or after the retention time.
+A job writes downloadable output to `job_output_dir(job_id)` (`data/jobs/<job id>`, created on demand; not in `data/tmp`, which the garbage collection empties) and returns their URLs, made with `job_file_url(job_id, name)` (`/api/v1/jobs/{job_id}/files/{name}`). The route serves a file to the users who may view the job and 404 otherwise. The directory is removed when the job is deleted, by the user or after the retention time.
 
 ## Testing
 
@@ -81,7 +82,7 @@ from fastapi_app.lib.jobs.routes import include_job_routes
 
 manager = create_job_manager(MemoryJobStore())  # registers all known job types
 set_job_manager(manager)
-app = FastAPI(lifespan=manager.lifespan)
+app = FastAPI(lifespan=manager.lifespan)  # add job_lock_refresher(interval=...) to test waiting jobs' locks
 api_v1 = APIRouter(prefix="/api/v1")
 include_job_routes(api_v1)
 app.include_router(api_v1)
