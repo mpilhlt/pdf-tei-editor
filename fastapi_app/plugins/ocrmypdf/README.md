@@ -64,6 +64,8 @@ For a container deployed with `scripts/deploy/container.js`, set `DEPLOY_SHARED_
 | `rasterize_fallback` | If `vectorize` is not possible, rasterize the pages instead (default). If unchecked, the run fails instead. |
 | `deskew` | Straighten skewed pages (not in `redo` mode, not applied when the pages are kept as vector graphics) |
 | `rotate_pages` | Fix the orientation of pages; may invalidate annotation coordinates |
+| `repair_footnote_markers` | Repair misrecognized footnote markers (default), see below. Unchecked, the pages are not analyzed and nothing is repaired. |
+| `optimize_images` | Recompress the page images of the result losslessly (OCRmyPDF's `optimize=1`, default). Unchecked: `optimize=0`. |
 | `model` | `fast` (default) or `best`, see above. Only offered if `tessdata_best` models are installed. |
 
 `auto` chooses:
@@ -107,7 +109,7 @@ A marker is only changed if a reading fits the numbering, and markers read corre
 
 The document step relies on two details of OCRmyPDF 17 that are not part of its plugin API: the page results passed to the executor's `task_finished` callback carry the hOCR file in `ocr`, and the hOCR files are parsed only in `OcrGrafter.finalize()`. If a later version changes this, the repair does nothing; `TestRepairIntegration` in `tests/test_footnote_markers.py` detects it.
 
-The plugin is passed to every OCRmyPDF run: OCRmyPDF serializes runs with different plugin sets, so making it optional would block concurrent jobs. Markers that Tesseract drops (`„Wort“¹²` read as `„Wort“`) or reads as letters are not detected.
+The plugin is passed to every OCRmyPDF run: OCRmyPDF serializes runs with different plugin sets, so leaving it out would block concurrent jobs. The option `repair_footnote_markers` turns the repair off instead through the keyword argument `pte_repair_footnote_markers=False` of `ocrmypdf.ocr()`: OCRmyPDF keeps unknown arguments in `OcrOptions.extra_attrs`, which reach the worker processes, so `generate_hocr()` skips the analysis, and without analyses `repair_document()` does nothing. The result message names the steps that were turned off ("Skipped: footnote marker repair, image optimization."). Markers that Tesseract drops (`„Wort“¹²` read as `„Wort“`) or reads as letters are not detected.
 
 ## Training data for fine-tuning (experimental)
 

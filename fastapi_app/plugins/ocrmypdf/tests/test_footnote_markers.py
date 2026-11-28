@@ -358,6 +358,7 @@ class TestRepairDocument(unittest.TestCase):
             hocr_files = {page: Path(tmp) / f"{page:06d}.hocr" for page in range(3)}
             for path in hocr_files.values():
                 path.write_text(HOCR, encoding="utf-8")
+                ocrmypdf_plugin.analysis_path(path).write_text(PageAnalysis().to_json(), encoding="utf-8")
             # Pages 0 and 2 have markers to repair, page 1 has none
             with patch.object(ocrmypdf_plugin, "plan_repairs", return_value=[[repair], [], [repair]]), progress_reporter(reports.append):
                 count = ocrmypdf_plugin.repair_document(hocr_files)
@@ -375,9 +376,21 @@ class TestRepairDocument(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "000000.hocr"
             path.write_text(HOCR, encoding="utf-8")
+            ocrmypdf_plugin.analysis_path(path).write_text(PageAnalysis().to_json(), encoding="utf-8")
             with patch.object(ocrmypdf_plugin, "plan_repairs", return_value=[[]]), progress_reporter(reports.append):
                 self.assertEqual(ocrmypdf_plugin.repair_document({0: path}), 0)
         self.assertEqual([(r.phase, r.total) for r in reports], [(ocrmypdf_plugin.REPAIR_PHASE, None)])
+
+    def test_nothing_without_analyzed_pages(self):
+        # With the repair turned off, no page is analyzed and the repair is not reported
+        reports: list[OcrProgress] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "000000.hocr"
+            path.write_text(HOCR, encoding="utf-8")
+            with patch.object(ocrmypdf_plugin, "plan_repairs") as plan, progress_reporter(reports.append):
+                self.assertEqual(ocrmypdf_plugin.repair_document({0: path}), 0)
+            plan.assert_not_called()
+        self.assertEqual(reports, [])
 
 
 @unittest.skipUnless(shutil.which("tesseract") and shutil.which("pdftotext"), "Tesseract or pdftotext is not installed")
@@ -413,6 +426,28 @@ class TestRepairIntegration(unittest.TestCase):
         # Quotation marks and apostrophes without a marker are left alone
         self.assertIn("„Haftung“ ist weit", text)
         self.assertIn("Müller's Ansicht", text)
+
+    def test_repair_can_be_turned_off(self):
+        reports: list[OcrProgress] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out.pdf"
+            with progress_reporter(reports.append):
+                result = OcrmypdfEngine().recognize(FIXTURES / "footnote-markers.pdf", output, ["de"], {"mode": "force", "repair_footnote_markers": False})
+            text = subprocess.run(["pdftotext", str(output), "-"], capture_output=True, text=True, check=True).stdout
+        self.assertNotIn("Regel12)", text)
+        self.assertNotIn("footnote markers were corrected", result.message or "")
+        self.assertIn("Skipped: footnote marker repair.", result.message or "")
+        self.assertNotIn(ocrmypdf_plugin.REPAIR_PHASE, [r.phase for r in reports])
+
+    def test_image_optimization_can_be_turned_off(self):
+        reports: list[OcrProgress] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out.pdf"
+            with progress_reporter(reports.append):
+                result = OcrmypdfEngine().recognize(FIXTURES / "footnote-markers.pdf", output, ["de"], {"mode": "force", "optimize_images": False})
+        self.assertIn("Skipped: image optimization.", result.message or "")
+        self.assertIn("3 misrecognized footnote markers were corrected", result.message or "")
+        self.assertNotIn("Optimizing images", [r.phase for r in reports])
 
 
 if __name__ == "__main__":

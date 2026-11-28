@@ -150,6 +150,18 @@ class OcrmypdfEngine(OcrEngine):
                 "description": "Rotates crooked scans by small angles before recognition. Not available in 'redo' mode, and not applied when the pages are kept as vector graphics.",
                 "default": False,
             },
+            "repair_footnote_markers": {
+                "type": "boolean",
+                "label": "Repair footnote markers",
+                "description": "Reads superscript footnote markers that Tesseract misrecognized as punctuation again and corrects them where the number fits the footnote numbering of the document.",
+                "default": True,
+            },
+            "optimize_images": {
+                "type": "boolean",
+                "label": "Optimize images",
+                "description": "Recompresses the page images of the result losslessly, which makes the file smaller and the recognition take longer. Does not change the text.",
+                "default": True,
+            },
             "rotate_pages": {
                 "type": "boolean",
                 "label": "Fix page orientation",
@@ -316,12 +328,12 @@ class OcrmypdfEngine(OcrEngine):
             source = self._decrypt(input_path, tmp_dir)
             if mode != MODE_VECTORIZE:
                 repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, mode, deskew, options)
-                return OcrResult(message=self._message(mode, tesseract_languages, repaired), method=METHODS[mode], models=tesseract_languages)
+                return OcrResult(message=self._message(mode, tesseract_languages, repaired, options), method=METHODS[mode], models=tesseract_languages)
 
             reason = self._vectorize(input_path, source, tmp_dir)
             if reason is None:
                 repaired = self._run_ocrmypdf(tmp_dir / "outlined.pdf", output_path, tesseract_languages, MODE_SKIP, False, options)
-                message = self._message(MODE_VECTORIZE, tesseract_languages, repaired)
+                message = self._message(MODE_VECTORIZE, tesseract_languages, repaired, options)
                 if deskew:
                     message += " Skewed pages were not straightened, since the pages were kept as vector graphics."
                 return OcrResult(message=message, method="vectorize", models=tesseract_languages)
@@ -330,12 +342,13 @@ class OcrmypdfEngine(OcrEngine):
                 raise ValueError(f"The text layer could not be replaced without rasterizing the pages: {reason}.")
             logger.info(f"Rasterizing {input_path.name} instead of converting the text to outlines: {reason}")
             repaired = self._run_ocrmypdf(source, output_path, tesseract_languages, MODE_FORCE, deskew, options)
-            message = self._message(MODE_FORCE, tesseract_languages, repaired) + f" The pages were converted to images, since {reason}."
+            message = self._message(MODE_FORCE, tesseract_languages, repaired, options) + f" The pages were converted to images, since {reason}."
             return OcrResult(message=message, method="force", fallback_reason=reason, models=tesseract_languages)
 
     @staticmethod
-    def _message(mode: str, tesseract_languages: list[str], repaired_markers: int = 0) -> str:
-        """Return the message reporting a finished run."""
+    def _message(mode: str, tesseract_languages: list[str], repaired_markers: int = 0, options: Optional[dict[str, OcrOptionValue]] = None) -> str:
+        """Return the message reporting a finished run, naming the post-processing steps turned off in `options`."""
+        options = options or {}
         descriptions: dict[str, str] = {
             MODE_SKIP: "pages without text were recognized",
             MODE_REDO: "the existing OCR layer was replaced",
@@ -345,6 +358,9 @@ class OcrmypdfEngine(OcrEngine):
         message = f"Text recognition finished: {descriptions.get(mode, mode)} (models: {', '.join(tesseract_languages)})."
         if repaired_markers:
             message += f" {repaired_markers} misrecognized footnote markers were corrected."
+        skipped = [step for step, key in (("footnote marker repair", "repair_footnote_markers"), ("image optimization", "optimize_images")) if options.get(key) is False]
+        if skipped:
+            message += f" Skipped: {', '.join(skipped)}."
         return message
 
     @staticmethod
@@ -409,8 +425,10 @@ class OcrmypdfEngine(OcrEngine):
         """
         Run OCRmyPDF, with the plugin that repairs misrecognized footnote markers (#904).
 
-        The plugin is always loaded: OCRmyPDF serializes jobs with different plugin sets,
-        and it changes a marker only where the footnote numbering confirms the number.
+        The plugin is always loaded: OCRmyPDF serializes jobs with different plugin sets, so the
+        option `repair_footnote_markers` turns the repair off through an argument the plugin
+        reads (`ocrmypdf_plugin.REPAIR_OPTION`). `optimize_images` chooses OCRmyPDF's
+        optimization level 1 (lossless, OCRmyPDF's default) or 0 (none).
 
         Returns:
             The number of repaired footnote markers
@@ -433,11 +451,14 @@ class OcrmypdfEngine(OcrEngine):
                 mode=mode,
                 deskew=deskew,
                 rotate_pages=bool(options.get("rotate_pages", False)),
+                optimize=1 if options.get("optimize_images", True) is not False else 0,
                 output_type="pdf",
                 tagged_pdf_mode="ignore",
                 invalidate_digital_signatures=True,
                 progress_bar=False,
                 plugins=[ocrmypdf_plugin.__name__],
+                # ocrmypdf_plugin.REPAIR_OPTION
+                pte_repair_footnote_markers=options.get("repair_footnote_markers", True) is not False,
             )
         except ExitCodeException as e:
             raise RuntimeError(f"OCRmyPDF failed: {type(e).__name__}: {e}") from e
