@@ -234,6 +234,7 @@ class OcrReviewResponse(BaseModel):
     discarded: int = Field(0, description="Proposals of the model that were dropped as implausible or not applicable")
     window_start: Optional[int] = Field(None, description="Start of the window's text in `xml` (UTF-16 code units)")
     window_end: Optional[int] = Field(None, description="End of the window's text in `xml` (UTF-16 code units)")
+    page_images: bool = Field(False, description="Whether the model was sent the images of the window's pages (it accepts images)")
 
 
 OcrResponse.model_rebuild()

@@ -9,13 +9,15 @@ without either one depending on the other's class hierarchy.
 """
 
 import asyncio
+import base64
 import logging
+from collections.abc import Sequence
 
 import requests
 
 from fastapi_app.lib.extraction.http_utils import get_retry_session
 
-from .base import LLMModel, LLMProvider
+from .base import LLMImage, LLMModel, LLMProvider
 from .rate_limit import post_completion
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,18 @@ def get_completion_session(retries: int = 3, backoff_factor: float = 2.0, read_r
     return get_retry_session(retries=retries, backoff_factor=backoff_factor, status_forcelist=[500, 502, 503, 504], read_retries=read_retries, respect_retry_after=False)
 
 
+def user_content(user_prompt: str, images: Sequence[LLMImage] | None = None) -> str | list[dict[str, object]]:
+    """The content of the user message: the prompt, or with images the images as base64 data URLs in `image_url` parts, in order, followed by the prompt text."""
+    if not images:
+        return user_prompt
+    parts: list[dict[str, object]] = [
+        {"type": "image_url", "image_url": {"url": f"data:{image['media_type']};base64,{base64.b64encode(image['data']).decode('ascii')}"}}
+        for image in images
+    ]
+    parts.append({"type": "text", "text": user_prompt})
+    return parts
+
+
 def chat_completion_sync(
     base_url: str,
     api_key: str | None,
@@ -40,8 +54,9 @@ def chat_completion_sync(
     system_prompt: str,
     user_prompt: str,
     temperature: float = 0.2,
+    images: Sequence[LLMImage] | None = None,
 ) -> str:
-    """Synchronously call an OpenAI-compatible chat/completions endpoint.
+    """Synchronously call an OpenAI-compatible chat/completions endpoint, with `images` attached to the user prompt if given.
 
     A stalled request is repeated once: it usually succeeds then, and a model that never answers fails after two timeouts.
 
@@ -60,7 +75,7 @@ def chat_completion_sync(
         "model": model_id,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+            {"role": "user", "content": user_content(user_prompt, images)},
         ],
         "temperature": temperature,
     }
@@ -74,7 +89,12 @@ def chat_completion_sync(
 
 
 class OpenAICompatibleProvider(LLMProvider):
-    """Concrete base for providers speaking the OpenAI chat/completions wire format."""
+    """Concrete base for providers speaking the OpenAI chat/completions wire format.
+
+    Images are sent as `image_url` content parts. Whether a model accepts them is up to the
+    capabilities list_models() reports (see LLMProvider.supports_image_input()); this class
+    reports "chat" only, since the OpenAI model list has no modalities.
+    """
 
     def __init__(self, id: str, label: str, base_url: str, api_key: str | None, secret_service: str | None = None):
         self.id = id
@@ -127,4 +147,23 @@ class OpenAICompatibleProvider(LLMProvider):
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=temperature,
+        )
+
+    async def chat_completion_with_images(
+        self,
+        model_id: str,
+        system_prompt: str,
+        user_prompt: str,
+        images: list[LLMImage],
+        temperature: float = 0.2,
+    ) -> str:
+        return await asyncio.to_thread(
+            chat_completion_sync,
+            base_url=self._base_url,
+            api_key=self._api_key,
+            model_id=model_id,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            images=images,
         )

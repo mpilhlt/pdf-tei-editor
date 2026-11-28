@@ -20,8 +20,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_app.lib.core.database import DatabaseManager
-from fastapi_app.lib.core.dependencies import get_file_repository, require_authenticated_user
-from fastapi_app.lib.llm import LLMModel, LLMProvider, LLMProviderRegistry, LLMRateLimitError
+from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
+from fastapi_app.lib.llm import LLMImage, LLMModel, LLMProvider, LLMProviderRegistry, LLMRateLimitError
 from fastapi_app.lib.llm.model_access import ModelAccessDenied
 from fastapi_app.lib.models.models import FileCreate
 from fastapi_app.lib.repository.file_repository import FileRepository
@@ -51,9 +51,16 @@ class FakeProvider(LLMProvider):
         self.uses_user_key = True
         self.response: str | Exception = "[]"
         self.calls = 0
+        self.vision = False
+        self.image_counts: list[int] = []
 
     def list_models(self) -> list[LLMModel]:
-        return []
+        capabilities = frozenset({"chat", "vision"} if self.vision else {"chat"})
+        return [LLMModel(id="m", label="m", capabilities=capabilities, status=None, free=True)]
+
+    async def chat_completion_with_images(self, model_id: str, system_prompt: str, user_prompt: str, images: list[LLMImage], temperature: float = 0.2) -> str:
+        self.image_counts.append(len(images))
+        return await self.chat_completion(model_id, system_prompt, user_prompt, temperature)
 
     async def chat_completion(self, model_id: str, system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
         self.calls += 1
@@ -89,6 +96,9 @@ class TestOcrLlmReviewRoutes(unittest.TestCase):
         app.include_router(ocr_router.router)
         app.dependency_overrides[require_authenticated_user] = lambda: USER
         app.dependency_overrides[get_file_repository] = lambda: self.repo
+        self.pdf_path: Path | None = None
+        storage = type("Storage", (), {"get_file_path": lambda _self, file_id, file_type: self.pdf_path})()
+        app.dependency_overrides[get_file_storage] = lambda: storage
         self.client = TestClient(app, headers={"X-Session-ID": "s1"})
 
     def tearDown(self) -> None:
@@ -125,6 +135,40 @@ class TestOcrLlmReviewRoutes(unittest.TestCase):
         self.assertEqual((result["window_count"], result["discarded"]), (1, 0))
         self.assertEqual(result["window_start"], XML.index("Die Gesellschaft"))
         self.assertEqual(result["window_end"], XML.index("</body>"))
+
+    def two_page_pdf(self) -> Path:
+        import pikepdf
+
+        path = self.tmp / "doc.pdf"
+        with pikepdf.new() as pdf:
+            pdf.add_blank_page(page_size=(595, 842))
+            pdf.add_blank_page(page_size=(595, 842))
+            pdf.save(path)
+        return path
+
+    def test_vision_model_gets_the_window_pages(self):
+        self.provider.vision = True
+        self.pdf_path = self.two_page_pdf()
+        self.repo.insert_file(FileCreate(id="p" * 64, stable_id="pdf1", filename="a.pdf", doc_id="doc1", file_type="pdf", file_size=1, doc_collections=["c1"]))
+        response = self.review()
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["page_images"])
+        self.assertEqual(self.provider.image_counts, [2])
+
+    def test_vision_model_without_pdf_gets_text_only(self):
+        self.provider.vision = True
+        with self.assertLogs("fastapi_app.routers.ocr", level="INFO"):
+            response = self.review()
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertFalse(response.json()["page_images"])
+        self.assertEqual(self.provider.image_counts, [])
+        self.assertEqual(self.provider.calls, 1)
+
+    def test_text_model_gets_text_only(self):
+        self.pdf_path = self.two_page_pdf()
+        response = self.review()
+        self.assertFalse(response.json()["page_images"])
+        self.assertEqual(self.provider.image_counts, [])
 
     def test_scope_occurring_more_than_once_is_422(self):
         response = self.plan(scope="<lb/>")

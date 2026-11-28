@@ -3,7 +3,8 @@ LLM review of OCR errors in zone documents (such as `grobid.training.segmentatio
 by page window (#931 Part A).
 
 The model sees the plain text of the window's lines, numbered with their line ids (entities
-decoded), and answers with line corrections:
+decoded), plus the images of the window's pages if it accepts images, and answers with line
+corrections:
 
     [{"line": "0412", "old": "Regel’).", "new": "Regel12).", "rationale": "..."}]
 
@@ -26,7 +27,7 @@ from xml.sax.saxutils import escape
 
 from lxml import etree
 
-from fastapi_app.lib.llm.base import LLMProvider
+from fastapi_app.lib.llm.base import LLMImage, LLMProvider
 from fastapi_app.lib.ocr.line_review import (  # noqa: F401  (re-exported)
     LOG_PREFIX,
     LineCorrection,
@@ -292,17 +293,28 @@ def findings_from_corrections(source: OcrReviewSource, corrections: Sequence[Lin
 # ── Review ───────────────────────────────────────────────────────────
 
 
+def window_page_indices(source: OcrReviewSource, index: int) -> list[int]:
+    """The 0-based PDF page indices of window `index`, in page order."""
+    return sorted({page.number - 1 for page in source.windows[index]})
+
+
 async def review_window(
-    source: OcrReviewSource, index: int, provider: LLMProvider, model_id: str, min_letter_similarity: float
+    source: OcrReviewSource,
+    index: int,
+    provider: LLMProvider,
+    model_id: str,
+    min_letter_similarity: float,
+    images: list[LLMImage] | None = None,
 ) -> tuple[list[Finding], int, int]:
     """
     Review one page window: `(findings, window count, discarded)`, where `discarded` counts the
-    corrections of the (last) answer that were dropped.
+    corrections of the (last) answer that were dropped. `images` are the images of the window's
+    pages (see `window_page_indices`), for a model that accepts images.
 
     Raises:
         UnusableResponseError: the model's answer contains no JSON list.
         IndexError: there is no window `index`.
     """
-    kept, count, dropped = await review_lines_window(source.lines, index, provider, model_id, min_letter_similarity)
+    kept, count, dropped = await review_lines_window(source.lines, index, provider, model_id, min_letter_similarity, images)
     findings = findings_from_corrections(source, kept)
     return findings, count, dropped + len(kept) - len(findings)
