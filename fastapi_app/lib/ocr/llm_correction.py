@@ -2,7 +2,8 @@
 The LLM correction pass of the OCR text layer (#931): run right after OCR, without human review.
 
 The pages that need a review (see `pages_needing_review`) are cut into windows of their lines, an
-LLM proposes line corrections for each window, and the corrections are written into the invisible
+LLM proposes line corrections for each window (with the images of the window's pages if the model
+accepts images), and the corrections are written into the invisible
 text layer of the PDF in place. Only words that a correction refers to are patched. Problems with
 the LLM or with patching are reported in the result, never raised.
 
@@ -25,7 +26,7 @@ import pikepdf
 import requests
 from pypdf.errors import PyPdfError
 
-from fastapi_app.lib.llm.base import LLMProvider, LLMProviderError
+from fastapi_app.lib.llm.base import LLMImage, LLMProvider, LLMProviderError
 from fastapi_app.lib.llm.json_response import UnusableResponseError
 from fastapi_app.lib.ocr.line_review import (
     LOG_PREFIX,
@@ -35,6 +36,7 @@ from fastapi_app.lib.ocr.line_review import (
     letters_similar,
     review_lines_window,
 )
+from fastapi_app.lib.ocr.page_images import render_page_images
 from fastapi_app.lib.ocr.progress import report_progress
 from fastapi_app.lib.ocr.text_layer import (
     LayerLine,
@@ -119,6 +121,8 @@ class CorrectionRun:
     """The most pages the pass reviews."""
     found: int = 0
     """The plausible corrections the LLM proposed (applied or not)."""
+    page_images: bool = False
+    """Whether the model was sent the page images (it accepts images)."""
 
 
 # ── Lines and patches ────────────────────────────────────────────────
@@ -391,6 +395,24 @@ def _write_corrections(
         os.replace(temp, pdf_path)
 
 
+async def _accepts_images(provider: LLMProvider, model_id: str) -> bool:
+    """Whether the model accepts images; False if the provider cannot tell."""
+    try:
+        return bool(await asyncio.to_thread(provider.supports_image_input, model_id))
+    except Exception as error:  # noqa: BLE001 - the pass must never fail the OCR run
+        logger.warning(f"{LOG_PREFIX}: cannot tell whether {model_id} accepts images, reviewing the text only: {error!r}")
+        return False
+
+
+async def _window_images(pdf_path: Path, pages: list[int]) -> list[LLMImage] | None:
+    """The images of the pages of a window, or None (text only) if they cannot be rendered."""
+    try:
+        return await asyncio.to_thread(render_page_images, pdf_path, pages)
+    except Exception as error:  # noqa: BLE001 - the window is still reviewed without images
+        logger.warning(f"{LOG_PREFIX}: cannot render pages {[p + 1 for p in pages]} of {pdf_path.name}, reviewing them without images: {error!r}")
+        return None
+
+
 async def correct_text_layer(
     pdf_path: Path,
     provider: LLMProvider,
@@ -403,7 +425,8 @@ async def correct_text_layer(
     Let an LLM correct the OCR errors of the text layer of `pdf_path` and write the corrections into it in place.
 
     Only pages selected by `pages_needing_review` whose text layer can be patched and is structured in lines are
-    reviewed, and of these only the first `max_pages`. An error of a review call stops the review; the corrections collected so far are still applied. A
+    reviewed, and of these only the first `max_pages`. If the model accepts images
+    (`provider.supports_image_input()`), each window is sent with the images of its pages. An error of a review call stops the review; the corrections collected so far are still applied. A
     page whose patches cannot be applied is left unchanged, and if saving fails the file stays as it was. These
     problems are reported in `error` and `skipped` of the result; the function does not raise.
 
@@ -443,16 +466,19 @@ async def correct_text_layer(
     total = len(review.windows)
     corrections: list[LineCorrection] = []
     report_progress(PROGRESS_PHASE, 0, total, "window")
+    run.page_images = await _accepts_images(provider, model_id)
     for index, window in enumerate(review.windows):
+        pages = sorted({lines[i].page for i in window})
+        images = await _window_images(pdf_path, pages) if run.page_images else None
         try:
-            found, _, _ = await review_lines_window(review, index, provider, model_id, min_letter_similarity)
+            found, _, _ = await review_lines_window(review, index, provider, model_id, min_letter_similarity, images)
         except Exception as error:  # noqa: BLE001 - keep the corrections of the windows reviewed so far
             _log_failure(f"review stopped at window {index + 1} of {total}", error, PROVIDER_ERRORS)
             run.error = f"LLM review stopped at window {index + 1} of {total}: {error}"
             break
         corrections.extend(found)
         run.found += len(found)
-        run.pages_reviewed.extend(sorted({lines[i].page for i in window}))
+        run.pages_reviewed.extend(pages)
         report_progress(PROGRESS_PHASE, index + 1, total, "window")
 
     if corrections:

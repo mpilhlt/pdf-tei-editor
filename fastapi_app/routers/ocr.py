@@ -10,13 +10,16 @@ Endpoints:
 - POST /api/v1/ocr/text-corrections/apply   - Write a TEI's text corrections into the PDF's OCR text layer
 - POST /api/v1/ocr/llm-review/plan          - Number of page windows of the LLM review of OCR errors
 - POST /api/v1/ocr/llm-review               - LLM review of one page window for OCR errors
+- GET  /api/v1/ocr/training-lines           - Zip of Tesseract ground truth lines from reviewed pages (admin)
 
 The OCR runs are jobs (`fastapi_app/lib/ocr/job_types.py`); their status, progress, result and
 cancel are those of the job API under `/api/v1/jobs`.
 """
 
 import asyncio
+import shutil
 import tempfile
+import zipfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -26,21 +29,41 @@ from typing import Any
 
 import pikepdf
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from fastapi_jobqueue import Job, JobManager, Principal
 from lxml import etree
 from pypdf.errors import PdfReadError
+from starlette.background import BackgroundTask
 
 from ..config import get_settings
-from ..lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_authenticated_user, require_reviewer_or_admin, require_session_id
+from ..lib.core.dependencies import (
+    get_file_repository,
+    get_file_storage,
+    get_session_manager,
+    get_sse_service,
+    require_admin_user,
+    require_authenticated_user,
+    require_reviewer_or_admin,
+    require_session_id,
+)
 from ..lib.core.locking import check_lock
 from ..lib.core.sessions import SessionManager
-from ..lib.jobs import RequestJob, RequestJobCancelled, current_principal, get_job_manager, run_request_job
+from ..lib.jobs import (
+    RequestJob,
+    RequestJobCancelled,
+    current_principal,
+    get_job_manager,
+    run_request_job,
+)
 from ..lib.jobs.hooks import JOB_LOCK_HOLDER_PREFIX
+from ..lib.llm import LLMImage, LLMProvider
+from ..lib.llm.http_errors import llm_http_error
+from ..lib.llm.model_access import check_model_access
 from ..lib.models import FileMetadata, FileUpdate
 from ..lib.models.models_ocr import (
     OcrEngineInfo,
-    OcrOptionInfo,
     OcrLlmCorrectionRequest,
+    OcrOptionInfo,
     OcrRequest,
     OcrReviewFinding,
     OcrReviewPlanRequest,
@@ -54,8 +77,6 @@ from ..lib.models.models_ocr import (
     TextQualityReport,
     UnwritableItem,
 )
-from ..lib.llm.http_errors import llm_http_error
-from ..lib.llm.model_access import check_model_access
 from ..lib.ocr.base import OcrEngine
 from ..lib.ocr.job_types import (
     LLM_CORRECTION_JOB_TYPE,
@@ -64,35 +85,79 @@ from ..lib.ocr.job_types import (
     OcrLlmCorrectionJobParams,
     checked_llm_correction,
     get_engine,
-    get_pdf as _get_pdf,
-    llm_provider as _llm_provider,
-    pdf_path as _pdf_path,
     submit_ocr_job,
     validate_languages,
     validate_options,
 )
+from ..lib.ocr.job_types import (
+    get_pdf as _get_pdf,
+)
+from ..lib.ocr.job_types import (
+    llm_provider as _llm_provider,
+)
+from ..lib.ocr.job_types import (
+    pdf_path as _pdf_path,
+)
 from ..lib.ocr.languages import normalize_ocr_language
 from ..lib.ocr.layout_check import apply_layout_check, check_text_layout
-from ..lib.ocr.llm_review import DEFAULT_MIN_LETTER_SIMILARITY, MIN_LETTER_SIMILARITY_KEY, MissingLayoutError, OcrReviewSource, prepare_source, review_window
+from ..lib.ocr.llm_review import (
+    DEFAULT_MIN_LETTER_SIMILARITY,
+    MIN_LETTER_SIMILARITY_KEY,
+    MissingLayoutError,
+    OcrReviewSource,
+    prepare_source,
+    review_window,
+    window_page_indices,
+)
+from ..lib.ocr.page_images import render_page_images
 from ..lib.ocr.provenance import OCR_METADATA_KEY, TEXT_CORRECTIONS_METADATA_KEY
 from ..lib.ocr.registry import OcrEngineRegistry
-from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
-from ..lib.ocr.text_layer import PageCallback, WordPatch, patch_text_layer, read_text_layer
+from ..lib.ocr.text_corrections import (
+    CorrectedPdfHandler,
+    CorrectedPdfMismatch,
+    CorrectionPlan,
+    WordCorrection,
+    derive_corrections,
+    get_corrected_pdf_handler,
+    tei_words,
+)
+from ..lib.ocr.text_layer import (
+    PageCallback,
+    WordPatch,
+    patch_text_layer,
+    read_text_layer,
+)
 from ..lib.ocr.text_quality import analyze_text_layer
+from ..lib.ocr.training_lines import LineSource, collect_training_lines, write_lines
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
-from ..lib.services.tei_versions import create_tei_version, emit_document_saved, version_collections
+from ..lib.services.tei_versions import (
+    create_tei_version,
+    emit_document_saved,
+    version_collections,
+)
 from ..lib.sse.sse_service import SSEService
 from ..lib.sse.sse_utils import broadcast_to_other_sessions
 from ..lib.storage.file_storage import FileStorage
+from ..lib.tei.layout import (
+    MISSING_LAYOUT_MESSAGE,
+    LineLayout,
+    get_line_layout,
+    get_zone_labels,
+)
 from ..lib.tei.zone_lines import window_range
-from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
 from ..lib.utils.config_utils import get_config
 from ..lib.utils.hash_utils import generate_file_hash
-from ..lib.utils.revision_hash import stamp_revision_hashes
-from ..lib.utils.tei_utils import add_revision_change, extract_processing_instructions, extract_tei_metadata, serialize_tei_with_formatted_header, update_fileref_in_xml
-from ..lib.utils.xml_utils import apply_entity_encoding_from_config
 from ..lib.utils.logging_utils import get_logger
+from ..lib.utils.revision_hash import stamp_revision_hashes
+from ..lib.utils.tei_utils import (
+    add_revision_change,
+    extract_processing_instructions,
+    extract_tei_metadata,
+    serialize_tei_with_formatted_header,
+    update_fileref_in_xml,
+)
+from ..lib.utils.xml_utils import apply_entity_encoding_from_config
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/ocr", tags=["ocr"])
@@ -880,6 +945,38 @@ def _review_source(tei: FileMetadata, xml: str, scope: str | None) -> OcrReviewS
         raise HTTPException(status_code=422, detail=str(e)) from e
 
 
+async def _review_images(
+    tei: FileMetadata,
+    source: OcrReviewSource,
+    window_index: int,
+    provider: LLMProvider,
+    model_id: str,
+    repo: FileRepository,
+    storage: FileStorage,
+    user: dict[str, Any],
+) -> list[LLMImage] | None:
+    """
+    The images of the pages of a review window from the TEI's PDF, or None (text only) if the model
+    accepts no images or the PDF is missing, not readable by the user or cannot be rendered.
+    """
+    if not await asyncio.to_thread(provider.supports_image_input, model_id):
+        return None
+    pdf = repo.get_pdf_for_file(tei)
+    if pdf is None or not check_file_access(pdf, user, "read"):
+        logger.info(f"No PDF of {tei.stable_id} to send to {model_id}, reviewing its text only")
+        return None
+    path = storage.get_file_path(pdf.id, "pdf")
+    if path is None or not path.exists():
+        logger.warning(f"The PDF {pdf.stable_id} of {tei.stable_id} is missing, reviewing its text only")
+        return None
+    pages = window_page_indices(source, window_index)
+    try:
+        return await asyncio.to_thread(render_page_images, path, pages)
+    except Exception as e:  # noqa: BLE001 - the window is still reviewed without images
+        logger.warning(f"Cannot render pages {[p + 1 for p in pages]} of {pdf.stable_id}, reviewing them without images: {e!r}")
+        return None
+
+
 @router.post("/llm-review/plan", response_model=OcrReviewPlanResponse)
 async def plan_ocr_llm_review(
     body: OcrReviewPlanRequest,
@@ -901,12 +998,14 @@ async def plan_ocr_llm_review(
 async def ocr_llm_review(
     body: OcrReviewRequest,
     repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
     current_user: dict[str, Any] = Depends(require_authenticated_user),
 ) -> OcrReviewResponse:
     """
     Review one page window of the given (possibly unsaved) content of a zone document for OCR
-    errors with the given provider and model. The response reports how many windows the document
-    has; the client requests each `window_index` in turn. Refused with 422 if the document has no
+    errors with the given provider and model. If the model accepts images, it is also sent the
+    images of the window's pages from the document's PDF (`page_images` in the response). The
+    response reports how many windows the document has; the client requests each `window_index` in turn. Refused with 422 if the document has no
     line layout or is no zone document, 404 for an unknown provider, 428 if the provider needs a
     secret of the user, 403 if the user may not use the model.
     """
@@ -920,7 +1019,8 @@ async def ocr_llm_review(
     try:
         # may list the provider's models, so its connection errors are handled below
         check_model_access(provider, body.model_id, current_user)
-        findings, window_count, discarded = await review_window(source, body.window_index, provider, body.model_id, min_similarity)
+        images = await _review_images(tei, source, body.window_index, provider, body.model_id, repo, storage, current_user)
+        findings, window_count, discarded = await review_window(source, body.window_index, provider, body.model_id, min_similarity, images)
     except Exception as e:
         http_error = llm_http_error(e, body.provider_id)
         if http_error is None:
@@ -934,4 +1034,90 @@ async def ocr_llm_review(
         discarded=discarded,
         window_start=start,
         window_end=end,
+        page_images=images is not None,
     )
+
+
+# ── Training lines for Tesseract (#959) ──────────────────────────────
+
+
+def _write_training_lines(repo: FileRepository, storage: FileStorage, collection: str | None, archive_path: Path) -> tuple[int, int]:
+    """
+    Write the training lines of all zone documents (of a collection) into a zip archive, see
+    `lib/ocr/training_lines.py`. All versions are read, newest first; a line of the same PDF page is
+    taken once. Only documents whose PDF has a text layer made by text recognition contribute.
+
+    Returns:
+        (number of documents with lines, number of lines)
+    """
+    zone_variants: dict[str, bool] = {}
+    seen: set[tuple[str, int, int]] = set()
+    documents: set[str] = set()
+    count = 0
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for tei in repo.list_files(collection=collection, file_type="tei"):
+            if tei.variant is None:
+                continue
+            if tei.variant not in zone_variants:
+                zone_variants[tei.variant] = get_zone_labels(tei.variant) is not None
+            if not zone_variants[tei.variant]:
+                continue
+            pdf = repo.get_pdf_for_file(tei)
+            ocr = pdf.file_metadata.get(OCR_METADATA_KEY) if pdf is not None else None
+            if pdf is None or not isinstance(ocr, dict):
+                continue
+            pdf_path = storage.get_file_path(pdf.id, "pdf")
+            content = storage.read_file(tei.id, "tei")
+            if pdf_path is None or not pdf_path.exists() or content is None:
+                continue
+            xml = content.decode("utf-8")
+            layout = get_line_layout(xml, tei.doc_id, tei.variant)
+            if layout is None:
+                continue
+            try:
+                lines = collect_training_lines(xml, tei.variant, layout, pdf_path)
+            except (ValueError, etree.XMLSyntaxError, pikepdf.PdfError) as e:
+                logger.warning(f"No training lines from {tei.stable_id}: {e}")
+                continue
+            languages = ocr.get("languages")
+            source = LineSource(
+                doc_id=tei.doc_id,
+                stable_id=tei.stable_id,
+                pdf_hash=pdf.id,
+                collections=list(tei.doc_collections or []),
+                languages=[str(lang) for lang in languages] if isinstance(languages, list) else [],
+            )
+            added = write_lines(archive, source, pdf_path, lines, seen)
+            if added:
+                documents.add(tei.doc_id)
+                count += added
+    return len(documents), count
+
+
+@router.get("/training-lines", response_class=FileResponse)
+async def export_training_lines(
+    collection: str | None = Query(None, description="Only documents of this collection"),
+    repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
+    user: dict[str, Any] = Depends(require_admin_user),
+) -> FileResponse:
+    """
+    Zip archive of ground truth lines for training Tesseract (tesstrain layout): for every line of a
+    page marked OK in the unit review of a zone document whose PDF was made by text recognition, the
+    line image (`.png`), its text (`.gt.txt`) and its source (`.json`). Takes a while for many
+    documents. Admins only.
+    """
+    folder = Path(tempfile.mkdtemp(prefix="training-lines-"))
+    archive_path = folder / "training-lines.zip"
+
+    def cleanup() -> None:
+        shutil.rmtree(folder, ignore_errors=True)
+
+    try:
+        documents, lines = await asyncio.to_thread(_write_training_lines, repo, storage, collection, archive_path)
+    except BaseException:
+        cleanup()
+        raise
+    logger.info(f"Exported {lines} training lines of {documents} documents for {user.get('username')}")
+    return FileResponse(path=str(archive_path), media_type="application/zip", filename="training-lines.zip", background=BackgroundTask(cleanup))
+

@@ -164,6 +164,50 @@ const deleteListeners = new Set();
 const fixListeners = new Set();
 
 /**
+ * A diagnostic of a sync source (see {@link registerSyncSource}). `page` (0-based page of the PDF)
+ * is set if the drift can be synchronized by writing the text corrections of that page into the PDF.
+ * @typedef {FixableDiagnostic & {page?: number}} SyncDiagnostic
+ */
+
+/**
+ * @typedef {object} SyncSourceOptions
+ * @property {string} target - What gets out of sync with the TEI, for messages (e.g. "GROBID training data")
+ */
+
+/** @type {Map<string, SyncSourceOptions>} */
+const syncSources = new Map();
+
+/**
+ * Marks the diagnostics of `source` as reporting drift between the TEI text and data derived from
+ * the PDF (its text layer, an extractor's training data), which the sync prompt (sync-prompt.js)
+ * offers to synchronize.
+ * @param {string} source - The `source` of the diagnostics
+ * @param {SyncSourceOptions} options
+ * @returns {() => void} Function removing the registration
+ */
+export function registerSyncSource(source, options) {
+  syncSources.set(source, { ...options });
+  return () => syncSources.delete(source);
+}
+
+/**
+ * The options of a sync source (see {@link registerSyncSource}), or null if `source` is none.
+ * @param {string|undefined} source
+ * @returns {SyncSourceOptions|null}
+ */
+export function syncSourceOptions(source) {
+  return (source !== undefined && syncSources.get(source)) || null;
+}
+
+/**
+ * The sources registered as sync sources (see {@link registerSyncSource}).
+ * @returns {string[]}
+ */
+export function syncSourceNames() {
+  return [...syncSources.keys()];
+}
+
+/**
  * Returns the diagnostics currently stored in the editor state.
  * @param {EditorState} state
  * @returns {Diagnostic[]}

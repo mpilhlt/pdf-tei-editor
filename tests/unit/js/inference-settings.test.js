@@ -137,6 +137,28 @@ describe('InferenceSettingsPlugin copy model id button', () => {
   });
 });
 
+describe('InferenceSettingsPlugin vision icon', () => {
+  const provider = { id: 'kisski', label: 'KISSKI', models: [] };
+
+  it('marks models that accept images', () => {
+    const plugin = makePlugin();
+    plugin._isAdmin = () => false;
+    const item = plugin._buildModelItem(provider, { id: 'qwen-vl', label: 'Qwen VL', capabilities: ['chat', 'vision'], status: null }, null);
+    const icon = item.querySelector('[data-test-id="inference-model-vision"]');
+    assert.ok(icon);
+    assert.strictEqual(icon.getAttribute('name'), 'eye');
+    assert.strictEqual(icon.parentElement.slot, 'suffix');
+    assert.strictEqual(item.textContent, 'Qwen VL');
+  });
+
+  it('shows no icon for text-only models', () => {
+    const plugin = makePlugin();
+    plugin._isAdmin = () => false;
+    const item = plugin._buildModelItem(provider, { id: 'gemma-3', label: 'Gemma 3', capabilities: ['chat'], status: null }, null);
+    assert.strictEqual(item.querySelector('[data-test-id="inference-model-vision"]'), null);
+  });
+});
+
 describe('InferenceSettingsPlugin admin confirmation', () => {
   beforeEach(() => { notifyCalls.length = 0; });
 

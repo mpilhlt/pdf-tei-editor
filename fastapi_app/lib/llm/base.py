@@ -11,8 +11,14 @@ See docs/superpowers/specs/2026-09-24-llm-annotation-review-design.md
 (Part A) for the design rationale.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Literal, TypedDict
+
+logger = logging.getLogger(__name__)
+
+VISION_CAPABILITY = "vision"
+"""The capability of a model (`LLMModel.capabilities`) that accepts images along with the prompt."""
 
 
 class LLMImage(TypedDict):
@@ -48,6 +54,9 @@ class LLMModel(TypedDict):
     an academic cloud); paid models are False and are restricted to
     admins unless an admin picked them as the default model. Admins can
     mark further models as free via `llm.free-models` (see model_access.py).
+
+    `capabilities` holds "chat" for every chat model and VISION_CAPABILITY
+    ("vision") for models that accept images.
     """
 
     id: str
@@ -160,9 +169,16 @@ class LLMProvider(ABC):
     def supports_image_input(self, model_id: str) -> bool:
         """Whether chat_completion_with_images() can send images to `model_id`.
 
-        Default False.
+        Default: whether list_models() reports VISION_CAPABILITY for the model
+        (False if the models cannot be listed). Override when the provider knows
+        without listing its models. May make a network request.
         """
-        return False
+        try:
+            models = self.list_models()
+        except Exception as e:  # noqa: BLE001 - a provider that cannot list its models gets text only
+            logger.warning(f"LLM provider '{self.id}' cannot list its models, assuming '{model_id}' accepts no images: {e}")
+            return False
+        return any(model["id"] == model_id and VISION_CAPABILITY in model["capabilities"] for model in models)
 
     async def chat_completion_with_images(
         self,

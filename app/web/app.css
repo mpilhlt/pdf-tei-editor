@@ -858,6 +858,25 @@ sl-drawer.diagnostics-drawer::part(footer) {
   flex: 1 1 auto;
 }
 
+.diagnostics-drawer-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--sl-color-primary-300);
+  border-radius: var(--sl-border-radius-pill);
+  background: var(--sl-color-primary-50);
+  color: var(--sl-color-primary-700);
+  font: inherit;
+  font-size: var(--sl-font-size-x-small);
+  font-weight: var(--sl-font-weight-normal);
+  cursor: pointer;
+}
+
+.diagnostics-drawer-filter[hidden] {
+  display: none;
+}
+
 .diagnostics-drawer-list {
   padding: 6px;
 }

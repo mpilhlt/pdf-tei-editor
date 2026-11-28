@@ -18,6 +18,9 @@ import { Command } from 'commander';
 
 const APP_NAME = 'pdf-tei-editor';
 
+/** Mount point of the host-wide shared data directory (--shared-dir) in the container */
+const SHARED_DIR_MOUNT = '/app/shared';
+
 /** @type {string|null} */
 let containerCmd = null;
 
@@ -685,7 +688,7 @@ async function startContainer(config) {
 
 /**
  * Handle start command
- * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
+ * @param {{tag?: string, name?: string, port?: number, detach?: boolean, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string, sharedDir?: string}} options
  */
 async function handleStart(options) {
   console.log('PDF TEI Editor - Container Start');
@@ -778,6 +781,12 @@ async function handleStart(options) {
     volumes.push({ host: options.dataDir, container: '/app/data' });
     // Add DATA_ROOT env var when mounting data directory
     additionalEnvVars.push({ key: 'DATA_ROOT', value: '/app/data' });
+  }
+
+  // Add shared-dir as shorthand for the host-wide shared data directory (downloaded models etc.)
+  if (options.sharedDir) {
+    volumes.push({ host: options.sharedDir, container: SHARED_DIR_MOUNT });
+    additionalEnvVars.push({ key: 'SHARED_DATA_DIR', value: SHARED_DIR_MOUNT });
   }
 
   // Add explicit volume mappings
@@ -917,7 +926,7 @@ async function handleStop(options) {
 
 /**
  * Handle restart command
- * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string}} options
+ * @param {{name?: string, tag?: string, port?: number, rebuild?: boolean, cache?: boolean, env?: string[], volume?: string[], restart?: string, dataDir?: string, sharedDir?: string}} options
  */
 async function handleRestart(options) {
   console.log('PDF TEI Editor - Container Restart');
@@ -1308,6 +1317,7 @@ async function setupSSL(fqdn, email) {
  *   port?: number,
  *   type?: string,
  *   dataDir?: string,
+ *   sharedDir?: string,
  *   nginx?: boolean,
  *   ssl?: boolean,
  *   email?: string,
@@ -1409,6 +1419,7 @@ async function handleDeploy(options) {
   if (deploymentType === 'production') {
     console.log(`[INFO]   Data root: ${dataDir || '(container internal)'}`);
   }
+  console.log(`[INFO]   Shared data: ${options.sharedDir || '(in the data root)'}`);
 
   console.log();
   console.log('[INFO] See .env.production for available environment variables');
@@ -1510,6 +1521,12 @@ async function handleDeploy(options) {
     console.log(`[INFO] Data root: ${dataDir} -> /app/data (contains files/ and db/ subdirectories)`);
   } else {
     console.log('[INFO] Demo deployment: using container-internal storage (non-persistent)');
+  }
+
+  if (options.sharedDir) {
+    volumes.push({ host: options.sharedDir, container: SHARED_DIR_MOUNT });
+    additionalEnvVars.push({ key: 'SHARED_DATA_DIR', value: SHARED_DIR_MOUNT });
+    console.log(`[INFO] Shared data: ${options.sharedDir} -> ${SHARED_DIR_MOUNT} (downloaded models, shared by all instances on this host)`);
   }
 
   // Start container
@@ -1652,6 +1669,7 @@ program
   .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
   .option('--volume <mapping>', 'Volume mount (host:container, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
   .option('--data-dir <dir>', 'Mount external data directory to /app/data')
+  .option('--shared-dir <dir>', 'Mount a host-wide shared data directory (downloaded models etc., shared by all instances) to /app/shared')
   .option('--restart <policy>', 'Restart policy (no, on-failure, always, unless-stopped)')
   .option('--rebuild', 'Rebuild image before starting')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
@@ -1677,6 +1695,7 @@ program
   .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
   .option('--volume <mapping>', 'Volume mount (host:container, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
   .option('--data-dir <dir>', 'Mount external data directory to /app/data')
+  .option('--shared-dir <dir>', 'Mount a host-wide shared data directory (downloaded models etc., shared by all instances) to /app/shared')
   .option('--restart <policy>', 'Restart policy (no, on-failure, always, unless-stopped)')
   .option('--rebuild', 'Rebuild image before restarting')
   .option('--no-cache', 'Force rebuild all layers (use with --rebuild)')
@@ -1701,6 +1720,7 @@ program
   .option('--port <port>', 'Host port to bind (default: 8001)', parseInt)
   .option('--type <type>', 'Deployment type: production|demo (default: production)')
   .option('--data-dir <dir>', 'External data root directory (contains files/ and db/ subdirectories, production only)')
+  .option('--shared-dir <dir>', 'Mount a host-wide shared data directory (downloaded models etc., shared by all instances) to /app/shared')
   .option('--env <var>', 'Environment variable (FOO or FOO=bar, can be used multiple times)', (value, previous) => previous ? [...previous, value] : [value])
   .option('--no-nginx', 'Skip nginx configuration')
   .option('--no-ssl', 'Skip SSL certificate setup')
@@ -1715,6 +1735,7 @@ Examples:
   sudo env "PATH=$PATH" node scripts/deploy/container.js deploy \\
     --fqdn editor.company.com \\
     --data-dir /opt/${APP_NAME}/data \\
+    --shared-dir /opt/${APP_NAME}-shared \\
     --pull
 
   # Demo deployment (no external volumes, no persistence)

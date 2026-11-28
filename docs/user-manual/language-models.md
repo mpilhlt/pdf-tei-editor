@@ -11,6 +11,7 @@ Open the <sl-icon name="tools"></sl-icon> **Tools** menu and point at the entry 
 *The models of two providers in the Tools menu. The second model is busy, and Google Gemini needs the user's own API key.*
 
 - A warning icon after a model means that the provider reports it as busy or unavailable at the moment. Hover over the icon to see its status.
+- An <sl-icon name="eye"></sl-icon> eye icon after a model means that it accepts images (a vision model). The review of OCR errors then also sends it the images of the pages, so it can compare the text with the scan. Whether a model accepts images is reported by its provider: KISSKI reports it for each model; Anthropic and Google Gemini models accept images; for an inference endpoint, the administrator sets it.
 - **Add your API key…** under a provider means that the provider runs on your own API key, which you have not entered yet. Selecting it opens the API key dialog (see [Your own API keys](#your-own-api-keys)).
 - **Models unavailable** means that the provider could not list its models; hover over it to see the error. If the provider uses your own key, selecting the entry opens the API key dialog, since a wrong key is the usual cause.
 

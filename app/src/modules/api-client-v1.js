@@ -8,7 +8,8 @@
  *
  * Upload (multipart/form-data) and SSE (text/event-stream) endpoints are
  * intentionally excluded; call `callApi`/`EventSource` directly for those, as
- * documented in docs/code-assistant/api-client.md.
+ * documented in docs/code-assistant/api-client.md. So is the zip download
+ * `GET /ocr/training-lines`, which only `scripts/dev/tesseract-lines.py` uses.
  */
 
 // Type Definitions
@@ -468,6 +469,7 @@
  * @property {string} applied_by - Username
  * @property {OcrMethod=} method - How the text layer was created, if the engine reports it
  * @property {string=} fallback_reason - Why the engine fell back from the preferred method
+ * @property {Array<string>=} models - Recognition models used, if the engine reports them (e.g. `deu`, `best/deu`)
  */
 
 /**
@@ -558,6 +560,7 @@
  * @property {number} discarded - Proposals of the model that were dropped as implausible or not applicable
  * @property {number|null=} window_start - Start of the window's text in `xml` (UTF-16 code units)
  * @property {number|null=} window_end - End of the window's text in `xml` (UTF-16 code units)
+ * @property {boolean=} page_images - Whether the model was sent the images of the window's pages (it accepts images)
  */
 
 /**

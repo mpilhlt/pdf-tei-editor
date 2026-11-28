@@ -67,3 +67,24 @@ def text_layer_provenance(file_metadata: Mapping[str, object]) -> TextLayerProve
     if models:
         description += f" {count} OCR error{'' if count == 1 else 's'} of it {'was' if count == 1 else 'were'} corrected by {', '.join(models)}."
     return TextLayerProvenance(label_suffix=OCR_LABEL_SUFFIX, description=description)
+
+
+def pending_text_correction_pages(file_metadata: Mapping[str, object]) -> list[int]:
+    """
+    The pages (0-based, sorted) whose text corrections were written page by page into the PDF
+    since the document was last updated for its PDF: the `pages` of the text-corrections records
+    at the end of the list. These writes do not update the data of the extractor (such as GROBID's
+    feature file) for the corrected PDF; the next write of the whole document does.
+
+    Args:
+        file_metadata: The file metadata of the PDF
+    """
+    records = file_metadata.get(TEXT_CORRECTIONS_METADATA_KEY)
+    pages: set[int] = set()
+    if not isinstance(records, list):
+        return []
+    for record in reversed(records):
+        if not isinstance(record, Mapping) or not isinstance(record.get("pages"), list):
+            break
+        pages.update(p for p in record["pages"] if isinstance(p, int))
+    return sorted(pages)

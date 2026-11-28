@@ -85,24 +85,24 @@ all = [
 ]
 
 [tool.uv.sources]
-pte-plugin-annotation-history = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-history", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-annotation-progress = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-progress", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-annotation-review = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-review", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-anthropic-llm = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/anthropic-llm", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-archival-edition = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/archival-edition", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-collection-overview = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/collection-overview", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-edit-history = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/edit-history", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-google-llm = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/google-llm", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-grobid = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/grobid", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-iaa-analyzer = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/iaa-analyzer", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-kisski = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/kisski", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-llamore-extractor = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/llamore-extractor", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-local-sync = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/local-sync", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-metadata-extraction = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/metadata-extraction", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-revision-feed = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/revision-feed", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-rng-converter = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/rng-converter", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-update-metadata = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/update-metadata", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
-pte-plugin-webdav-sync = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/webdav-sync", rev = "aa3d6691b3c650a39e9121ed06a6e9c30041d4fd" }
+pte-plugin-annotation-history = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-history", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-annotation-progress = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-progress", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-annotation-review = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/annotation-review", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-anthropic-llm = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/anthropic-llm", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-archival-edition = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/archival-edition", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-collection-overview = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/collection-overview", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-edit-history = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/edit-history", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-google-llm = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/google-llm", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-grobid = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/grobid", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-iaa-analyzer = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/iaa-analyzer", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-kisski = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/kisski", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-llamore-extractor = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/llamore-extractor", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-local-sync = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/local-sync", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-metadata-extraction = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/metadata-extraction", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-revision-feed = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/revision-feed", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-rng-converter = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/rng-converter", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-update-metadata = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/update-metadata", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
+pte-plugin-webdav-sync = { git = "https://github.com/mpilhlt/pte-plugins", subdirectory = "plugins/webdav-sync", rev = "eca5028b6e7b6e8cb14a3e66f4ebf2216b0192b3" }
 
 [tool.uv]
 # scipy <1.16.0 ships a _propack binary with a malformed Mach-O __thread_bss

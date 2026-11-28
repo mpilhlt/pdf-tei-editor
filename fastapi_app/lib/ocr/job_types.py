@@ -328,7 +328,8 @@ def _pages(count: int) -> str:
 def llm_correction_message(run: llm_correction.CorrectionRun, model_id: str) -> str:
     """The sentences about the LLM correction pass appended to the message of the OCR run."""
     count = len(run.corrections)
-    corrected = f"Corrected {count} OCR {'error' if count == 1 else 'errors'} with {model_id}."
+    with_images = " and the page images" if run.page_images else ""
+    corrected = f"Corrected {count} OCR {'error' if count == 1 else 'errors'} with {model_id}{with_images}."
     if run.error:
         message = (corrected + " " if count else "") + f"The LLM correction failed: {run.error}"
     elif count:
@@ -535,6 +536,8 @@ async def _recognize(ctx: JobContext, params: OcrJobParams, user: dict[str, Any]
             record["method"] = result.method
         if result.fallback_reason:
             record["fallback_reason"] = result.fallback_reason
+        if result.models:
+            record["models"] = result.models
         file_metadata = {**file.file_metadata, OCR_METADATA_KEY: record}
         result_pdf = _store_pdf(repo, storage, file, output_path.read_bytes(), file_metadata, user)
         logger.info(f"Applied OCR ({engine.id}, {result.method or 'default method'}, {languages}) to {file.stable_id}: {file.id[:8]} -> {result_pdf.stable_id} ({result_pdf.id[:8]})")

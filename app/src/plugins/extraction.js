@@ -977,7 +977,7 @@ function renderTextQuality(container, report, message = '', pending = '') {
   }
   if (report.ocr_applied) {
     const date = new Date(report.ocr_applied.applied_at).toLocaleString()
-    details.push(`Text recognition was applied on ${date} (${report.ocr_applied.engine}, ${report.ocr_applied.languages.join(', ')}).`)
+    details.push(`Text recognition was applied on ${date} (${report.ocr_applied.engine}, ${(report.ocr_applied.models || report.ocr_applied.languages).join(', ')}).`)
     if (report.ocr_applied.method === 'force') {
       const reason = report.ocr_applied.fallback_reason ? `, since ${report.ocr_applied.fallback_reason}` : ''
       details.push(`The pages were converted to images${reason}.`)

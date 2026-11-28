@@ -27,6 +27,7 @@ from fastapi_app.lib.core.dependencies import (
     require_reviewer_or_admin,
 )
 from fastapi_app.lib.core.locking import register_lock_holder, unregister_lock_holder
+from fastapi_app.lib.core.shared_data import download_shared_file, get_shared_data_dir
 from fastapi_app.lib.core.gc_hooks import register_gc_handler, unregister_gc_handler
 from fastapi_app.lib.core.gc_registry import (
     GcContext,
@@ -89,6 +90,7 @@ from fastapi_app.lib.ocr.text_corrections import (
     register_corrected_pdf_handler,
     unregister_corrected_pdf_handler,
 )
+from fastapi_app.lib.ocr.provenance import pending_text_correction_pages
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.services.service_registry import BaseService, get_service_registry
 from fastapi_app.lib.sse.event_bus import EventBus, get_event_bus
@@ -139,6 +141,7 @@ __all__ = [
     "PAGES_UNIT_PATH",
     "get_completion_session",
     "get_corrected_pdf_handler",
+    "pending_text_correction_pages",
     "post_completion",
     "rate_limit_http_error",
     "ModelStatus",
@@ -149,6 +152,7 @@ __all__ = [
     "PluginContext",
     "clear_directory",
     "clear_directory_result",
+    "download_shared_file",
     "generate_datatable_page",
     "get_config",
     "get_current_user",
@@ -163,6 +167,7 @@ __all__ = [
     "get_service_registry",
     "get_session_manager",
     "get_settings",
+    "get_shared_data_dir",
     "get_sse_service",
     "load_plugin_html",
     "register_bundled_schema",
