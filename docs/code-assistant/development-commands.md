@@ -36,7 +36,7 @@ FASTAPI_ALLOW_ANONYMOUS_ACCESS=true npm run start:dev
 npm run build
 
 # Generate the plugin and module registries, the importmap and the highlight.js bundle
-# (run by npm install and npm run start:dev)
+# (run by npm install and npm run start:dev; npm install also runs npm run build)
 npm run generate
 ```
 
@@ -91,7 +91,7 @@ npm run manage-remote -- config set <key> <json_value>
 2. **DO NOT rebuild after frontend changes** - The importmap loads source files directly in development mode
 3. **Backend changes**: Server auto-reloads automatically (FastAPI dev server detects changes), including changes to plugins installed as editable packages from a pte-plugins checkout (`npm run dev:install` there) and to `FASTAPI_PLUGIN_PATHS` plugins
 4. **Schema updates**: Delete `schema/cache/` to refresh XSD cache
-5. **Building is only needed for production**. The production bundle (templates, version file, PDF.js, Rollup bundle, icons) is built inside the Docker image, both in CI and for releases, so there is no git hook for it. The files that loading the frontend from source needs (`app/src/plugin-registry.js`, `app/src/module-registry.js`, `app/web/importmap.json`, `app/web/highlight.js`) are generated and not under version control. `npm run generate` creates them; `npm install` and `npm run start:dev` run it. After adding or removing a frontend plugin, a `@registerModule` module or an npm dependency while the dev server runs, run `npm run generate`.
+5. `npm run generate` vs. `npm run build`. `generate` creates the files needed to load the frontend from source (`?dev` URL parameter): `app/src/plugin-registry.js`, `app/src/module-registry.js`, `app/web/importmap.json`, `app/web/highlight.js`. They are not under version control. `npm run start:dev` and `npm install` (`prepare` hook) run it. After adding or removing a frontend plugin, a `@registerModule` module or an npm dependency while the dev server runs, run `npm run generate`. `build` runs these steps plus the production bundle (templates, version file, PDF.js, Rollup bundle `app/web/app.js`, icons). Without `?dev`, even the dev server serves this bundle, so `npm install` also runs `build` (`postinstall` hook) to make a fresh checkout usable; the bundle is then only updated by running `npm run build` again (the E2E runner rebuilds it when sources are newer). The Docker image installs with `--ignore-scripts` and runs `build` itself.
 
 ## Critical Reminders
 
