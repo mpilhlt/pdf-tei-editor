@@ -68,7 +68,7 @@ import { xml, xmlLanguage } from "@codemirror/lang-xml";
 import { syntaxTree, syntaxParserRunning, indentUnit, foldInside, foldedRanges, foldEffect, unfoldEffect, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, bracketMatching } from "@codemirror/language"
 import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands"
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete"
-import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
+import { searchKeymap } from "@codemirror/search"
 import { linter, lintGutter, forceLinting, nextDiagnostic } from "@codemirror/lint"
 
 // custom modules
@@ -76,6 +76,7 @@ import { linter, lintGutter, forceLinting, nextDiagnostic } from "@codemirror/li
 import { selectionChangeListener, isExtension } from './codemirror/codemirror-utils.js';
 import { EventEmitter } from './event-emitter.js';
 import { xmlTagSync } from "./codemirror/xml-tag-sync.js";
+import { selectionMatches } from "./codemirror/selection-matches.js";
 import { createCompletionSource } from './codemirror/autocomplete.js';
 import { XmlEditorDomSync } from './xml-editor-dom-sync.js';
 import { getTheme } from './codemirror/editor-themes.js';
@@ -293,7 +294,7 @@ export class XMLEditor extends EventEmitter {
       rectangularSelection(),
       crosshairCursor(),
       highlightActiveLine(),
-      highlightSelectionMatches(),
+      selectionMatches(),
       keymap.of([
         ...closeBracketsKeymap,
         ...defaultKeymap,

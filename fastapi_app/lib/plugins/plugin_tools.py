@@ -35,8 +35,12 @@ def get_plugin_config(
     """
     Get plugin configuration value with env var fallback.
 
-    Priority: config.json > environment variable > default
-    Creates config key from env var if it doesn't exist.
+    Priority: non-empty config.json value > non-empty environment variable > default.
+    An empty string counts as unset in both places.
+
+    If the key does not exist, it is created with the resulting value. A key stored as an empty
+    string stays empty, so that the environment variable keeps applying when it is set later;
+    a non-empty stored value overrides the environment variable.
 
     Args:
         config_key: Dot-notation config key (e.g., "plugin.local-sync.enabled")
@@ -49,8 +53,7 @@ def get_plugin_config(
             the config editor and excluded from the public (pre-auth) config. Any plugin
             that reads credentials from environment variables MUST pass masked=True.
             A masked key without a value is stored as an empty string, so that
-            administrators can set it in the config editor; an empty string counts as
-            unset, so the environment variable still applies.
+            administrators can set it in the config editor.
 
     Returns:
         Configuration value
@@ -68,13 +71,12 @@ def get_plugin_config(
     from fastapi_app.lib.utils.config_utils import get_config
 
     config = get_config()
-    value = config.get(config_key)
-    if masked and value == "":
-        value = None
+    stored = config.get(config_key)
+    value = None if stored == "" else stored
 
     if value is None:
         env_value = os.environ.get(env_var)
-        if env_value is not None:
+        if env_value:
             if value_type == "boolean":
                 value = env_value.lower() in ("true", "1", "yes")
             elif value_type == "number":
@@ -87,15 +89,17 @@ def get_plugin_config(
         else:
             value = default
 
-    # Always persist metadata (description, allowed_values, masked) so re-registration on startup
-    # updates metadata even when the config key already has a stored value.
+    # A stored value is kept as it is (an empty one, so that the environment variable keeps
+    # applying); a missing key is created with the resulting value. Metadata (description,
+    # allowed_values, masked) is always persisted, so re-registration on startup updates it.
     # Only pass masked=True (never False) to avoid overwriting an existing masked=True.
-    if value is not None:
-        config.set(config_key, value, allowed_values=allowed_values, description=description,
-                   masked=True if masked else None)
-    elif masked:
+    to_store = value if stored is None else stored
+    if to_store is None and masked:
         # Make the unset secret visible (as "not set") in the config editor
-        config.set(config_key, "", description=description, masked=True)
+        to_store = ""
+    if to_store is not None:
+        config.set(config_key, to_store, allowed_values=allowed_values, description=description,
+                   masked=True if masked else None)
 
     return value
 

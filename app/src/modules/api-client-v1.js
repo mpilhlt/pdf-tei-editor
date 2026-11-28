@@ -468,6 +468,7 @@
  * @property {string} applied_by - Username
  * @property {OcrMethod=} method - How the text layer was created, if the engine reports it
  * @property {string=} fallback_reason - Why the engine fell back from the preferred method
+ * @property {Array<string>=} models - Recognition models used, if the engine reports them (e.g. `deu`, `best/deu`)
  */
 
 /**
@@ -2601,6 +2602,21 @@ export class ApiClientV1 {
   async ocrTextCorrectionsApply(requestBody) {
     const endpoint = `/ocr/text-corrections/apply`
     return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Cancel the preview or the write of text corrections of this session that reports its steps to
+   * the progress widget `progressId`. The request stops at its next page or step and is rejected
+   * with 409 and the detail `{code: 'cancelled', message}`; the PDF and the document stay
+   * unchanged. A request past the point where it stores its result finishes as usual.
+   * Requires the reviewer role.
+   *
+   * @param {string} progressId
+   * @returns {Promise<{requested: boolean}>}
+   */
+  async ocrTextCorrectionsCancel(progressId) {
+    const endpoint = `/ocr/text-corrections/cancel/${encodeURIComponent(progressId)}`
+    return this.callApi(endpoint, 'POST');
   }
 
   /**

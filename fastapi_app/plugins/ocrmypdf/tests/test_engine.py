@@ -14,6 +14,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from fastapi_app.lib.models.models_ocr import TextQualityReport
 from fastapi_app.plugins.ocrmypdf.engine import (
+    MODEL_BEST,
+    MODEL_FAST,
     MODE_REDO,
     MODE_SKIP,
     MODE_VECTORIZE,
@@ -95,6 +97,34 @@ class TestTesseractLanguageMapping(unittest.TestCase):
         self.assertEqual(language_to_tesseract("zh-Hans", available), "chi_sim")
         self.assertEqual(language_to_tesseract("en-US", available), "eng")
         self.assertIsNone(language_to_tesseract("fr", available))
+
+
+def engine_with_models(codes: list[str]) -> OcrmypdfEngine:
+    """Create an engine that reports the given installed Tesseract models."""
+    engine = OcrmypdfEngine()
+    engine._tesseract_codes = codes
+    return engine
+
+
+class TestRecognitionModel(unittest.TestCase):
+    def test_best_models_are_not_languages(self):
+        engine = engine_with_models(["deu", "eng", "best/deu", "osd"])
+        self.assertEqual(engine.get_languages(), ["de", "en"])
+
+    def test_model_option_only_with_best_models(self):
+        self.assertNotIn("model", engine_with_models(["deu", "eng"]).get_options())
+        option = engine_with_models(["deu", "best/deu"]).get_options()["model"]
+        self.assertEqual(option.get("options"), [MODEL_FAST, MODEL_BEST])
+        self.assertEqual(option.get("default"), MODEL_FAST)
+
+    def test_tesseract_languages_by_model(self):
+        engine = engine_with_models(["deu", "eng", "best/deu"])
+        self.assertEqual(engine._tesseract_languages(["de", "en"]), ["deu", "eng"])
+        self.assertEqual(engine._tesseract_languages(["de", "en"], MODEL_FAST), ["deu", "eng"])
+        # eng has no best model and falls back to the fast one
+        self.assertEqual(engine._tesseract_languages(["de", "en"], MODEL_BEST), ["best/deu", "eng"])
+        with self.assertRaises(ValueError):
+            engine._tesseract_languages(["fr"], MODEL_BEST)
 
 
 if __name__ == "__main__":

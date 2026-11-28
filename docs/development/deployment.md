@@ -34,6 +34,7 @@ The script:
 3. Converts `DEPLOY_*` variables to command-line options:
    - `DEPLOY_FQDN=example.org` → `--fqdn example.org`
    - `DEPLOY_DATA_DIR=/path` → `--data-dir /path`
+   - `DEPLOY_SHARED_DIR=/path` → `--shared-dir /path`
    - `DEPLOY_REBUILD=true` → `--rebuild`
    - `DEPLOY_REBUILD=(''|0|false|off)` → (omitted)
 4. Detects localhost deployments (`localhost` or `127.0.0.1`) and adds `--no-nginx --no-ssl`
@@ -170,6 +171,7 @@ Includes DNS resolution check before attempting certificate request.
 | `--port <port>` | Optional | Host port (default: `8001`) |
 | `--type <type>` | Optional | `production` or `demo` (default: `production`) |
 | `--data-dir <dir>` | Optional | Persistent data directory (production only) |
+| `--shared-dir <dir>` | Optional | Host-wide shared data directory (downloaded models), mounted at `/app/shared` with `SHARED_DATA_DIR` set; shared by all instances on the host |
 | `--env <var>` | Multiple | Environment variables (`FOO` or `FOO=bar`) |
 | `--no-nginx` | Flag | Skip nginx configuration |
 | `--no-ssl` | Flag | Skip SSL certificate setup |

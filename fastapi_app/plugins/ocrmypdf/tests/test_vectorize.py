@@ -200,7 +200,7 @@ class TestReplacementChain(unittest.TestCase):
         self.engine = OcrmypdfEngine()
         self.runs: list[tuple[str, str]] = []
         patches = [
-            patch.object(OcrmypdfEngine, "_tesseract_languages", lambda self, languages: ["eng"]),
+            patch.object(OcrmypdfEngine, "_tesseract_languages", lambda self, languages, model="fast": ["eng"]),
             patch.object(OcrmypdfEngine, "_run_ocrmypdf", staticmethod(self._fake_run)),
         ]
         for p in patches:

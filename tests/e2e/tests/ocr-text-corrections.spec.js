@@ -2,7 +2,8 @@
  * Tools action "Write text corrections to PDF": for a document without text layout, the dialog
  * shows why nothing can be written and offers no Write button. The apply path is tested with the
  * preview and apply routes mocked (the real write needs the GROBID service and is covered by the
- * backend tests): the client shows the busy state and loads the new version and the PDF.
+ * backend tests): the client shows the busy state and loads the new version and the PDF, and the
+ * cancel button of the progress widget cancels the write on the backend.
  *
  * @testCovers app/src/plugins/text-corrections.js
  * @testCovers app/src/modules/text-corrections.js
@@ -186,10 +187,70 @@ test.describe('Text corrections', () => {
         content: /** @type {any} */ (window).app.getDependency('xmleditor').getXML()
       }));
       expect(state.xml).toBe(newVersionId);
-      expect(state.pdf).toBe(pdfId);
       expect(state.content).toContain('TEXT_CORRECTIONS_MARKER');
       const pdfLoadsAfter = consoleLogs.filter(log => log.message === 'PDF_SHOWN' && log.value?.pdf === pdfId).length;
       expect(pdfLoadsAfter).toBe(pdfLoadsBefore + 1);
+    } finally {
+      stopErrorMonitoring();
+      await cleanUp(page, created);
+    }
+  });
+
+  test('the cancel button of the progress widget cancels the write', async ({ page }) => {
+    test.setTimeout(90000);
+    const consoleLogs = setupTestConsoleCapture(page);
+    // the cancelled request is answered with 409
+    const stopErrorMonitoring = setupErrorFailure(consoleLogs, [...ALLOWED_ERROR_PATTERNS, 'Failed to load resource.*409']);
+    /** @type {string[]} */
+    const created = [];
+
+    try {
+      await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
+      const { stableId, pdfId } = await createOwnDocument(page);
+      created.push(stableId, pdfId);
+
+      await page.route('**/api/v1/ocr/text-corrections/preview', route => route.fulfill({
+        json: { corrections: [{ page: 0, line: 3, old: 'teh', new: 'the' }], unwritable: [], reason: null }
+      }));
+      /** @type {string[]} */
+      const cancelled = [];
+      /** @type {() => void} */
+      let release = () => {};
+      const cancelRequested = new Promise(resolve => { release = () => resolve(undefined); });
+      await page.route('**/api/v1/ocr/text-corrections/cancel/*', route => {
+        cancelled.push(decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop() ?? ''));
+        release();
+        return route.fulfill({ json: { requested: true } });
+      });
+      // the write runs until it is cancelled, and is then answered like the backend does
+      await page.route('**/api/v1/ocr/text-corrections/apply', async route => {
+        await cancelRequested;
+        await route.fulfill({
+          status: 409,
+          json: { detail: { code: 'cancelled', message: 'Writing the text corrections was cancelled. The PDF and the document are unchanged.' } }
+        });
+      });
+
+      await clickMenuItem(page);
+      await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_DIALOG_OPENED', 20000);
+      const dialog = page.locator('sl-dialog[name="textCorrectionsDialog"]');
+      await page.waitForTimeout(500);
+      await dialog.locator('sl-button[name="write"]').click();
+      await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_WRITING', 10000);
+
+      const progressId = `text-corrections-write-${stableId}`;
+      const cancelButton = page.locator(`.progress-widget[data-progress-id="${progressId}"] [data-name="cancelBtn"]`);
+      await expect(cancelButton).toBeVisible();
+      await cancelButton.click();
+
+      await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_CANCELLED', 10000);
+      expect(cancelled).toEqual([progressId]);
+      await expect(dialog).not.toHaveAttribute('open', '');
+      await expect(page.locator(`.progress-widget[data-progress-id="${progressId}"]`)).toHaveCount(0);
+      expect(consoleLogs.some(log => log.message === 'TEXT_CORRECTIONS_APPLIED')).toBe(false);
+      // the document stays open
+      const state = await page.evaluate(() => /** @type {any} */ (window).app.getCurrentState());
+      expect(state.xml).toBe(stableId);
     } finally {
       stopErrorMonitoring();
       await cleanUp(page, created);

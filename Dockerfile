@@ -13,6 +13,11 @@ ARG NODE_VERSION=26
 # Tesseract language models for text recognition (OCRmyPDF plugin), as Debian package suffixes
 # (tesseract-ocr-<lang>). Example: --build-arg TESSERACT_LANGS="eng deu fra"
 ARG TESSERACT_LANGS="eng deu fra ita spa por nld lat grc ell rus pol ces"
+# The Debian packages contain the tessdata_fast models. For the languages in TESSERACT_BEST_LANGS
+# (e.g. "eng deu"), the OCRmyPDF plugin downloads the more accurate (and slower) tessdata_best models
+# at startup into the shared data directory (SHARED_DATA_DIR, ~10 MB each, once per host), see
+# docs/user-manual/docker-deployment.md. Default: none. Can also be set at runtime.
+ARG TESSERACT_BEST_LANGS=""
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -32,6 +37,8 @@ RUN apt-get update && apt-get install -y \
     # Clean up package cache
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+ENV TESSERACT_BEST_LANGS="${TESSERACT_BEST_LANGS}"
 
 # Install Node.js via NodeSource repository (avoids tar permission issues)
 RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \

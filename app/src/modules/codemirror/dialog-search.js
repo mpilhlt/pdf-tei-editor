@@ -7,7 +7,8 @@
  */
 
 import { EditorView, ViewPlugin, keymap } from "@codemirror/view"
-import { highlightSelectionMatches, searchKeymap, searchPanelOpen } from "@codemirror/search"
+import { searchKeymap, searchPanelOpen } from "@codemirror/search"
+import { selectionMatches } from "./selection-matches.js"
 
 /**
  * Keeps an Escape that closes the search panel from also closing the
@@ -44,7 +45,7 @@ const escapeGuard = ViewPlugin.fromClass(class {
 
 /**
  * Search/replace extensions matching the main XML editor's (`searchKeymap`
- * and `highlightSelectionMatches()`, see xmleditor.js), plus a guard so that
+ * and `selectionMatches()`, see xmleditor.js), plus a guard so that
  * Escape in the search panel doesn't close the enclosing dialog.
  *
  * The `tabindex` keeps the content focusable while `EditorView.editable` is
@@ -54,7 +55,7 @@ const escapeGuard = ViewPlugin.fromClass(class {
  */
 export function dialogSearch() {
   return [
-    highlightSelectionMatches(),
+    selectionMatches(),
     keymap.of(searchKeymap),
     EditorView.contentAttributes.of({ tabindex: '0' }),
     escapeGuard

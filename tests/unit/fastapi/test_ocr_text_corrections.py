@@ -4,6 +4,8 @@ text layer (#931).
 
 @testCovers fastapi_app/routers/ocr.py::preview_text_corrections
 @testCovers fastapi_app/routers/ocr.py::apply_text_corrections
+@testCovers fastapi_app/routers/ocr.py::cancel_text_corrections
+@testCovers fastapi_app/lib/ocr/cancel_requests.py
 @testCovers fastapi_app/lib/repository/file_repository.py::get_current_pdf_teis
 @testCovers fastapi_app/lib/models/models_ocr.py
 @testCovers fastapi_app/lib/ocr/text_layer.py::read_text_layer
@@ -28,6 +30,7 @@ from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_authenticated_user
 from fastapi_app.lib.core.locking import acquire_lock, check_lock
 from fastapi_app.lib.models.models import FileCreate, FileMetadata
+from fastapi_app.lib.ocr.cancel_requests import CancelRequests
 from fastapi_app.lib.ocr.jobs import OcrJobStore
 from fastapi_app.lib.ocr.text_corrections import CorrectedPdfMismatch, register_corrected_pdf_handler, unregister_corrected_pdf_handler
 from fastapi_app.lib.ocr.text_layer import read_text_layer
@@ -89,6 +92,7 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         register_layout_provider(VARIANT, "test", lambda xml, doc_id: self.layout)
         self.handler_calls: list[tuple[str, str, Path, str, frozenset[int]]] = []
         self.handler_error: Exception | None = None
+        self.cancel_in_handler = False
         register_corrected_pdf_handler(VARIANT, "test", self.handler)
 
         self.allowed = True
@@ -102,6 +106,8 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         app.dependency_overrides[get_file_repository] = lambda: self.repo
         app.dependency_overrides[get_file_storage] = lambda: self.storage
         app.dependency_overrides[ocr_router.get_ocr_job_store] = lambda: self.jobs
+        self.cancels = CancelRequests(self.tmp / "cancel")
+        app.dependency_overrides[ocr_router.get_text_corrections_cancels] = lambda: self.cancels
         self.sse = MagicMock()
         app.dependency_overrides[get_sse_service] = lambda: self.sse
         app.dependency_overrides[get_session_manager] = lambda: MagicMock()
@@ -120,6 +126,8 @@ class TestTextCorrectionRoutes(unittest.TestCase):
 
     def handler(self, xml: str, doc_id: str, pdf_path: Path, pdf_hash: str, corrected_lines: frozenset[int]) -> str:
         self.handler_calls.append((xml, doc_id, pdf_path, pdf_hash, corrected_lines))
+        if self.cancel_in_handler:
+            self.cancels.request(SESSION, "p1")
         if self.handler_error is not None:
             raise self.handler_error
         return xml.replace("OLD-HASH", pdf_hash)
@@ -458,6 +466,71 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         response = self.apply(pages=[0])
         self.assertEqual((response.status_code, response.json()["detail"]), (409, ocr_router.FROZEN_MESSAGE))
         self.assertEqual(self.repo.get_file_by_stable_id("tei1").pdf_stable_id, "pdf1")  # type: ignore[union-attr]
+
+    def cancel_while_reading(self) -> None:
+        """Cancel the request with progress widget "p1" while it reads the lines of the document."""
+        def layout(xml: str, doc_id: str) -> LineLayout | None:
+            self.cancels.request(SESSION, "p1")
+            return self.layout
+        unregister_layout_provider(VARIANT)
+        register_layout_provider(VARIANT, "test", layout)
+
+    def assert_cancelled(self, response: Any) -> None:
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(response.json()["detail"], {"code": "cancelled", "message": ocr_router.CANCELLED_MESSAGE})
+        # nothing was changed, and the request is forgotten
+        self.assertEqual([p.stable_id for p in self.repo.get_document_pdfs("doc1")], ["pdf1"])
+        tei = self.repo.get_file_by_stable_id("tei1")
+        assert tei is not None
+        self.assertEqual(tei.pdf_stable_id, "pdf1")
+        self.assertEqual(self.storage.read_file(tei.id, "tei"), tei_xml(corrected(LINES)).encode())
+        self.assertEqual(self.repo.get_latest_tei_version("doc1", VARIANT).stable_id, "tei2")  # type: ignore[union-attr]
+        self.assertFalse(self.cancels.is_requested(SESSION, "p1"))
+
+    def test_cancel_preview(self):
+        self.cancel_while_reading()
+        with self.assertLogs("fastapi_app.routers.ocr", level="INFO"):
+            response = self.client.post("/ocr/text-corrections/preview", json={"stable_id": "tei1", "progress_id": "p1"})
+        self.assert_cancelled(response)
+        # it stopped at the first page
+        self.assertNotIn("Comparing the document with the text layer: page 1 of 1", self.progress_labels("p1"))
+
+    def test_cancel_write_of_pages(self):
+        self.cancel_while_reading()
+        with self.assertLogs("fastapi_app.routers.ocr", level="INFO"):
+            response = self.apply(pages=[0], progress_id="p1")
+        self.assert_cancelled(response)
+
+    def test_cancel_write_while_the_extractor_runs(self):
+        stored = set(self.stored_pdfs())
+        self.assertTrue(stored)
+        self.cancel_in_handler = True
+        with self.assertLogs("fastapi_app.routers.ocr", level="INFO"):
+            response = self.apply(progress_id="p1")
+        self.assertEqual(len(self.handler_calls), 1)
+        self.assert_cancelled(response)
+        # the corrected PDF stored for the extractor is removed again
+        self.assertEqual(set(self.stored_pdfs()), stored)
+        self.assertNotIn("Saving the new version of the document", self.progress_labels("p1"))
+
+    def test_cancel_of_an_earlier_run_does_not_apply(self):
+        self.assertEqual(self.client.post("/ocr/text-corrections/cancel/p1").json(), {"requested": True})
+        self.assertTrue(self.cancels.is_requested(SESSION, "p1"))
+        self.assertEqual(self.apply(progress_id="p1").status_code, 200)
+        self.assertFalse(self.cancels.is_requested(SESSION, "p1"))
+
+    def test_cancel_applies_to_own_session_only(self):
+        self.cancels.request("other-session", "p1")
+        self.cancel_in_handler = False
+        self.assertEqual(self.apply(progress_id="p1").status_code, 200)
+
+    def test_cancel_requires_reviewer(self):
+        self.user = ANNOTATOR
+        self.assertEqual(self.client.post("/ocr/text-corrections/cancel/p1").status_code, 403)
+        self.assertFalse(self.cancels.is_requested(SESSION, "p1"))
+
+    def stored_pdfs(self) -> list[Path]:
+        return sorted((self.tmp / "files").rglob("*.pdf"))
 
 
 if __name__ == "__main__":
