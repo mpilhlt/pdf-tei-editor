@@ -110,6 +110,17 @@ async function typeBeforeBody(page, text) {
 }
 
 /**
+ * Types `SYNC<n> ` before `<body` and waits until the drawer lists its sync diagnostic, which the
+ * test source adds asynchronously: a check before that would find nothing new.
+ * @param {Page} page
+ * @param {number} n
+ */
+async function typeSync(page, n) {
+  await typeBeforeBody(page, `SYNC${n} `);
+  await expect.poll(async () => (await drawer(page)).sync).toContain(`Sync: unexpected token "SYNC${n}"`);
+}
+
+/**
  * Checks for new sync diagnostics now; resolves with the choice once the prompt is closed, or
  * null right away if it was not shown. Not awaited by the caller while the prompt is shown.
  * @param {Page} page
@@ -210,7 +221,7 @@ test.describe('Sync prompt', () => {
 
       // the same diagnostic does not ask again; Show changes filters the drawer
       expect(await checkNow(page)).toBeNull();
-      await typeBeforeBody(page, 'SYNC4 ');
+      await typeSync(page, 4);
       const shown = checkNow(page);
       await clickDialog(page, 'showChanges');
       expect(await shown).toBe('show');
@@ -227,13 +238,13 @@ test.describe('Sync prompt', () => {
       expect((await drawer(page)).filtered).toBe(false);
 
       // Don't ask again turns the prompt off for the document
-      await typeBeforeBody(page, 'SYNC5 ');
+      await typeSync(page, 5);
       const cancelled = checkNow(page);
       await page.waitForTimeout(500);
       await page.locator(`sl-dialog[name="syncPromptDialog"] [name="dontAsk"]`).first().click();
       await clickDialog(page, 'notNow');
       expect(await cancelled).toBe('cancel');
-      await typeBeforeBody(page, 'SYNC6 ');
+      await typeSync(page, 6);
       expect(await checkNow(page)).toBeNull();
       expect(await page.evaluate(() => /** @type {any} */ (window).app.getDependency('sync-prompt').isOffForDocument())).toBe(true);
       expect(await page.evaluate(() => /** @type {any} */ (window).writtenPages)).toEqual([[1], [1, 3, 8]]);

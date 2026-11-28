@@ -892,7 +892,7 @@ sl-drawer.diagnostics-drawer::part(footer) {
   display: none;
 }
 
-.diagnostics-drawer-sync-group .diagnostics-drawer-list {
+.diagnostics-drawer-sync-list {
   padding: 6px 0;
 }
 
