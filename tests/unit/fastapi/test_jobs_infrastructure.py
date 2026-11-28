@@ -331,5 +331,72 @@ class TestJobsInfrastructure(JobsTestCase):
             self.assertEqual(client.get(f"{url}/missing.txt", headers=headers("alice-session")).status_code, 404)
 
 
+    def test_jobs_of_other_users_are_private(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 100, "delay_ms": 50}})
+            self.wait_for(client, job["id"], ("active",))
+            url = f"/api/v1/jobs/{job['id']}"
+            self.assertEqual(client.get(url, headers=headers("bob-session")).status_code, 404)
+            self.assertEqual(client.get("/api/v1/jobs", headers=headers("bob-session")).json(), [])
+            self.assertEqual(client.get("/api/v1/jobs", headers=headers("alice-session")).json()[0]["id"], job["id"])
+            # an invisible job is reported as missing, for cancel and delete too
+            self.assertEqual(client.post(f"{url}/cancel", headers=headers("bob-session")).status_code, 404)
+            self.assertEqual(client.delete(url, headers=headers("bob-session")).status_code, 404)
+            self.assertEqual(client.get(url, headers=headers("alice-session")).json()["status"], "active")
+            client.post(f"{url}/cancel", headers=headers("alice-session"))
+
+    def test_shared_job_visible_but_not_cancellable_by_others(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 100, "delay_ms": 50}, "visibility": "users"})
+            self.wait_for(client, job["id"], ("active",))
+            url = f"/api/v1/jobs/{job['id']}"
+            self.assertEqual(client.get(url, headers=headers("bob-session")).status_code, 200)
+            self.assertEqual(client.post(f"{url}/cancel", headers=headers("bob-session")).status_code, 403)
+            self.assertEqual(client.delete(url, headers=headers("bob-session")).status_code, 403)
+            client.post(f"{url}/cancel", headers=headers("alice-session"))
+
+    def test_admin_lists_cancels_and_deletes_jobs_of_others(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 100, "delay_ms": 50}})
+            self.wait_for(client, job["id"], ("active",))
+            url = f"/api/v1/jobs/{job['id']}"
+            listed = client.get("/api/v1/jobs", headers=headers("admin-session")).json()
+            self.assertEqual([(j["id"], j["owner"]) for j in listed], [(job["id"], "alice")])
+            self.assertEqual(client.get("/api/v1/jobs", params={"mine": "true"}, headers=headers("admin-session")).json(), [])
+            self.assertEqual(client.post(f"{url}/cancel", headers=headers("admin-session")).status_code, 200)
+            self.assertEqual(self.wait_for(client, job["id"], ("cancelled", "done", "error"))["status"], "cancelled")
+            self.assertEqual(client.delete(url, headers=headers("admin-session")).status_code, 200)
+            self.assertEqual(client.get(url, headers=headers("admin-session")).status_code, 404)
+            self.assertEqual(client.get("/api/v1/jobs", headers=headers("admin-session")).json(), [])
+
+    def test_bulk_operations_are_admin_only(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 100, "delay_ms": 50}})
+            self.wait_for(client, job["id"], ("active",))
+            self.assertEqual(client.post("/api/v1/jobs/cancel-all", json={}, headers=headers("alice-session")).status_code, 403)
+            self.assertEqual(client.delete("/api/v1/jobs", headers=headers("alice-session")).status_code, 403)
+            response = client.post("/api/v1/jobs/cancel-all", json={}, headers=headers("admin-session"))
+            self.assertEqual((response.status_code, response.json()), (200, {"count": 1}))
+            self.assertEqual(self.wait_for(client, job["id"], ("cancelled", "done", "error"))["status"], "cancelled")
+
+    def test_cancelling_a_finished_job_returns_it_unchanged(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 1, "delay_ms": 1}})
+            done = self.wait_for(client, job["id"], ("done", "error"))
+            for session in ("alice-session", "admin-session"):
+                response = client.post(f"/api/v1/jobs/{job['id']}/cancel", headers=headers(session))
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual((response.json()["status"], response.json()["result"]), ("done", done["result"]))
+            # the owner may delete the finished job
+            self.assertEqual(client.delete(f"/api/v1/jobs/{job['id']}", headers=headers("alice-session")).status_code, 200)
+
+    def test_non_admin_cannot_delete_unfinished_job(self) -> None:
+        with self.make_client(self.make_manager()) as client:
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 100, "delay_ms": 50}})
+            self.wait_for(client, job["id"], ("active",))
+            self.assertEqual(client.delete(f"/api/v1/jobs/{job['id']}", headers=headers("alice-session")).status_code, 409)
+            client.post(f"/api/v1/jobs/{job['id']}/cancel", headers=headers("alice-session"))
+
+
 if __name__ == "__main__":
     unittest.main()

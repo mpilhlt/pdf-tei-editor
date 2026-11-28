@@ -1,0 +1,35 @@
+<sl-dialog name="jobsAdminDialog" label="Jobs" class="jobs-admin-dialog" style="--width: 70rem;">
+  <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: end;">
+      <sl-select name="statusFilter" label="Status" size="small" value="unfinished" style="min-width: 10rem;">
+        <sl-option value="unfinished">Unfinished</sl-option>
+        <sl-option value="all">All</sl-option>
+      </sl-select>
+      <sl-select name="typeFilter" label="Type" size="small" value="" style="min-width: 14rem;">
+        <sl-option value="">All types</sl-option>
+      </sl-select>
+      <span style="flex: 1;"></span>
+      <sl-button name="cancelAllBtn" size="small" variant="warning"><sl-icon slot="prefix" name="x-circle"></sl-icon>Cancel all unfinished</sl-button>
+    </div>
+    <div name="summary" style="color: var(--sl-color-neutral-600); font-size: 0.85em;"></div>
+    <div style="overflow: auto; max-height: 55vh; border: 1px solid var(--sl-color-neutral-200); border-radius: var(--sl-border-radius-medium);">
+      <table name="jobsTable" style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+        <thead>
+          <tr style="text-align: left; background: var(--sl-color-neutral-50);">
+            <th style="padding: 0.4rem 0.6rem;">Type</th>
+            <th style="padding: 0.4rem 0.6rem;">Owner</th>
+            <th style="padding: 0.4rem 0.6rem;">Status</th>
+            <th style="padding: 0.4rem 0.6rem;">Progress</th>
+            <th style="padding: 0.4rem 0.6rem;">Created</th>
+            <th style="padding: 0.4rem 0.6rem;">Updated</th>
+            <th style="padding: 0.4rem 0.6rem;"></th>
+          </tr>
+        </thead>
+        <tbody name="jobsBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div slot="footer">
+    <sl-button name="closeBtn" variant="default">Close</sl-button>
+  </div>
+</sl-dialog>

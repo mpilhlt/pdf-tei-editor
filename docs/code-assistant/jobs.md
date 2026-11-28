@@ -156,6 +156,10 @@ class MyPlugin extends Plugin {
 
 The E2E tests in `tests/e2e/tests/jobs-progress.spec.js` use the core type `test.progress`.
 
+## Frontend: the `jobs-admin` Plugin
+
+`app/src/plugins/jobs-admin.js` adds the admin-only menu entry "Jobs" (Tools > Administration) and a dialog with a table of the jobs of all users (type title from `jobsTypes()`, owner, status, `formatJobProgress`, created, updated). Filters: status (unfinished or all) and type. Rows have Cancel (unfinished) or Delete (finished); "Cancel all unfinished" asks for confirmation and calls `jobsCancelAll`. The dialog does not use the SSE feed: while open it calls `jobsList()` every 5 s, and the timer stops when it closes. Admins get every user's jobs from `jobsList()` unless `mine` is set. Privacy and cancel rights are enforced by the library routes and covered in `tests/unit/fastapi/test_jobs_infrastructure.py` (jobs of others are 404 for non-admins; shared jobs are visible but 403 for cancel and delete; cancelling a finished job returns it unchanged). E2E: `tests/e2e/tests/jobs-admin.spec.js`.
+
 ## Testing
 
 ```python

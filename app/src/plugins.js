@@ -22,6 +22,7 @@ import {
   ConfigEditorPlugin,
   ConfigPlugin,
   PluginAdminPlugin,
+  JobsAdminPlugin,
   DiagnosticsDrawerPlugin,
   DialogPlugin,
   DocumentActionsPlugin,
@@ -95,6 +96,7 @@ const plugins = [
   RbacManagerPlugin,   // Manage Access & Projects
   ConfigEditorPlugin,  // Configuration Editor
   PluginAdminPlugin,   // Manage Plugins
+  JobsAdminPlugin,     // Jobs
 
   // Other plugins
   InfoPlugin,          // User Manual (first)
