@@ -15,4 +15,4 @@ Issue #960. When the selected model accepts images, the LLM review of OCR errors
 
 ## Providers (pte-plugins)
 
-KISSKI reads `input` modalities from `/models`; Anthropic and Gemini chat models report `vision`, Gemini implements `chat_completion_with_images()`; MPCDF presets have no modality field, so the plugin config key `plugin.mpcdf-llm.vision-presets` lists the presets whose models accept images.
+KISSKI reads `input` modalities from `/models`; Anthropic and Gemini chat models report `vision`, Gemini implements `chat_completion_with_images()`; MPCDF presets carry a new `vision` field (llm-mpcdf 717dae0), set with "Accepts images" in the preset form.
