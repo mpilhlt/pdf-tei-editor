@@ -3,8 +3,8 @@ Extraction as a job (see docs/code-assistant/jobs.md): the job type `extract`, w
 through `POST /api/v1/extract/job` (`routers/extraction.py`). The synchronous `POST /api/v1/extract`
 runs the same extraction (`run.py`) without a job.
 
-The job holds the lock of its source file (`file:<stable_id>`) if it is a PDF. With `ocr`, text
-recognition is applied to the PDF first (step `ocr`, with the code of the `ocr` job), and the
+With `ocr`, the job holds the lock of its source PDF (`file:<stable_id>`), which requires edit
+access to it, and text recognition is applied to the PDF first (step `ocr`, with the code of the `ocr` job), and the
 extraction (step `extract`) extracts from the new PDF.
 
 Cancelling during text recognition leaves the PDF unchanged and ends the job `cancelled`.
@@ -139,14 +139,15 @@ def check_inference_key(validated: _ValidatedExtraction, request: ExtractRequest
 
 async def submit_extract_job(manager: JobManager, params: ExtractJobParams, source: _ValidatedExtraction, user: dict[str, Any]) -> Job:
     """
-    Submit an extraction job of the user. It holds the lock of its source file if that is a PDF;
-    a TEI source is not locked, since the user who extracts from it usually edits it.
+    Submit an extraction job of the user. Only a job with text recognition (`params.ocr`) on a PDF
+    holds the lock of the PDF, since text recognition stores a new version of it; a plain extraction
+    only reads its source and needs no lock, as with the synchronous route.
 
     Raises:
         HTTPException: 409 if another job or a user holds the lock of the PDF, 403 if the user
-            may not edit it
+            may not edit it (only with text recognition)
     """
-    resources = [f"file:{source.file.stable_id}"] if source.reads_pdf else []
+    resources = [f"file:{source.file.stable_id}"] if source.reads_pdf and params.ocr is not None else []
     try:
         return await manager.submit(EXTRACT_JOB_TYPE, params, owner=user["username"], resources=resources)
     except ResourceBusy as e:

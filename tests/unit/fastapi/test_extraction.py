@@ -380,7 +380,9 @@ class TestExtractionJob(unittest.TestCase):
         self.assertEqual(response.status_code, 202, response.text)
         job = response.json()
         self.assertEqual(job["type"], "extract")
-        self.assertEqual(job["resources"], [f"file:{self.pdf.stable_id}"])
+        # only a job with text recognition locks the PDF
+        expected = [f"file:{self.pdf.stable_id}"] if payload.get("ocr") else []
+        self.assertEqual(job["resources"], expected)
         return job
 
     def steps(self, job_id: str) -> set[str]:
@@ -442,6 +444,27 @@ class TestExtractionJob(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self.client.portal.call(self.manager.list), [])
+
+    def test_plain_extract_job_needs_no_edit_access_to_the_pdf(self):
+        from unittest.mock import patch
+        from fastapi_app.lib.ocr import job_types as ocr_job_types
+
+        def read_only(file, user, op):
+            return op != "edit"
+
+        with patch("fastapi_app.lib.jobs.hooks.check_file_access", read_only), patch.object(ocr_job_types, "check_file_access", read_only):
+            # without text recognition the job only reads the PDF: no lock, no edit access needed
+            job = self.wait_for(self.submit({"extractor": "mock-extractor", "file_id": self.pdf.stable_id, "options": {}}))
+            self.assertEqual(job["status"], "done", job.get("error"))
+            self.assertEqual(job["resources"], [])
+            # text recognition stores a new version of the PDF: edit access is required
+            response = self.client.post("/extract/job", json={
+                "extractor": "mock-extractor",
+                "file_id": self.pdf.stable_id,
+                "ocr": {"stable_id": self.pdf.stable_id, "engine": "fake", "languages": ["en"]},
+            })
+            self.assertEqual(response.status_code, 403, response.json())
+        self.assertEqual(len(self.client.portal.call(self.manager.list)), 1)
 
     def test_extract_job_cancelled_during_ocr_extracts_nothing(self):
         from unittest.mock import patch
