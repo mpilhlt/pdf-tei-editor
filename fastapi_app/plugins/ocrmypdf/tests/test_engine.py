@@ -117,6 +117,17 @@ class TestRecognitionModel(unittest.TestCase):
         self.assertEqual(option.get("options"), [MODEL_FAST, MODEL_BEST])
         self.assertEqual(option.get("default"), MODEL_FAST)
 
+    def test_post_processing_options_default_on(self):
+        options = engine_with_models(["deu"]).get_options()
+        for key in ("repair_footnote_markers", "optimize_images"):
+            self.assertEqual(options[key].get("type"), "boolean")
+            self.assertIs(options[key].get("default"), True)
+
+    def test_message_names_skipped_steps(self):
+        self.assertNotIn("Skipped", OcrmypdfEngine._message(MODE_SKIP, ["deu"], 0, {"repair_footnote_markers": True, "optimize_images": True}))
+        message = OcrmypdfEngine._message(MODE_SKIP, ["deu"], 0, {"repair_footnote_markers": False, "optimize_images": False})
+        self.assertIn("Skipped: footnote marker repair, image optimization.", message)
+
     def test_tesseract_languages_by_model(self):
         engine = engine_with_models(["deu", "eng", "best/deu"])
         self.assertEqual(engine._tesseract_languages(["de", "en"]), ["deu", "eng"])

@@ -48,6 +48,10 @@ logger = logging.getLogger(__name__)
 
 ANALYSIS_SUFFIX = ".markers.json"
 
+REPAIR_OPTION = "pte_repair_footnote_markers"
+"""Keyword argument of `ocrmypdf.ocr()` that turns the repair off if False. OCRmyPDF keeps
+unknown arguments in `OcrOptions.extra_attrs`, which reach the worker processes."""
+
 PHASES: dict[str, str] = {
     "Scanning contents": "Analyzing the pages",
     "OCR": "Recognizing text",
@@ -78,6 +82,11 @@ def repair_count() -> int:
     return int(getattr(_state, "count", 0))
 
 
+def repair_enabled(options: OcrOptions) -> bool:
+    """Return whether the footnote marker repair is enabled for a run (`REPAIR_OPTION`)."""
+    return options.extra_attrs.get(REPAIR_OPTION, True) is not False
+
+
 def analysis_path(hocr_path: Path) -> Path:
     """Return the path of the page analysis written next to an hOCR file."""
     return hocr_path.with_name(hocr_path.name + ANALYSIS_SUFFIX)
@@ -89,6 +98,8 @@ class FootnoteMarkerEngine(TesseractOcrEngine):
     @staticmethod
     def generate_hocr(input_file: Path, output_hocr: Path, output_text: Path, options: OcrOptions) -> None:
         TesseractOcrEngine.generate_hocr(input_file, output_hocr, output_text, options)
+        if not repair_enabled(options):
+            return
         # The English model reads digits best; the document languages add further readings
         languages = list(dict.fromkeys(["eng", *options.languages]))
         try:
@@ -105,7 +116,8 @@ def repair_document(hocr_files: dict[int, Path]) -> int:
     Repair the footnote markers in the hOCR files of a document.
 
     Reports the progress of the repair (`REPAIR_PHASE`) after every repaired page, counting the
-    pages that have markers to repair.
+    pages that have markers to repair. Does nothing if no page was analyzed (the repair is
+    turned off, see `REPAIR_OPTION`).
 
     Args:
         hocr_files: The hOCR file of every recognized page, by page number
@@ -113,12 +125,12 @@ def repair_document(hocr_files: dict[int, Path]) -> int:
     Returns:
         The number of repaired markers
     """
-    report_progress(REPAIR_PHASE)
     pages = sorted(hocr_files)
-    analyses = []
-    for page in pages:
-        path = analysis_path(hocr_files[page])
-        analyses.append(PageAnalysis.from_json(path.read_text(encoding="utf-8")) if path.exists() else PageAnalysis())
+    paths = [analysis_path(hocr_files[page]) for page in pages]
+    if not any(path.exists() for path in paths):
+        return 0
+    report_progress(REPAIR_PHASE)
+    analyses = [PageAnalysis.from_json(path.read_text(encoding="utf-8")) if path.exists() else PageAnalysis() for path in paths]
     to_repair = [(page, repairs) for page, repairs in zip(pages, plan_repairs(analyses)) if repairs]
     if not to_repair:
         return 0
