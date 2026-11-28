@@ -14,7 +14,7 @@ from unittest import mock
 
 from fastapi_app.lib.plugins.plugin_tools import get_plugin_config
 from fastapi_app.lib.secrets.encryption import ENCRYPTION_KEY_ENV_VAR, reset_fernet_cache
-from fastapi_app.lib.utils.config_utils import MASKED_SENTINEL, Config, get_config_value
+from fastapi_app.lib.utils.config_utils import Config, get_config_value
 
 KEY = "plugin.test.api.key"
 ENV = "PTE_TEST_SHARED_API_KEY"
@@ -52,8 +52,8 @@ class TestMaskedPluginConfig(unittest.TestCase):
         self._register()
         with mock.patch.dict(os.environ, {ENV: "secret"}):
             self.assertEqual(self._register(), "secret")
-        self.assertEqual(self.config.get(KEY), "secret")
-        self.assertEqual(self.config.load(apply_masks=True)[KEY], MASKED_SENTINEL)
+        # not copied into config.json, so that a later change of the variable applies too
+        self.assertEqual(self.config.get(KEY), "")
 
     def test_value_set_in_the_editor_is_kept(self):
         self._register()
@@ -78,6 +78,52 @@ class TestMaskedPluginConfig(unittest.TestCase):
         self.assertEqual(data[KEY], "")
         self.assertTrue(data[f"{KEY}.masked"])
         self.assertEqual(data[f"{KEY}.description"], "Shared key")
+
+
+class TestEmptyPluginConfig(unittest.TestCase):
+    """An empty stored value does not override the environment variable, a non-empty one does."""
+
+    KEY = "plugin.test.languages"
+    ENV = "PTE_TEST_LANGUAGES"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.config = Config(self.tmp)
+        patcher = mock.patch("fastapi_app.lib.utils.config_utils.get_config", return_value=self.config)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(shutil.rmtree, self.tmp)
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop(self.ENV, None)
+
+    def _register(self, default: str = ""):
+        return get_plugin_config(self.KEY, self.ENV, default=default, description="Languages")
+
+    def test_empty_default_is_stored_and_env_applies_later(self):
+        self.assertEqual(self._register(), "")
+        self.assertEqual(self.config.get(self.KEY), "")
+        with mock.patch.dict(os.environ, {self.ENV: "eng deu"}):
+            self.assertEqual(self._register(), "eng deu")
+        # still empty, so that changing or removing the variable applies too
+        self.assertEqual(self.config.get(self.KEY), "")
+        self.assertEqual(self._register(), "")
+
+    def test_empty_env_falls_back_to_default(self):
+        with mock.patch.dict(os.environ, {self.ENV: ""}):
+            self.assertEqual(self._register(default="eng"), "eng")
+
+    def test_non_empty_stored_value_overrides_env(self):
+        self.config.set(self.KEY, "fra")
+        with mock.patch.dict(os.environ, {self.ENV: "eng deu"}):
+            self.assertEqual(self._register(), "fra")
+
+    def test_env_value_of_a_new_key_is_stored(self):
+        with mock.patch.dict(os.environ, {self.ENV: "eng"}):
+            self.assertEqual(self._register(), "eng")
+        self.assertEqual(self.config.get(self.KEY), "eng")
+        self.assertEqual(self.config.get(f"{self.KEY}.description"), "Languages")
 
 
 if __name__ == "__main__":

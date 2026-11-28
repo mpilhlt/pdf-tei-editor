@@ -13,11 +13,11 @@ ARG NODE_VERSION=26
 # Tesseract language models for text recognition (OCRmyPDF plugin), as Debian package suffixes
 # (tesseract-ocr-<lang>). Example: --build-arg TESSERACT_LANGS="eng deu fra"
 ARG TESSERACT_LANGS="eng deu fra ita spa por nld lat grc ell rus pol ces"
-# The Debian packages contain the tessdata_fast models. For these languages, the OCRmyPDF plugin
-# downloads the more accurate (and slower) tessdata_best models at startup into the shared data
-# directory (SHARED_DATA_DIR, ~10 MB each, once per host), see docs/user-manual/docker-deployment.md.
-# Set to "" to download none; can also be overridden at runtime.
-ARG TESSERACT_BEST_LANGS="${TESSERACT_LANGS}"
+# The Debian packages contain the tessdata_fast models. For the languages in TESSERACT_BEST_LANGS
+# (e.g. "eng deu"), the OCRmyPDF plugin downloads the more accurate (and slower) tessdata_best models
+# at startup into the shared data directory (SHARED_DATA_DIR, ~10 MB each, once per host), see
+# docs/user-manual/docker-deployment.md. Default: none. Can also be set at runtime.
+ARG TESSERACT_BEST_LANGS=""
 
 ENV DEBIAN_FRONTEND=noninteractive
 

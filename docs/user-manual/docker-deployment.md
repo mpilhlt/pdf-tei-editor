@@ -153,7 +153,7 @@ See [Plugins in the image](#plugins-in-the-image). `.env.production` documents t
 | `SECRETS_ENCRYPTION_KEY` | Fernet key that encrypts the users' stored API keys (see [User API Keys](./cli.md#user-api-keys)) and the masked settings in `config.json` (see [Encryption of secrets](#encryption-of-secrets)); without it a key file is generated in `data/db` | - |
 | `FASTAPI_PLUGIN_PATHS` | Directories with additional (external) plugins, separated by `:` (see [External Plugins](#external-plugins)) | - |
 | `SHARED_DATA_DIR` | Host-wide directory for downloaded data shared by all instances, e.g. OCR models (see [Shared Data Directory](#shared-data-directory)) | `<DATA_ROOT>/shared` |
-| `TESSERACT_BEST_LANGS` | Languages whose `tessdata_best` OCR models are downloaded at startup (see [OCR Languages](#ocr-languages)) | `TESSERACT_LANGS` of the build |
+| `TESSERACT_BEST_LANGS` | Languages whose `tessdata_best` OCR models are downloaded at startup (see [OCR Languages](#ocr-languages)) | none |
 
 See `.env.production` for complete list.
 
@@ -187,7 +187,7 @@ Text recognition (the core OCRmyPDF plugin) uses Tesseract. The build argument `
 docker build --build-arg TESSERACT_LANGS="eng deu fra tur" -t pdf-tei-editor .
 ```
 
-These packages contain the `tessdata_fast` models. The more accurate and slower `tessdata_best` models (about 10 MB per language), between which the OCR option "Recognition model" chooses, are not part of the image: the application downloads them at startup into the shared data directory (see below). The environment variable `TESSERACT_BEST_LANGS` lists their languages; the image sets it to the value of the build argument of the same name, which defaults to `TESSERACT_LANGS`. Set it to an empty string to download none:
+These packages contain the `tessdata_fast` models. The more accurate and slower `tessdata_best` models (about 10 MB per language), between which the OCR option "Recognition model" chooses, are not part of the image: the application downloads them at startup into the shared data directory (see below). The environment variable `TESSERACT_BEST_LANGS` lists their languages; by default none are downloaded. The image sets it to the value of the build argument of the same name (default empty). A non-empty value of the configuration key `ocr.tesseract.best_languages` overrides the variable. See the [OCRmyPDF plugin README](../../fastapi_app/plugins/ocrmypdf/README.md#environment-variables) for all variables of the plugin:
 
 ```bash
 docker run -e TESSERACT_BEST_LANGS="eng deu" ...

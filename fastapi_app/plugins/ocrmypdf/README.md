@@ -20,10 +20,41 @@ The Debian packages `tesseract-ocr-<lang>` contain the `tessdata_fast` models (i
 
 The best models are not part of the image. At startup the plugin (`tessdata.py`):
 
-1. downloads the missing best models of the languages in `TESSERACT_BEST_LANGS` (config key `ocr.tesseract.best_languages`; Tesseract codes separated by spaces or commas, e.g. `eng deu`; default empty, the Docker image sets it to `TESSERACT_LANGS`) from `tessdata_best` 4.1.0, in a background thread, into the shared data directory `<SHARED_DATA_DIR>/tesseract/tessdata_best-4.1.0/` (see `fastapi_app/lib/core/shared_data.py`). With `SHARED_DATA_DIR` pointing to a host directory used by all installations, each model is downloaded once per host. A failed download is logged and retried at the next start. The option `best` appears as soon as the first model is there, without a restart.
+1. downloads the missing best models of the languages in `TESSERACT_BEST_LANGS` (config key `ocr.tesseract.best_languages`; Tesseract codes separated by spaces or commas, e.g. `eng deu`; default empty: no best models are downloaded) from `tessdata_best` 4.1.0, in a background thread, into the shared data directory `<SHARED_DATA_DIR>/tesseract/tessdata_best-4.1.0/` (see `fastapi_app/lib/core/shared_data.py`). With `SHARED_DATA_DIR` pointing to a host directory used by all installations, each model is downloaded once per host. A failed download is logged and retried at the next start. The option `best` appears as soon as the first model is there, without a restart.
 2. builds the link folder `data/plugins/ocrmypdf/tessdata/` with a symlink to every entry of the system model folder (fast models, `configs/`, `tessconfigs/`) and `best` pointing to the shared folder, and sets `TESSDATA_PREFIX` to it. Tesseract then lists the best models as `best/<lang>` and selects them with `-l best/deu`; they are not offered as languages. OCRmyPDF's worker processes inherit the variable. An up-to-date link folder is left alone; otherwise it is rebuilt next to the old one and swapped in.
 
 If the setup fails (Tesseract does not report its model folder, the shared directory is not writable), a warning is logged and the system models are used. Without network access, the models can be copied into the shared folder by hand.
+
+## Environment variables
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `TESSERACT_BEST_LANGS` | Tesseract codes of the languages whose `tessdata_best` models are downloaded at startup, separated by spaces or commas (`eng deu`). Only codes with a fast model installed are useful. Mirrored by the config key `ocr.tesseract.best_languages`: if the key is empty (the default), the variable applies; a non-empty value set in the configuration editor overrides it. | empty: no best models |
+| `SHARED_DATA_DIR` | Core setting: host-wide directory that holds the downloaded best models in `tesseract/tessdata_best-4.1.0/`. Point all installations on a host to the same directory to download each model once. | `<DATA_ROOT>/shared` |
+| `TESSDATA_PREFIX` | Tesseract's model folder. Normally not set: Tesseract reports its system folder. If set at startup, its folder is used as the system folder that the link folder points to. The plugin then overwrites the variable in its process with the link folder `data/plugins/ocrmypdf/tessdata/`. | Tesseract's built-in folder |
+| `LOG_DIR` | Core setting: directory of `ocr-last-run.log` | `<project root>/log` |
+| `TESSERACT_LANGS` | Docker build argument, not a runtime variable: the fast models installed as Debian packages `tesseract-ocr-<lang>` | `eng deu fra ita spa por nld lat grc ell rus pol ces` |
+| `DEPLOY_SHARED_DIR` | `.env.deploy.*` files of `scripts/deploy/container.js` (`--shared-dir`): host directory mounted at `/app/shared`, sets `SHARED_DATA_DIR` in the container | none: data directory of the instance |
+
+### `.env` template
+
+```bash
+# --- OCRmyPDF plugin (fastapi_app/plugins/ocrmypdf/README.md) ---
+# Languages whose more accurate (and slower) tessdata_best models are downloaded at startup,
+# Tesseract codes separated by spaces or commas, about 10 MB each. Empty: none, only the fast
+# models of the Tesseract installation are used. A non-empty value of the config key
+# ocr.tesseract.best_languages overrides it.
+# TESSERACT_BEST_LANGS="eng deu"
+
+# Host-wide directory for downloaded data such as the tessdata_best models; share it between
+# all installations on a host so each model is downloaded once. Default: <DATA_ROOT>/shared
+# SHARED_DATA_DIR=/opt/pdf-tei-editor-shared
+
+# Tesseract's model folder; only needed if Tesseract does not find its models by itself.
+# TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+```
+
+For a container deployed with `scripts/deploy/container.js`, set `DEPLOY_SHARED_DIR=/opt/pdf-tei-editor-shared` in the `.env.deploy.*` file instead of `SHARED_DATA_DIR`.
 
 ## Parameters
 

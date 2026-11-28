@@ -519,13 +519,13 @@ async def custom_action():
     # Use config values...
 ```
 
-**Priority**: Config file (`data/db/config.json`) > Environment variable > Default value
+**Priority**: non-empty value in the config file (`data/db/config.json`) > non-empty environment variable > default value. An empty string counts as unset in both places.
 
 **Key points**:
 
 - Initialize config in the plugin class `__init__()` using `get_plugin_config()` (creates keys from env vars)
 - Access config everywhere else using `get_config()` (retrieves existing keys)
-- Config values are automatically created from environment variables on first initialization
+- A missing key is created with the resulting value on first initialization (the environment variable's value if set, otherwise the default). A key stored as an empty string stays empty, so that the environment variable keeps applying when it is set or changed later; in that case only the return value of `get_plugin_config()` contains the variable's value, `get_config().get()` returns `""`. Keep the returned value when the default is empty and the variable may be set later.
 - Routes and plugin methods use the same `get_config()` pattern
 
 **MANDATORY: Mask credentials** — Any plugin that reads an API key, password, token, or other credential from an environment variable and stores it via `get_plugin_config()` **must** pass `masked=True`. This ensures the value is excluded from the public (pre-auth) config endpoint and displayed as `****` in the config editor:
@@ -544,7 +544,7 @@ Failure to pass `masked=True` for credentials is a security defect.
 
 Masked values are stored encrypted in `config.json` (`"fernet:<token>"`, with the key of the user secret store) and decrypted by `get_plugin_config()`, `config.get()` and `get_config_value()`. `config.load()` returns the stored tokens, so read a secret with `get()`, never from `load()`.
 
-A masked key without a value (no environment variable, `default=None`) is stored as an empty string, so that it appears as "not set" in the config editor and administrators can enter a shared key there. An empty string counts as unset: the environment variable still applies at the next start, and plugins must treat an empty value like a missing one. Administrators can clear a masked value in the config editor (it saves `""`) and delete any `plugin.*` key (`DELETE /api/v1/config/{key}`); code reading a plugin key must therefore cope with a missing key until the next start re-registers it.
+A masked key without a value (no environment variable, `default=None`) is stored as an empty string, so that it appears as "not set" in the config editor and administrators can enter a shared key there. An empty string counts as unset: the environment variable still applies at every start without being copied into `config.json`, and plugins must treat an empty value like a missing one. Administrators can clear a masked value in the config editor (it saves `""`) and delete any `plugin.*` key (`DELETE /api/v1/config/{key}`); code reading a plugin key must therefore cope with a missing key until the next start re-registers it.
 
 **Example - Plugin availability based on config**:
 
