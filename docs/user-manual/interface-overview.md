@@ -26,6 +26,35 @@ Both values can be copied by single-click, in addition, administrators can chang
 
 In the status bar of the PDF viewer, you can toggle the "Sync with editor" feature, which tries to automatically navigate to the position within the PDF that corresponds to the cursor position in the XML Editor. In documents with page markers (`<pb/>`), it also works the other way round: when you page through the PDF, the XML Editor scrolls to the page marker of that page, without moving the cursor. Page markers also make the lookup itself more reliable: text is first searched only on the page that the preceding page marker points to, so that short or repeated text such as running heads, footers and page numbers is found on the right page. It works well on most documents; results can be less reliable when the PDF's underlying text extraction is poor (e.g. scanned pages or unusual layouts).
 
+#### PDF information
+
+The <sl-icon name="info-circle"></sl-icon> button in the toolbar of the PDF viewer, next to the download button, opens a dialog with the metadata of the PDF that is shown.
+
+![The toolbar of the PDF viewer with the tooltip "PDF information" over the info button, left of the download button](../images/pdf-info-button.png)
+
+*The "PDF information" button in the toolbar of the PDF viewer.*
+
+If the text layer of the PDF was made by [text recognition](extraction-workflow.md#text-recognition-ocr), the dialog starts with two highlighted sections:
+
+- **Text recognition (OCR)**: the engine, its method, the languages and recognition models, when and by whom it was applied.
+- **Text corrections in the text layer**: every run that wrote corrections into the text layer, either a language model during or after text recognition, or the corrections [written from the TEI document](extraction-workflow.md#writing-text-corrections-to-the-pdf), with the model, the pages, the user, and the list of corrections (page, text before and after). Click a run to see its corrections.
+
+![The PDF information dialog: a highlighted section "Text recognition (OCR)" with engine ocrmypdf, method, languages deu and eng, date and user, and a highlighted section "Text corrections in the text layer" with two runs, the first opened with the model and two corrections](../images/pdf-info-dialog.png)
+
+*Text recognition and text corrections of a PDF.*
+
+Below follow the metadata stored in the PDF file and in the editor:
+
+- **Document information**: the document information dictionary of the PDF (title, author, subject, keywords, creating application, producer, creation and modification date, custom entries) and properties such as the PDF version and the number of pages.
+- **XMP metadata**: the entries of the XMP metadata of the PDF, and the raw XMP packet under "Raw XMP".
+- **Stored file**: the file name, the name under which the PDF was uploaded, its size, the document id, the content hash, and when and by whom it was stored.
+
+Values that name a text recognition tool, such as the creating application "ocrmypdf … / Tesseract …" that OCRmyPDF writes, are highlighted in color.
+
+![The lower part of the PDF information dialog: the document information with the creating application "ocrmypdf 17.14.2 / Tesseract OCR-hOCR 5.5.0" highlighted, the XMP metadata, and the stored file](../images/pdf-info-dialog-metadata.png)
+
+*Document information, XMP metadata and stored file.*
+
 ### Right Panel: XML Editor  
 
 The right panel contains the CodeMirror-based XML editor and provides the following features:

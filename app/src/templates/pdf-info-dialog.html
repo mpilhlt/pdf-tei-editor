@@ -1,0 +1,18 @@
+<sl-dialog name="pdfInfoDialog" label="PDF information" class="dialog-width pdf-info-dialog" style="--width: 50rem;">
+  <style>
+    .pdf-info-dialog [name="content"] { max-height: 65vh; overflow: auto; font-size: var(--sl-font-size-small); }
+    .pdf-info-section { margin-bottom: var(--sl-spacing-large); }
+    .pdf-info-section h3 { font-size: var(--sl-font-size-medium); margin: 0 0 var(--sl-spacing-x-small); }
+    .pdf-info-section-highlight { border-left: 3px solid var(--sl-color-primary-600); background: var(--sl-color-primary-50); padding: var(--sl-spacing-small) var(--sl-spacing-medium); border-radius: var(--sl-border-radius-medium); }
+    .pdf-info-table, .pdf-info-corrections { width: 100%; border-collapse: collapse; }
+    .pdf-info-table th { width: 12rem; text-align: left; font-weight: var(--sl-font-weight-semibold); vertical-align: top; padding: 0.2rem 0.75rem 0.2rem 0; }
+    .pdf-info-table td { padding: 0.2rem 0; word-break: break-word; }
+    .pdf-info-highlight td { color: var(--sl-color-primary-700); font-weight: var(--sl-font-weight-semibold); }
+    .pdf-info-corrections { margin-top: var(--sl-spacing-small); }
+    .pdf-info-corrections th, .pdf-info-corrections td { text-align: left; padding: 0.15rem 0.5rem 0.15rem 0; border-bottom: 1px solid var(--sl-color-neutral-200); }
+    .pdf-info-section sl-details { margin-top: var(--sl-spacing-x-small); }
+    .pdf-info-raw { white-space: pre-wrap; word-break: break-all; font-size: var(--sl-font-size-x-small); margin: 0; }
+  </style>
+  <div name="content"></div>
+  <sl-button name="closeBtn" slot="footer" variant="primary">Close</sl-button>
+</sl-dialog>
