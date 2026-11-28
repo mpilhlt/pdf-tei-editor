@@ -5,7 +5,9 @@
 /**
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
- * @import { UIPart, SlDrawer } from '../ui.js'
+ * @import { UIPart, SlDrawer, SlDialog } from '../ui.js'
+ * @import { pdfInfoDialogPart } from '../templates/pdf-info-dialog.types.js'
+ * @import { PdfJsMetadata } from '../modules/pdf-info.js'
  * @import { diagnosticsDrawerPart, diagnosticsButtonPart } from '../templates/diagnostics-drawer.types.js'
  */
 
@@ -19,6 +21,10 @@ import { userHasRole } from '../modules/acl-utils.js'
 import { encodeFilename, decodeFilename } from '../modules/doi-utils.js'
 import Plugin from '../modules/plugin-base.js'
 import ep from '../extension-points.js'
+import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
+import { buildPdfInfoSections, renderPdfInfoSections } from '../modules/pdf-info.js'
+
+await registerTemplate('pdf-info-dialog', 'pdf-info-dialog.html')
 
 /** Delay after the last page change before `pdfViewer.pageChanged` is invoked */
 const PAGE_CHANGED_DELAY_MS = 300;
@@ -74,6 +80,8 @@ class PdfViewerPlugin extends Plugin {
   #statusMessageTimer = null;
   /** @type {ReturnType<typeof setTimeout>|null} */
   #pageChangedTimer = null;
+  /** @type {(SlDialog & pdfInfoDialogPart)|null} */
+  #pdfInfoDialog = null;
 
   /**
    * Returns a proxy that exposes plugin-level methods alongside the PDFJSViewer API.
@@ -292,6 +300,15 @@ class PdfViewerPlugin extends Plugin {
     toolbar.add(fitPageBtn, 77);
 
     toolbar.add(PanelUtils.createSeparator({ variant: 'vertical' }), 70);
+
+    const infoBtn = PanelUtils.createButton({
+      icon: 'info-circle',
+      tooltip: 'PDF information',
+      action: 'pdf-info',
+      name: 'infoBtn'
+    });
+    infoBtn.addEventListener('widget-click', () => this.#onShowPdfInfo());
+    toolbar.add(infoBtn, 61);
 
     const downloadBtn = PanelUtils.createButton({
       icon: 'download',
@@ -552,6 +569,44 @@ class PdfViewerPlugin extends Plugin {
     this.uiStorage.set('handTool', true);
     this.#textSelectBtn.setAttribute('variant', 'default');
     this.#handToolBtn.setAttribute('variant', 'primary');
+  }
+
+  /**
+   * Shows the metadata of the PDF in a dialog: the text recognition and text corrections
+   * recorded in its file metadata, the document information dictionary, the XMP metadata and
+   * the stored file.
+   */
+  async #onShowPdfInfo() {
+    const pdfDoc = this.#pdfViewer.pdfDoc;
+    const stableId = this.state?.pdf;
+    if (!pdfDoc || !stableId) {
+      notify('No PDF loaded', 'warning', 'exclamation-triangle');
+      return;
+    }
+    if (!this.#pdfInfoDialog) {
+      this.#pdfInfoDialog = /** @type {SlDialog & pdfInfoDialogPart} */ (
+        this.createUi(createSingleFromTemplate('pdf-info-dialog', document.body))
+      );
+      this.#pdfInfoDialog.closeBtn.addEventListener('click', () => this.#pdfInfoDialog?.hide());
+    }
+    const dialog = this.#pdfInfoDialog;
+    const [pdfMetadata, file] = await Promise.all([
+      pdfDoc.getMetadata().catch(error => {
+        this.#logger.warn(`Cannot read the metadata of the PDF: ${String(error)}`);
+        return null;
+      }),
+      this.#client.apiClient.filesGetMetadata(stableId).catch(error => {
+        this.#logger.warn(`Cannot load the file record of the PDF: ${String(error)}`);
+        return null;
+      })
+    ]);
+    const sections = buildPdfInfoSections({
+      pdfMetadata: /** @type {PdfJsMetadata|null} */ (pdfMetadata),
+      numPages: pdfDoc.numPages,
+      file
+    });
+    renderPdfInfoSections(dialog.content, sections);
+    await dialog.show();
   }
 
   async #onDownloadPdf() {
