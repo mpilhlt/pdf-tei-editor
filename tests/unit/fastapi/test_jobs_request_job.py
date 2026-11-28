@@ -223,6 +223,26 @@ class TestRequestJob(JobsTestCase):
             self.assertEqual(client.get(f"/api/v1/jobs/{claimed_id}", headers=headers("alice-session")).json()["status"], "done")
 
 
+    def test_a_failing_cancel_does_not_skip_the_other_unclaimed_jobs(self) -> None:
+        manager = self.make_manager()
+        with self.make_request_client(manager) as client:
+            assert client.portal is not None
+            first_id = self.submit_client_job(client)
+            second_id = self.submit_client_job(client)
+            cancel = manager.cancel
+
+            async def failing_cancel(job_id: str) -> Any:
+                if job_id == first_id:
+                    raise RuntimeError("store unavailable")
+                return await cancel(job_id)
+
+            manager.cancel = failing_cancel  # type: ignore[method-assign]
+            manager.clock = lambda: time.time() + UNCLAIMED_CLIENT_JOB_MAX_AGE + 1
+            with self.assertLogs("fastapi_app.lib.jobs.hooks", level="ERROR"):
+                self.assertEqual(client.portal.call(cancel_unclaimed_client_jobs), 1)
+            self.assertEqual(client.get(f"/api/v1/jobs/{first_id}", headers=headers("alice-session")).json()["status"], "queued")
+            self.assertEqual(client.get(f"/api/v1/jobs/{second_id}", headers=headers("alice-session")).json()["status"], "cancelled")
+
 class TestThreadCallbacks(unittest.TestCase):
     def test_thread_callbacks_adapter(self) -> None:
         calls: list[dict[str, Any]] = []

@@ -4,7 +4,7 @@
  * Has no plugin imports; everything it needs is passed to the constructor. See
  * docs/code-assistant/jobs.md for the concepts.
  *
- * @import { ApiClientV1, Job, JobEvent, JobProgress, JobTypeInfo } from './api-client-v1.js'
+ * @import { ApiClientV1, Job, JobEvent, JobListFilter, JobProgress, JobSubmitRequest, JobTypeInfo } from './api-client-v1.js'
  */
 
 const HOLDER_KEY = 'job-holder'
@@ -107,7 +107,7 @@ export class JobClient {
    * @returns {Promise<Job>}
    */
   async submit(type, params, { resources, inputHash, idempotencyKey } = {}) {
-    /** @type {import('./api-client-v1.js').JobSubmitRequest} */
+    /** @type {JobSubmitRequest} */
     const body = { type, params }
     if (resources) body.resources = resources
     if (inputHash) body.input_hash = inputHash
@@ -123,7 +123,7 @@ export class JobClient {
   }
 
   /**
-   * @param {import('./api-client-v1.js').JobListFilter} [filter]
+   * @param {JobListFilter} [filter]
    * @returns {Promise<Job[]>}
    */
   async list(filter) {
@@ -240,6 +240,7 @@ export class JobClient {
 
   /**
    * Wait until a job is finished. Aborting the signal only stops waiting; the job keeps running.
+   * Rejects {@link JobFailedError} with status 404 if the job is deleted while it is waited for.
    * @param {string} jobId
    * @param {{signal?: AbortSignal}} [options]
    * @returns {Promise<unknown>} The result of the job
@@ -254,7 +255,12 @@ export class JobClient {
       /** @type {ReturnType<typeof setInterval>|null} */
       let safetyTimer = null
 
-      const refetch = () => { this.get(jobId).then(check, () => {}) }
+      // a failed refetch is retried with the next poll, except for a job that no longer exists
+      const refetch = () => {
+        this.get(jobId).then(check, (error) => {
+          if (/** @type {{statusCode?: number}} */ (error)?.statusCode === 404) fail(new JobFailedError(`The job ${jobId} no longer exists`, 404))
+        })
+      }
       const cleanup = () => {
         settled = true
         unsubscribe?.()

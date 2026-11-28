@@ -209,6 +209,27 @@ describe('JobClient with a feed', () => {
     assert.strictEqual(await client.wait('j1'), 7)
   })
 
+  test('wait rejects with status 404 and stops polling when the job is deleted', async () => {
+    const feed = makeFeed()
+    feed.isConnected = false
+    let n = 0
+    const notFound = Object.assign(new Error('Job not found'), { statusCode: 404 })
+    const { client, calls } = setup({ feed, safetyPollInterval: 15, jobs: { j1: () => { if (++n >= 3) throw notFound; return makeJob() } } })
+    await assert.rejects(client.wait('j1'), (e) => e instanceof JobFailedError && e.status === 404 && /no longer exists/.test(e.message))
+    const gets = calls.filter(c => c[0] === 'jobsGet').length
+    await tick(60)
+    // both timers are cleared
+    assert.strictEqual(calls.filter(c => c[0] === 'jobsGet').length, gets)
+  })
+
+  test('wait keeps polling after other refetch errors', async () => {
+    const feed = makeFeed()
+    feed.isConnected = false
+    let n = 0
+    const { client } = setup({ feed, jobs: { j1: () => { ++n; if (n === 2) throw Object.assign(new Error('Bad gateway'), { statusCode: 502 }); return n >= 4 ? makeJob({ status: 'done', result: 'ok' }) : makeJob() } } })
+    assert.strictEqual(await client.wait('j1'), 'ok')
+  })
+
   test('wait does not poll while the feed is connected', async () => {
     const feed = makeFeed()
     const { client, calls } = setup({ feed })

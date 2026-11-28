@@ -103,10 +103,17 @@ class JobsAdminPlugin extends Plugin {
   }
 
   /**
-   * @param {any} newUser
+   * Show the menu entry to admins only; close the dialog and stop the refresh timer when the
+   * user logs out or is no longer an admin.
+   * @param {ApplicationState['user']} newUser
    */
   async onUserChange(newUser) {
-    if (this.#menuItem) this.#menuItem.style.display = userIsAdmin(newUser) ? '' : 'none'
+    const admin = userIsAdmin(newUser)
+    if (this.#menuItem) this.#menuItem.style.display = admin ? '' : 'none'
+    if (!admin) {
+      this.#stopTimer()
+      if (this.#ui?.open) this.#ui.hide()
+    }
   }
 
   async shutdown() {
@@ -132,6 +139,8 @@ class JobsAdminPlugin extends Plugin {
       ui.show()
       await this.#refresh()
       this.#stopTimer()
+      // the dialog may have been closed (or the user logged out) during the first refresh
+      if (!ui.open || !userIsAdmin(this.state?.user)) return
       this.#timer = setInterval(() => this.#refresh(), REFRESH_MS)
     } catch (error) {
       this.getDependency('logger').error(`Failed to open the job list: ${error instanceof Error ? error.message : String(error)}`)

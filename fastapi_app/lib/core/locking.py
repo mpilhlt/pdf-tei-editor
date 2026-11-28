@@ -278,7 +278,8 @@ def _acquire_lock_impl(file_id: str, session_id: str, db_dir: Path, logger: logg
                 else:
                     # Lock is held by another active session - DENY
                     conn.rollback()
-                    logger.warning(
+                    # local resources (e.g. the OCR engine lock) are polled by waiting jobs, so their denials are routine
+                    (logger.debug if file_id.startswith(LOCAL_LOCK_PREFIX) else logger.warning)(
                         f"[LOCK] Session {session_id[:8]}... DENIED lock for file {file_id[:8]}.... "
                         f"Held by {existing_session[:8]}... (age={age_seconds:.1f}s, still fresh)"
                     )

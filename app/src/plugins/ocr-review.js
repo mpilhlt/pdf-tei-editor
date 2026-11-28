@@ -116,7 +116,7 @@ function escapeHtml(text) {
 class OcrReviewPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'ocr-review', deps: ['client', 'tools'] })
+    super(context, { name: 'ocr-review', deps: ['client', 'tools', 'xmleditor', 'logger', 'dialog', 'jobs', 'inference-settings', 'text-corrections'] })
   }
 
   static extensionPoints = [ep.jobs.resume];

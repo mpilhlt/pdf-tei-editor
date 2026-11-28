@@ -185,10 +185,16 @@ async def cancel_unclaimed_client_jobs(max_age: float = UNCLAIMED_CLIENT_JOB_MAX
     now = manager.clock()
     count = 0
     for job in await manager.list(statuses=("queued",)):
-        if job.driver == "client" and now - job.created_at.timestamp() > max_age:
+        if job.driver != "client" or now - job.created_at.timestamp() <= max_age:
+            continue
+        # one job that cannot be cancelled must not keep the others queued
+        try:
             await manager.cancel(job.id)
-            logger.info(f"Cancelled client job {job.id} ({job.type}), which was not claimed within {max_age:.0f} s")
-            count += 1
+        except Exception:
+            logger.exception(f"Could not cancel the unclaimed client job {job.id} ({job.type})")
+            continue
+        logger.info(f"Cancelled client job {job.id} ({job.type}), which was not claimed within {max_age:.0f} s")
+        count += 1
     return count
 
 
