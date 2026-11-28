@@ -535,6 +535,88 @@ class TestExtractionJob(unittest.TestCase):
         registry.get_provider_for_user.assert_called_once_with("anthropic", "alice")
         self.assertEqual(self.client.portal.call(self.manager.list), [])
 
+    def add_pdf(self, content: bytes, doc_id: str):
+        """Store another PDF and return its metadata."""
+        import hashlib
+        from fastapi_app.lib.models.models import FileCreate
+        file_hash = hashlib.sha256(content).hexdigest()
+        self.storage.save_file(content, "pdf")
+        return self.repo.insert_file(FileCreate(id=file_hash, filename=f"{file_hash}.pdf", doc_id=doc_id, file_type="pdf", file_size=len(content), label=doc_id, doc_collections=["_inbox"]))
+
+    def test_one_ocr_engine_run_at_a_time_across_job_types(self):
+        """An `ocr` job and the OCR step of an `extract` job for another PDF do not run the engine at the same time."""
+        import threading
+        import time
+        from functools import partial
+        from unittest.mock import patch
+        from fastapi_app.lib.ocr import job_types as ocr_job_types
+        from fastapi_app.lib.ocr.registry import OcrEngineRegistry
+
+        engine = OcrEngineRegistry.get_instance().get_engine("fake")
+        events: list[str] = []
+        first_started = threading.Event()
+        release_first = threading.Event()
+
+        def during_recognize():
+            run = sum(1 for e in events if e.startswith("start"))  # 0 for the first run
+            events.append(f"start{run + 1}")
+            if run == 0:
+                first_started.set()
+                release_first.wait(10)
+            events.append(f"end{run + 1}")
+        engine.during_recognize = during_recognize
+
+        other_pdf = self.add_pdf(b"%PDF-1.4 the PDF of the ocr job", "ocr-job-doc")
+        with patch.object(ocr_job_types, "OCR_ENGINE_POLL_INTERVAL", 0.05):
+            ocr_job = self.client.portal.call(partial(self.manager.submit, "ocr", {"stable_id": other_pdf.stable_id, "engine": "fake"}, owner="alice", resources=[f"file:{other_pdf.stable_id}"]))
+            self.assertTrue(first_started.wait(10))
+            extract_job = self.submit({
+                "extractor": "mock-extractor",
+                "file_id": self.pdf.stable_id,
+                "ocr": {"stable_id": self.pdf.stable_id, "engine": "fake"},
+            })
+            # the extract job waits for the engine
+            deadline = time.monotonic() + 10
+            while self.get_job(extract_job["id"])["progress"]["phase"] != ocr_job_types.OCR_ENGINE_WAIT_PHASE:
+                self.assertLess(time.monotonic(), deadline, self.get_job(extract_job["id"]))
+                time.sleep(0.02)
+            self.assertEqual(events, ["start1"])
+            release_first.set()
+            ocr_done = self.wait_for(ocr_job.model_dump(mode="json"))
+            extract_done = self.wait_for(extract_job)
+        self.assertEqual(ocr_done["status"], "done", ocr_done.get("error"))
+        self.assertEqual(extract_done["status"], "done", extract_done.get("error"))
+        self.assertEqual(events, ["start1", "end1", "start2", "end2"])
+
+    def test_job_cancelled_while_waiting_for_the_ocr_engine(self):
+        import time
+        from fastapi_app.config import get_settings
+        from fastapi_app.lib.core.locking import acquire_lock, release_lock
+        from fastapi_app.lib.ocr import job_types as ocr_job_types
+        from fastapi_app.lib.ocr.registry import OcrEngineRegistry
+        import logging
+
+        engine = OcrEngineRegistry.get_instance().get_engine("fake")
+        logger = logging.getLogger(__name__)
+        db_dir = get_settings().db_dir
+        # another job runs the engine
+        self.assertTrue(acquire_lock(ocr_job_types.OCR_ENGINE_LOCK_ID, "job:other", db_dir, logger))
+        self.addCleanup(release_lock, ocr_job_types.OCR_ENGINE_LOCK_ID, "job:other", db_dir, logger)
+        job = self.submit({
+            "extractor": "mock-extractor",
+            "file_id": self.pdf.stable_id,
+            "ocr": {"stable_id": self.pdf.stable_id, "engine": "fake"},
+        })
+        deadline = time.monotonic() + 10
+        while self.get_job(job["id"])["progress"]["phase"] != ocr_job_types.OCR_ENGINE_WAIT_PHASE:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.02)
+        self.client.portal.call(self.manager.cancel, job["id"])
+        job = self.wait_for(job, timeout=10)
+        self.assertEqual(job["status"], "cancelled")
+        self.assertEqual(engine.calls, [])
+        self.assertEqual(self.calls, [])
+
     def test_extract_job_reports_a_missing_secret_as_428(self):
         from unittest.mock import patch
         from fastapi_app.lib.extraction import run as extraction_run

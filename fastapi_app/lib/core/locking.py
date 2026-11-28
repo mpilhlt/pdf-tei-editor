@@ -18,6 +18,12 @@ import logging
 
 LOCK_TIMEOUT_SECONDS = 90
 
+LOCAL_LOCK_PREFIX = "local:"
+"""Prefix of lock ids that are not files but resources of this instance (e.g. the OCR engine,
+`fastapi_app/lib/ocr/job_types.py`). Such locks work across the workers of the instance like file
+locks, but are not listed by `get_all_active_locks()` (so neither the file list nor the lock sync
+with other instances sees them) and are not checked against the locks of remote instances."""
+
 
 class LockStatus(TypedDict):
     """Result of check_lock()"""
@@ -279,7 +285,7 @@ def _acquire_lock_impl(file_id: str, session_id: str, db_dir: Path, logger: logg
                     return False
             else:
                 # No local lock — check remote lock cache before granting
-                if _is_remotely_locked(file_id, db_dir, logger):
+                if not file_id.startswith(LOCAL_LOCK_PREFIX) and _is_remotely_locked(file_id, db_dir, logger):
                     conn.rollback()
                     logger.warning(
                         f"[LOCK] Session {session_id[:8]}... DENIED lock for file {file_id[:8]}...: "
@@ -486,7 +492,8 @@ def cleanup_stale_locks(db_dir: Path, logger: logging.Logger, timeout_seconds: i
 
 def get_all_active_locks(db_dir: Path, logger: logging.Logger, timeout_seconds: int = LOCK_TIMEOUT_SECONDS) -> Dict[str, str]:
     """
-    Fetches all non-stale locks and returns a map of file_id -> session_id.
+    Fetches all non-stale file locks and returns a map of file_id -> session_id. Locks of local
+    resources (`LOCAL_LOCK_PREFIX`) are not included.
 
     Args:
         db_dir: Directory containing locks.db
@@ -517,7 +524,8 @@ def get_all_active_locks(db_dir: Path, logger: logging.Logger, timeout_seconds: 
                 WHERE datetime(updated_at) >= datetime(?)
             """, (stale_threshold.isoformat(),))
 
-            active_locks = {row['file_id']: row['session_id'] for row in cursor.fetchall()}
+            # locks of local resources are not file locks (see LOCAL_LOCK_PREFIX)
+            active_locks = {row['file_id']: row['session_id'] for row in cursor.fetchall() if not row['file_id'].startswith(LOCAL_LOCK_PREFIX)}
 
             return active_locks
     except Exception as e:

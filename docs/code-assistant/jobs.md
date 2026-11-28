@@ -69,6 +69,14 @@ A job lists the files it works on as resources `file:<stable_id>`. `EditorJobHoo
 - The user's own editing lock also blocks the job; release it before submitting a job on the open document, or let the job work on a new version.
 - Input check: a job submitted with `input_hash=files_input_hash(resources)` (sha256 over the current content hashes of its files) is not resumed if a file changed in the meantime. Jobs without `file:` resources are never refused this way; a client job checks for changes on the client.
 
+### The OCR Engine Lock
+
+Only one OCR engine run happens at a time on the server, whichever job runs it (the `ocr` job, the `ocr` step of the `extract` job). `max_concurrent` limits one job type only, and a per-process semaphore does not reach the other uvicorn workers, so `recognize_for_job()` runs the engine inside `ocr_engine_lock(ctx)` (`fastapi_app/lib/ocr/job_types.py`). It takes the lock `OCR_ENGINE_LOCK_ID` (`local:ocr-engine`) in the file lock table under the holder `job:<job id>`:
+
+- A busy engine means waiting, never 409. The job retries every `OCR_ENGINE_POLL_INTERVAL` (1 s), reports the phase `OCR_ENGINE_WAIT_PHASE` ("Waiting for another text recognition to finish") and can be cancelled while it waits; it then ends `cancelled` without running the engine.
+- While the engine runs, the lock is renewed every `OCR_ENGINE_RENEW_INTERVAL` (30 s, well below `LOCK_TIMEOUT_SECONDS`). It is released when the run ends, also after a cancel or an error. The lock of a worker that died becomes stale and is taken over.
+- Ids with the prefix `LOCAL_LOCK_PREFIX` (`local:`, `fastapi_app/lib/core/locking.py`) lock resources of this instance, not files: `get_all_active_locks()` leaves them out, so neither the file list nor the lock sync with other instances (webdav-sync) sees them, and acquiring them ignores the locks of remote instances.
+
 ## Files a Job Produces
 
 A job writes downloadable output to `job_output_dir(job_id)` (`data/jobs/<job id>`, created on demand; not in `data/tmp`, which the garbage collection empties) and returns their URLs, made with `job_file_url(job_id, name)` (`/api/v1/jobs/{job_id}/files/{name}`). The route serves a file to the users who may view the job and 404 otherwise. The directory is removed when the job is deleted, by the user or after the retention time.

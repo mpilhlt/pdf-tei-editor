@@ -4,8 +4,11 @@ optional LLM correction pass) and `ocr.llm-correction` (the correction pass alon
 and the checks that `routers/ocr.py` also makes before it submits them.
 
 Both job types hold the lock of their PDF (resource `file:<stable_id>`), so that no second run and
-no text correction (#931) changes the PDF meanwhile. Only one text recognition runs at a time on
-the server (`max_concurrent=1`); further jobs wait as `queued`.
+no text correction (#931) changes the PDF meanwhile. Only one `ocr` job runs at a time on the
+server (`max_concurrent=1`); further jobs wait as `queued`. Since other job types run text
+recognition too (the `ocr` step of `extract`), the engine run itself is guarded by a lock that all
+workers share (`OCR_ENGINE_LOCK_ID` in the file lock table, see `ocr_engine_lock()`): a job that
+finds the engine busy waits, reporting the phase `OCR_ENGINE_WAIT_PHASE`, and can be cancelled meanwhile.
 
 A run is cancelled through the progress reports of the engine and of the correction pass (see
 `progress.py`). Cancelling during text recognition leaves the PDF unchanged. The OCR result is
@@ -15,8 +18,8 @@ stored before the LLM correction pass starts, so cancelling the pass keeps it; t
 
 import asyncio
 import tempfile
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,8 +29,11 @@ from fastapi import HTTPException
 from fastapi_jobqueue import Job, JobContext, JobManager, ResourceBusy
 from fastapi_jobqueue.errors import JobCancelled
 
+from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import get_db, get_file_storage
+from fastapi_app.lib.core.locking import LOCAL_LOCK_PREFIX, acquire_lock, release_lock
 from fastapi_app.lib.jobs import job_type, job_user, register_client_type
+from fastapi_app.lib.jobs.hooks import job_lock_holder
 from fastapi_app.lib.llm import LLMProvider, LLMProviderRegistry
 from fastapi_app.lib.llm.http_errors import llm_http_error
 from fastapi_app.lib.llm.model_access import check_model_access
@@ -56,6 +62,18 @@ LLM_REVIEW_JOB_TYPE = "ocr.llm-review"
 
 OCR_BUSY_MESSAGE = "Text recognition is already running for this PDF"
 """The response (409) to a job for a PDF whose lock another job or a user holds."""
+
+OCR_ENGINE_LOCK_ID = f"{LOCAL_LOCK_PREFIX}ocr-engine"
+"""Id of the lock (in the file lock table) that the job running the OCR engine holds, as `job:<job id>`."""
+
+OCR_ENGINE_WAIT_PHASE = "Waiting for another text recognition to finish"
+"""The phase that a job reports while it waits for the OCR engine lock."""
+
+OCR_ENGINE_POLL_INTERVAL = 1.0
+"""Seconds between the attempts to take the OCR engine lock."""
+
+OCR_ENGINE_RENEW_INTERVAL = 30.0
+"""Seconds between the renewals of the OCR engine lock while the engine runs; well below LOCK_TIMEOUT_SECONDS."""
 
 
 class OcrJobParams(OcrRequest):
@@ -359,6 +377,49 @@ def _store_pdf(repo: FileRepository, storage: FileStorage, source: FileMetadata,
     return repo.create_pdf_version(source.stable_id, new_hash, len(content), file_metadata, created_by=str(user.get("username") or "") or None)
 
 
+@asynccontextmanager
+async def ocr_engine_lock(ctx: JobContext) -> AsyncIterator[None]:
+    """
+    Hold the OCR engine lock while the body runs, so that only one OCR engine run happens at a
+    time on the server (across all workers and job types). While another job holds it, wait and
+    report `OCR_ENGINE_WAIT_PHASE`; the lock is renewed while the body runs and released afterwards.
+    A lock left behind by a worker that died becomes stale after `LOCK_TIMEOUT_SECONDS` and is taken over.
+
+    Raises:
+        JobCancelled: if the job is cancelled while it waits
+    """
+    db_dir = get_settings().db_dir
+    holder = job_lock_holder(ctx.job)
+    waiting = False
+    while not await asyncio.to_thread(acquire_lock, OCR_ENGINE_LOCK_ID, holder, db_dir, logger):
+        if not waiting:
+            logger.info(f"Job {ctx.job_id} waits for another text recognition to finish")
+            waiting = True
+        # raises JobCancelled after a cancel
+        await ctx.report(phase=OCR_ENGINE_WAIT_PHASE, done=None, total=None, unit=None, eta_seconds=None)
+        await asyncio.sleep(OCR_ENGINE_POLL_INTERVAL)
+
+    async def renew() -> None:
+        while True:
+            await asyncio.sleep(OCR_ENGINE_RENEW_INTERVAL)
+            try:
+                if not await asyncio.to_thread(acquire_lock, OCR_ENGINE_LOCK_ID, holder, db_dir, logger):
+                    logger.warning(f"Job {ctx.job_id} lost the OCR engine lock to another holder")
+            except Exception:
+                logger.exception(f"Could not renew the OCR engine lock of job {ctx.job_id}")
+
+    renewal = asyncio.create_task(renew())
+    try:
+        yield
+    finally:
+        renewal.cancel()
+        try:
+            # synchronous, so that a cancelled task still releases the lock
+            release_lock(OCR_ENGINE_LOCK_ID, holder, db_dir, logger)
+        except Exception:
+            logger.exception(f"Could not release the OCR engine lock of job {ctx.job_id}")
+
+
 async def recognize_for_job(ctx: JobContext, params: OcrJobParams, user: dict[str, Any]) -> OcrResponse:
     """
     Apply OCR to a PDF and store the result as a new PDF of the document (#944); the versions
@@ -399,19 +460,20 @@ async def _recognize(ctx: JobContext, params: OcrJobParams, user: dict[str, Any]
     input_path = pdf_path(storage, file)
     with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
         output_path = Path(tmp) / "output.pdf"
-        with progress_reporter(ctx.report_threadsafe, ctx.check_cancelled) as progress:
-            try:
-                # to_thread passes the progress reporter on to the worker thread
-                outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, params.rebuild)
-            except ValueError as e:
-                # an engine may turn the cancellation raised in its progress report into its own error
+        async with ocr_engine_lock(ctx):
+            with progress_reporter(ctx.report_threadsafe, ctx.check_cancelled) as progress:
+                try:
+                    # to_thread passes the progress reporter on to the worker thread
+                    outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, params.rebuild)
+                except ValueError as e:
+                    # an engine may turn the cancellation raised in its progress report into its own error
+                    progress.check_cancelled()
+                    raise HTTPException(status_code=400, detail=str(e))
+                except Exception as e:
+                    progress.check_cancelled()
+                    logger.error(f"OCR with {engine.id} failed for {file.stable_id}: {e}")
+                    raise HTTPException(status_code=500, detail=f"Text recognition failed: {e}")
                 progress.check_cancelled()
-                raise HTTPException(status_code=400, detail=str(e))
-            except Exception as e:
-                progress.check_cancelled()
-                logger.error(f"OCR with {engine.id} failed for {file.stable_id}: {e}")
-                raise HTTPException(status_code=500, detail=f"Text recognition failed: {e}")
-            progress.check_cancelled()
         if not output_path.exists():
             raise HTTPException(status_code=500, detail="Text recognition produced no output")
 
