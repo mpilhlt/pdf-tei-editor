@@ -93,7 +93,7 @@ The output is a regular PDF (not PDF/A).
 
 ## Footnote marker repair
 
-Tesseract reads small superscript footnote markers as punctuation or quotation marks (`tut³¹²⁾` → `tut?!?)`, `Regel¹²` → `Regel"`, `vor.¹⁴` → `vor.'*`, #904). Higher resolutions (300 to 800 dpi) and the `tessdata_best` models do not help: on the example document of the issue, none of the markers was read correctly in any combination. The engine therefore repairs the markers in Tesseract's hOCR output before OCRmyPDF builds the text layer from it (`footnote_markers.py`, `ocrmypdf_plugin.py`):
+Tesseract reads small superscript footnote markers as punctuation or quotation marks (`tut³¹²⁾` → `tut?!?)`, `Regel¹²` → `Regel"`, `vor.¹⁴` → `vor.'*`, #904). Higher resolutions (300 to 800 dpi) do not help. The `tessdata_best` models (`model: best`) read most superscripts correctly, but not all of them, and the fast models are the default. The engine therefore repairs the markers in Tesseract's hOCR output before OCRmyPDF builds the text layer from it (`footnote_markers.py`, `ocrmypdf_plugin.py`):
 
 1. **Per page** (in OCRmyPDF's worker processes, `FootnoteMarkerEngine.generate_hocr()`): words ending in a run of non-letters are marker candidates. For each, the columns whose ink lies well above the baseline of the word (the superscript) are cropped, upscaled and recognized with a digits-only whitelist, with the `eng` model and the document languages (the models read digits differently). All regions of a page are passed to Tesseract in one call per model, as a list of images (`make_tesseract_digit_recognizer()`): starting Tesseract and loading a model takes far longer than recognizing a region, and one call per region made the run take about 60% longer on ten cores. Candidates come in three kinds:
    - followed by `)` (`tut?!?)`): a candidate even if no raised glyphs are found;
@@ -108,6 +108,16 @@ A marker is only changed if a reading fits the numbering, and markers read corre
 The document step relies on two details of OCRmyPDF 17 that are not part of its plugin API: the page results passed to the executor's `task_finished` callback carry the hOCR file in `ocr`, and the hOCR files are parsed only in `OcrGrafter.finalize()`. If a later version changes this, the repair does nothing; `TestRepairIntegration` in `tests/test_footnote_markers.py` detects it.
 
 The plugin is passed to every OCRmyPDF run: OCRmyPDF serializes runs with different plugin sets, so making it optional would block concurrent jobs. Markers that Tesseract drops (`„Wort“¹²` read as `„Wort“`) or reads as letters are not detected.
+
+## Training data for fine-tuning (experimental)
+
+Reviewed segmentation documents provide ground truth for fine-tuning the Tesseract models (#959). `GET /api/v1/ocr/training-lines` (admins only, optional `collection`) returns a zip archive with one image (`.png`), text (`.gt.txt`, tesstrain's layout) and source record (`.json`) per line (`fastapi_app/lib/ocr/training_lines.py`):
+
+- Only zone documents whose PDF has a text layer made by text recognition (`file_metadata.ocr`), and only pages whose unit review result is OK for their current content: a final mark decides, otherwise at least one human OK mark and no not-OK mark. Marks of LLM reviewers do not count.
+- A line is one text object of the layer. Its text is the TEI text aligned with the layer's words, with the layer's dashes and quotes where they only differ in form. Lines whose words do not align cleanly (different words, text missing from the layer next to them) or with fewer than three characters are left out.
+- The image is cut from the page rendered at 300 dpi, from the boxes pdfium reads for the layer's characters, with some padding. Lines whose box overlaps another line are left out. All versions of a document are read, newest first; a line of the same PDF page is exported once.
+
+`scripts/dev/tesseract-lines.py` downloads the archive (`fetch`), splits it into training and evaluation lines by document (`split`) and reports the character and word error rates and the most frequent confusions of models on the evaluation lines (`eval`). Its help text shows how to fine-tune a model with tesstrain. The Debian package `tesseract-ocr` contains the training programs (`lstmtraining`, `combine_tessdata`, ...).
 
 ## Logging and progress
 

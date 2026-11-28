@@ -10,10 +10,13 @@ Endpoints:
 - POST /api/v1/ocr/text-corrections/apply   - Write a TEI's text corrections into the PDF's OCR text layer
 - POST /api/v1/ocr/llm-review/plan          - Number of page windows of the LLM review of OCR errors
 - POST /api/v1/ocr/llm-review               - LLM review of one page window for OCR errors
+- GET  /api/v1/ocr/training-lines           - Zip of Tesseract ground truth lines from reviewed pages (admin)
 """
 
 import asyncio
+import shutil
 import tempfile
+import zipfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,11 +26,13 @@ from typing import Any
 
 import pikepdf
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from lxml import etree
 from pypdf.errors import PdfReadError
 
 from ..config import get_settings
-from ..lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_authenticated_user, require_reviewer_or_admin, require_session_id
+from ..lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_admin_user, require_authenticated_user, require_reviewer_or_admin, require_session_id
 from ..lib.core.locking import check_lock
 from ..lib.core.sessions import SessionManager
 from ..lib.models import FileMetadata, FileUpdate
@@ -68,6 +73,7 @@ from ..lib.ocr.registry import OcrEngineRegistry
 from ..lib.ocr.text_corrections import CorrectedPdfHandler, CorrectedPdfMismatch, CorrectionPlan, WordCorrection, derive_corrections, get_corrected_pdf_handler, tei_words
 from ..lib.ocr.text_layer import PageCallback, WordPatch, patch_text_layer, read_text_layer
 from ..lib.ocr.text_quality import analyze_text_layer
+from ..lib.ocr.training_lines import LineSource, collect_training_lines, write_lines
 from ..lib.permissions.access_control import check_file_access
 from ..lib.repository.file_repository import FileRepository
 from ..lib.secrets import MissingSecretError, secret_required_detail
@@ -76,7 +82,7 @@ from ..lib.sse.sse_service import SSEService
 from ..lib.sse.sse_utils import ProgressBar, broadcast_to_other_sessions
 from ..lib.storage.file_storage import FileStorage
 from ..lib.tei.zone_lines import window_range
-from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout
+from ..lib.tei.layout import MISSING_LAYOUT_MESSAGE, LineLayout, get_line_layout, get_zone_labels
 from ..lib.utils.config_utils import get_config
 from ..lib.utils.hash_utils import generate_file_hash
 from ..lib.utils.revision_hash import stamp_revision_hashes
@@ -1482,3 +1488,88 @@ async def ocr_llm_review(
         window_start=start,
         window_end=end,
     )
+
+
+# ── Training lines for Tesseract (#959) ──────────────────────────────
+
+
+def _write_training_lines(repo: FileRepository, storage: FileStorage, collection: str | None, archive_path: Path) -> tuple[int, int]:
+    """
+    Write the training lines of all zone documents (of a collection) into a zip archive, see
+    `lib/ocr/training_lines.py`. All versions are read, newest first; a line of the same PDF page is
+    taken once. Only documents whose PDF has a text layer made by text recognition contribute.
+
+    Returns:
+        (number of documents with lines, number of lines)
+    """
+    zone_variants: dict[str, bool] = {}
+    seen: set[tuple[str, int, int]] = set()
+    documents: set[str] = set()
+    count = 0
+    with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for tei in repo.list_files(collection=collection, file_type="tei"):
+            if tei.variant is None:
+                continue
+            if tei.variant not in zone_variants:
+                zone_variants[tei.variant] = get_zone_labels(tei.variant) is not None
+            if not zone_variants[tei.variant]:
+                continue
+            pdf = repo.get_pdf_for_file(tei)
+            ocr = pdf.file_metadata.get(OCR_METADATA_KEY) if pdf is not None else None
+            if pdf is None or not isinstance(ocr, dict):
+                continue
+            pdf_path = storage.get_file_path(pdf.id, "pdf")
+            content = storage.read_file(tei.id, "tei")
+            if pdf_path is None or not pdf_path.exists() or content is None:
+                continue
+            xml = content.decode("utf-8")
+            layout = get_line_layout(xml, tei.doc_id, tei.variant)
+            if layout is None:
+                continue
+            try:
+                lines = collect_training_lines(xml, tei.variant, layout, pdf_path)
+            except (ValueError, etree.XMLSyntaxError, pikepdf.PdfError) as e:
+                logger.warning(f"No training lines from {tei.stable_id}: {e}")
+                continue
+            languages = ocr.get("languages")
+            source = LineSource(
+                doc_id=tei.doc_id,
+                stable_id=tei.stable_id,
+                pdf_hash=pdf.id,
+                collections=list(tei.doc_collections or []),
+                languages=[str(lang) for lang in languages] if isinstance(languages, list) else [],
+            )
+            added = write_lines(archive, source, pdf_path, lines, seen)
+            if added:
+                documents.add(tei.doc_id)
+                count += added
+    return len(documents), count
+
+
+@router.get("/training-lines", response_class=FileResponse)
+async def export_training_lines(
+    collection: str | None = Query(None, description="Only documents of this collection"),
+    repo: FileRepository = Depends(get_file_repository),
+    storage: FileStorage = Depends(get_file_storage),
+    user: dict[str, Any] = Depends(require_admin_user),
+) -> FileResponse:
+    """
+    Zip archive of ground truth lines for training Tesseract (tesstrain layout): for every line of a
+    page marked OK in the unit review of a zone document whose PDF was made by text recognition, the
+    line image (`.png`), its text (`.gt.txt`) and its source (`.json`). Takes a while for many
+    documents. Admins only.
+    """
+    folder = Path(tempfile.mkdtemp(prefix="training-lines-"))
+    archive_path = folder / "training-lines.zip"
+
+    def cleanup() -> None:
+        shutil.rmtree(folder, ignore_errors=True)
+
+    try:
+        documents, lines = await asyncio.to_thread(_write_training_lines, repo, storage, collection, archive_path)
+    except BaseException:
+        cleanup()
+        raise
+    logger.info(f"Exported {lines} training lines of {documents} documents for {user.get('username')}")
+    return FileResponse(path=str(archive_path), media_type="application/zip", filename="training-lines.zip", background=BackgroundTask(cleanup))
+

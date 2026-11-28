@@ -8,7 +8,8 @@
  *
  * Upload (multipart/form-data) and SSE (text/event-stream) endpoints are
  * intentionally excluded; call `callApi`/`EventSource` directly for those, as
- * documented in docs/code-assistant/api-client.md.
+ * documented in docs/code-assistant/api-client.md. So is the zip download
+ * `GET /ocr/training-lines`, which only `scripts/dev/tesseract-lines.py` uses.
  */
 
 // Type Definitions
