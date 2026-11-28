@@ -881,6 +881,42 @@ sl-drawer.diagnostics-drawer::part(footer) {
   padding: 6px;
 }
 
+/* "Differences from the PDF": the diagnostics of sync sources, below the others */
+.diagnostics-drawer-sync-group {
+  margin: 4px 6px 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--sl-color-neutral-300);
+}
+
+.diagnostics-drawer-sync-group[hidden] {
+  display: none;
+}
+
+.diagnostics-drawer-sync-group .diagnostics-drawer-list {
+  padding: 6px 0;
+}
+
+.diagnostics-drawer-sync-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diagnostics-drawer-sync-title {
+  flex: 1 1 auto;
+  font-weight: var(--sl-font-weight-semibold);
+}
+
+.diagnostics-drawer-sync-heading .diagnostics-drawer-action[hidden] {
+  display: none;
+}
+
+.diagnostics-drawer-sync-help {
+  margin: 4px 0 0;
+  font-size: 85%;
+  color: var(--sl-color-neutral-600);
+}
+
 .diagnostics-drawer-item {
   display: flex;
   align-items: flex-start;

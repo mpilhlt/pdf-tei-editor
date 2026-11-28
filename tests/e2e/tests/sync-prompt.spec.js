@@ -5,7 +5,9 @@
  * does), makes an edit that adds such a diagnostic, and checks that reviewers are asked to
  * synchronize: "Synchronize" writes the text corrections of the page, "Show changes" lists only
  * the sync diagnostics in the diagnostics drawer, and "Don't ask again" turns the prompt off for
- * the document. Diagnostics there before the first edit and annotators get no prompt.
+ * the document. Diagnostics there before the first edit are asked about once, with another text.
+ * The drawer lists the sync diagnostics in their own section, unchecked, with "Revert to PDF text"
+ * and a "Write to PDF" button.
  *
  * @testCovers app/src/plugins/sync-prompt.js
  * @testCovers app/src/modules/sync-prompt.js
@@ -127,16 +129,34 @@ async function clickDialog(page, name) {
 }
 
 /**
- * The messages listed in the drawer and whether its filter button is shown.
+ * The messages listed in the drawer (`messages`: the main list, `sync`: the "Differences from the
+ * PDF" section) and whether its filter button is shown.
  * @param {Page} page
  */
 async function drawer(page) {
   return page.evaluate(() => {
     const d = /** @type {any} */ (window).ui.pdfViewer.diagnosticsDrawer;
+    /** @param {HTMLElement} list */
+    const messages = list => Array.from(list.children).map((/** @type {HTMLElement} */ item) => item.querySelector('.diagnostics-drawer-message')?.textContent ?? '');
     return {
-      messages: Array.from(d.list.children).map((/** @type {HTMLElement} */ item) => item.querySelector('.diagnostics-drawer-message')?.textContent ?? ''),
+      messages: messages(d.list),
+      sync: d.syncGroup.hidden ? [] : messages(d.syncGroup.syncList),
       filtered: !d.header.filterButton.hidden
     };
+  });
+}
+
+/**
+ * Whether the entries of the sync section are checked, and the labels of their fix buttons.
+ * @param {Page} page
+ */
+async function syncEntries(page) {
+  return page.evaluate(() => {
+    const d = /** @type {any} */ (window).ui.pdfViewer.diagnosticsDrawer;
+    return Array.from(d.syncGroup.syncList.children).map((/** @type {HTMLElement} */ item) => ({
+      checked: /** @type {any} */ (item.querySelector('sl-checkbox')).checked,
+      fix: item.querySelector('.diagnostics-drawer-apply-fix')?.textContent ?? null
+    }));
   });
 }
 
@@ -154,19 +174,35 @@ test.describe('Sync prompt', () => {
       await page.evaluate(() => /** @type {any} */ (window).app.getDependency('sync-prompt').uiStorage.remove('dontAskDocuments'));
       await registerSyncSource(page);
 
-      // diagnostics present before the first edit do not open the prompt
+      // diagnostics present before the first edit are asked about once, as differences from the PDF
       await page.evaluate(() => {
         const view = /** @type {any} */ (window).app.getDependency('xmleditor').getView();
         const at = view.state.doc.toString().indexOf('<body');
         view.dispatch({ changes: { from: at, insert: 'SYNC9 ' } });
       });
-      await expect.poll(async () => (await drawer(page)).messages).toContain('Sync: unexpected token "SYNC9"');
+      await expect.poll(async () => (await drawer(page)).sync).toEqual(['Sync: unexpected token "SYNC9"']);
+      // in their own section, unchecked, with a fix that reverts the change
+      expect((await drawer(page)).messages).toContain('not a sync diagnostic');
+      expect(await syncEntries(page)).toEqual([{ checked: false, fix: 'Revert to PDF text' }]);
+      const atLoad = await waitForTestMessage(consoleLogs, 'SYNC_PROMPT_OPENED', 10000);
+      expect(atLoad.value).toEqual({ pages: [8], count: 1, reason: 'load' });
+      await expect(page.locator('sl-dialog[name="syncPromptDialog"] [name="message"]'))
+        .toHaveText('The text of this document differs from the PDF in 1 place (page 9). If these differences are intended, for example corrections that were not written into the PDF yet, the PDF text layer and the test training data need to be updated to match.');
+      await clickDialog(page, 'notNow');
+      const closedAtLoad = await waitForTestMessage(consoleLogs, 'SYNC_PROMPT_CLOSED', 10000);
+      expect(closedAtLoad.value.choice).toBe('cancel');
       expect(await checkNow(page)).toBeNull();
+      // Select all leaves the sync diagnostics out
+      await page.locator('sl-drawer[name="diagnosticsDrawer"] sl-checkbox[name="selectAll"]').click();
+      expect(await syncEntries(page)).toEqual([{ checked: false, fix: 'Revert to PDF text' }]);
+      await page.locator('sl-drawer[name="diagnosticsDrawer"] sl-checkbox[name="selectAll"]').click();
 
       // an edit adding a sync diagnostic opens it after the delay; Synchronize writes its page
       await typeBeforeBody(page, 'SYNC2 ');
-      const opened = await waitForTestMessage(consoleLogs, 'SYNC_PROMPT_OPENED', 10000);
-      expect(opened.value).toEqual({ pages: [1], count: 1 });
+      // the second prompt, after the one at load
+      const openedPrompts = () => consoleLogs.filter(log => log.message === 'SYNC_PROMPT_OPENED');
+      await expect.poll(() => openedPrompts().length, { timeout: 10000 }).toBe(2);
+      expect(openedPrompts()[1].value).toEqual({ pages: [1], count: 1, reason: 'edit' });
       await expect(page.locator('sl-dialog[name="syncPromptDialog"] [name="message"]'))
         .toHaveText('You changed the text of this document. If the changes are intentional, the PDF text layer and the test training data need to be updated to match.');
       await clickDialog(page, 'synchronize');
@@ -179,9 +215,13 @@ test.describe('Sync prompt', () => {
       await clickDialog(page, 'showChanges');
       expect(await shown).toBe('show');
       await expect.poll(() => drawer(page)).toEqual({
-        messages: ['Sync: unexpected token "SYNC9"', 'Sync: unexpected token "SYNC2"', 'Sync: unexpected token "SYNC4"'],
+        messages: [],
+        sync: ['Sync: unexpected token "SYNC9"', 'Sync: unexpected token "SYNC2"', 'Sync: unexpected token "SYNC4"'],
         filtered: true
       });
+      // Write to PDF writes the pages of all listed sync diagnostics
+      await page.locator('sl-drawer[name="diagnosticsDrawer"] [name="syncAction"]').click();
+      await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).writtenPages)).toEqual([[1], [1, 3, 8]]);
       await page.locator('[name="filterButton"]').click();
       await expect.poll(async () => (await drawer(page)).messages).toContain('not a sync diagnostic');
       expect((await drawer(page)).filtered).toBe(false);
@@ -196,7 +236,7 @@ test.describe('Sync prompt', () => {
       await typeBeforeBody(page, 'SYNC6 ');
       expect(await checkNow(page)).toBeNull();
       expect(await page.evaluate(() => /** @type {any} */ (window).app.getDependency('sync-prompt').isOffForDocument())).toBe(true);
-      expect(await page.evaluate(() => /** @type {any} */ (window).writtenPages)).toEqual([[1]]);
+      expect(await page.evaluate(() => /** @type {any} */ (window).writtenPages)).toEqual([[1], [1, 3, 8]]);
     } finally {
       await page.evaluate(() => /** @type {any} */ (window).app.getDependency('sync-prompt').uiStorage.remove('dontAskDocuments')).catch(() => {});
       await releaseAllLocks(page);

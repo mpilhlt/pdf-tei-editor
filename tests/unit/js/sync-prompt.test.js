@@ -66,4 +66,11 @@ describe('pagesOf and promptText', () => {
     assert.match(promptText([entry(0, 'GROBID training data')]), /the PDF text layer and the GROBID training data need to be updated/);
     assert.match(promptText([entry(0, 'PDF text layer')]), /intentional, the PDF text layer needs to be updated/);
   });
+
+  it('describes differences found when the document was loaded', () => {
+    const text = promptText([entry(1, 'GROBID training data'), entry(4, 'GROBID training data'), entry(1, 'GROBID training data')], 'load');
+    assert.match(text, /^The text of this document differs from the PDF in 3 places \(pages 2 and 5\)\./);
+    assert.match(text, /intended, for example corrections that were not written into the PDF yet, the PDF text layer and the GROBID training data need to be updated/);
+    assert.match(promptText([entry(0, 'PDF text layer')], 'load'), /in 1 place \(page 1\)\. .* the PDF text layer needs to be updated/);
+  });
 });
