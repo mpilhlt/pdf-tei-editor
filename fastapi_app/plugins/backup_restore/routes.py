@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi_jobqueue import Job
 from starlette.background import BackgroundTask
 
 from fastapi_app.lib.core.dependencies import (
@@ -29,11 +30,13 @@ from fastapi_app.lib.core.dependencies import (
     require_session_id,
 )
 from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.jobs import get_job_manager
 from fastapi_app.lib.core.data_restore import STAGING_DIR, RestoreError, stage_restore
 from fastapi_app.lib.core.worker_recycle import can_recycle_workers, recycle_workers
 from fastapi_app.lib.plugins.plugin_manifest import get_pte_version
 from fastapi_app.lib.sse.sse_utils import broadcast_to_all_sessions, send_notification
 from fastapi_app.plugins.backup_restore.archive import create_backup_zip
+from fastapi_app.plugins.backup_restore.plugin import BACKUP_JOB_TYPE
 from fastapi_app.plugins.backup_restore.manifest import (
     IncompatibleBackupError,
     check_compatible,
@@ -146,6 +149,19 @@ async def backup_restore_view(
     can_restore = "true" if _user_has_role(user, RESTORE_ROLE) else "false"
     html = html.replace("__CAN_BACKUP__", can_backup).replace("__CAN_RESTORE__", can_restore)
     return HTMLResponse(content=html)
+
+
+@router.post("/backup", status_code=202)
+async def start_backup(
+    user: dict[str, Any] = Depends(require_authenticated_user),
+) -> Job:
+    """Create a backup as a job (type `backup-restore.backup`) whose result carries the download URL.
+
+    Backups queue one at a time. Poll `GET /api/v1/jobs/{id}`; the result is
+    `{"download", "filename", "size", "sha256"}`.
+    """
+    _authorize(BACKUP_ROLE, user)
+    return await get_job_manager().submit(BACKUP_JOB_TYPE, None, owner=user["username"])
 
 
 @router.get("/download")

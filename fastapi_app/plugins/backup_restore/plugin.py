@@ -7,10 +7,15 @@ controlled by the independent `backup` and `restore` roles (`admin` and `*`
 imply both).
 """
 
+import asyncio
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
+from fastapi_jobqueue import JobContext
+
+from fastapi_app.lib.jobs import job_file_url, job_output_dir, job_type, thread_callbacks
 from fastapi_app.lib.plugins.plugin_base import Plugin, PluginContext
 from fastapi_app.lib.utils.data_utils import get_data_file_path, load_json_file, save_json_file
 
@@ -54,6 +59,51 @@ def ensure_roles(db_dir: Path) -> list[str]:
     return [r["id"] for r in missing]
 
 
+BACKUP_JOB_TYPE = "backup-restore.backup"
+
+
+async def run_backup(ctx: JobContext, params: Any) -> dict[str, Any]:
+    """Create the backup ZIP in the job's output directory.
+
+    Returns:
+        `{"download": URL of the ZIP, "filename": str, "size": int, "sha256": str}`
+    """
+    from fastapi_app.config import get_settings
+    from fastapi_app.lib.plugins.plugin_manifest import get_pte_version
+    from fastapi_app.plugins.backup_restore.archive import create_backup_zip
+
+    data_root = get_settings().data_root
+    pte_version = get_pte_version()
+    if pte_version is None:
+        logger.warning("Cannot determine the application version; the backup cannot be restored without editing its manifest")
+    out_dir = job_output_dir(ctx.job_id)
+    progress, _ = thread_callbacks(ctx.report_threadsafe, ctx.check_cancelled)
+    try:
+        zip_path, sha256 = await asyncio.to_thread(
+            create_backup_zip, data_root, out_dir, pte_version, progress, ctx.check_cancelled
+        )
+    except BaseException:
+        # Cancelled or failed: the partial ZIP is already deleted; do not leave an empty directory
+        try:
+            out_dir.rmdir()
+        except OSError:
+            pass
+        raise
+    filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    final_path = zip_path.rename(out_dir / filename)
+    return {
+        "download": job_file_url(ctx.job_id, filename),
+        "filename": filename,
+        "size": final_path.stat().st_size,
+        "sha256": sha256,
+    }
+
+
+def register_job_types() -> None:
+    """Register the `backup-restore.backup` job type (idempotent: registering again replaces it)."""
+    job_type(BACKUP_JOB_TYPE, title="Backup", roles=["admin", "backup"], max_concurrent=1)(run_backup)
+
+
 class BackupRestorePlugin(Plugin):
     """Plugin for backing up and restoring application data."""
 
@@ -82,6 +132,7 @@ class BackupRestorePlugin(Plugin):
         from fastapi_app.config import get_settings
 
         ensure_roles(get_settings().db_dir)
+        register_job_types()
 
     def get_endpoints(self) -> dict[str, Callable]:
         return {
