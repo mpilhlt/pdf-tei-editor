@@ -13,7 +13,7 @@
  * models and the configured default), so every listed model is selectable.
  * Adds a Tools menu entry (new "inference" category) listing every available provider's models,
  * fetched from GET /api/v1/llm/providers, with a warning icon when a
- * model's live status isn't "available", and, for admins only, a button that
+ * model's live status isn't "available", an eye icon for models that accept images ("vision" capability), and, for admins only, a button that
  * copies the model's full "<provider id>/<model id>" for use in scripts. The entry's own label reads
  * "Default Model" until a selection is made, then "<provider>/<model>";
  * selecting a model also toasts a confirmation naming it.
@@ -351,7 +351,8 @@ export class InferenceSettingsPlugin extends Plugin {
   /**
    * Build one model's `sl-menu-item[type=checkbox]`. When the model's
    * status isn't "available", attaches a warning tooltip+icon as a
-   * `suffix`-slotted child - purely informational, never disables the
+   * `suffix`-slotted child, and an eye icon for models with the "vision"
+   * capability - purely informational, never disables the
    * item. `status` is null for providers that don't expose live load
    * data: no icon in that case, silence rather than a false "available"
    * signal.
@@ -377,6 +378,13 @@ export class InferenceSettingsPlugin extends Plugin {
       const icon = /** @type {HTMLElement & {name: string}} */ (document.createElement('sl-icon'));
       icon.name = 'exclamation-triangle';
       tooltip.appendChild(icon);
+      item.appendChild(tooltip);
+    }
+    if (model.capabilities?.includes('vision')) {
+      const tooltip = /** @type {HTMLElement & {content: string, slot: string}} */ (document.createElement('sl-tooltip'));
+      tooltip.slot = 'suffix';
+      tooltip.content = 'This model accepts images, e.g. the page images in the OCR error review';
+      tooltip.innerHTML = '<sl-icon name="eye" data-test-id="inference-model-vision"></sl-icon>';
       item.appendChild(tooltip);
     }
     if (this._isAdmin()) {
