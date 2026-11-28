@@ -22,6 +22,7 @@
 
 import { Plugin } from '../modules/plugin-base.js'
 import { JobClient, JobCancelledError, formatJobProgress } from '../modules/job-client.js'
+import { JobTabChannel, resumeAction } from '../modules/job-tab-channel.js'
 import { notify } from '../modules/sl-utils.js'
 import { testLog } from '../modules/test-log.js'
 import ep from '../extension-points.js'
@@ -60,6 +61,12 @@ class JobsPlugin extends Plugin {
   #waited = new Set()
 
   #appReady = false
+
+  /** @type {JobTabChannel} Answers other tabs whether this tab drives a job or uses a holder id */
+  #tabs = new JobTabChannel({
+    port: typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('pte-jobs'),
+    sessionStorage: window.sessionStorage
+  })
 
   /** @type {Set<(event: JobEvent) => void>} Listeners of the feed of the job client */
   #feedListeners = new Set()
@@ -104,6 +111,7 @@ class JobsPlugin extends Plugin {
 
   async shutdown() {
     this.#stop()
+    this.#tabs.close()
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -160,9 +168,15 @@ class JobsPlugin extends Plugin {
    */
   runClientJob(type, params, body, options = {}) {
     if (options.jobId) this.#waited.add(options.jobId)
-    return this.client.runClientJob(type, params, (run) => {
+    return this.client.runClientJob(type, params, async (run) => {
       this.#waited.add(run.job.id)
-      return body(run)
+      // other tabs ask whether a live tab drives the job before they resume it
+      const endDrive = this.#tabs.drive(run.job.id)
+      try {
+        return await body(run)
+      } finally {
+        endDrive()
+      }
     }, options)
   }
 
@@ -195,6 +209,9 @@ class JobsPlugin extends Plugin {
     await this.#relist()
     if (this.#client !== client) return
     testLog('JOBS_SUBSCRIBED')
+    // a duplicated tab has a copy of the holder id of the original tab; it takes a fresh one
+    if (await this.#tabs.ensureOwnHolder()) this.#logger.info('Another tab uses the job holder id of this tab; using a fresh one')
+    if (this.#client !== client) return
     await this.#resumeClientJobs(client)
   }
 
@@ -370,7 +387,8 @@ class JobsPlugin extends Plugin {
   /**
    * Resume the client jobs that a reload interrupted: those of this tab without asking, others
    * after asking the user; discarded jobs and jobs without a `jobs.resume` contribution are cancelled.
-   * Active jobs that another tab drives are left alone.
+   * Active jobs that another tab holds, or that a live tab drives (asked over the tab channel,
+   * see {@link resumeAction}), are left alone.
    * @param {JobClient} client
    */
   async #resumeClientJobs(client) {
@@ -395,12 +413,13 @@ class JobsPlugin extends Plugin {
         await client.cancel(job.id).catch((error) => this.#logger.warn(`Could not cancel job ${job.id}: ${error}`))
         continue
       }
-      const holder = job.lease?.holder ?? job.lease_holder ?? null
-      if (holder === client.holder) {
+      const action = await resumeAction(job, client.holder, this.#tabs)
+      if (this.#client !== client) return
+      if (action === 'skip') continue
+      if (action === 'resume') {
         this.#resume(contribution, job)
         continue
       }
-      if (job.status === 'active' && holder) continue
       const title = this.#titles.get(job.type) ?? job.type
       const resume = await this.getDependency('dialog').confirm(
         `The job "${title}" was interrupted. Confirm to resume it, or Cancel to discard it.`,
