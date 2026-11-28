@@ -509,41 +509,11 @@
  */
 
 /**
- * @typedef {'queued'|'running'|'done'|'failed'|'cancelled'} OcrJobStatus
- */
-
-/**
- * Progress of a running OCR job
- * @typedef {Object} OcrProgress
- * @property {string} phase - What the engine is doing, e.g. 'Recognizing text'
- * @property {number|null=} done - Units of the phase done so far, if the phase is counted
- * @property {number|null=} total - Units of the phase in total, if the phase is counted
- * @property {string|null=} unit - Unit of `done` and `total`, e.g. 'page'
- * @property {number|null=} eta_seconds - Estimated seconds until the phase is finished, extrapolated from the units done so far
- */
-
-/**
- * An OCR run in the background, started by `POST /api/v1/ocr` and polled with `GET /api/v1/ocr/jobs/{job_id}`
- * @typedef {Object} OcrJob
- * @property {string} job_id - Id of the job
- * @property {string} stable_id - stable_id of the PDF
- * @property {OcrJobStatus} status - 'queued' (waiting for another run to finish), 'running', 'done' (see `result`), 'failed' (see `error`) or 'cancelled' (stopped by the user, see {@link ApiClientV1#ocrCancelJob})
- * @property {OcrProgress|null=} progress - Progress of the run if the status is 'running' and the engine reports it
- * @property {OcrResponse|null=} result - Result of the run if the status is 'done'
- * @property {string|null=} error - Error message if the status is 'failed'
- * @property {number|null=} error_status - HTTP status code corresponding to the error (4xx: invalid request, 5xx: failure of the engine or the server)
- * @property {string} username - User who started the job
- * @property {number} pid - Id of the server process that runs the job
- * @property {string} created_at - ISO timestamp of the start of the job
- * @property {string} updated_at - ISO timestamp of the last status change
- */
-
-/**
  * Request to preview or write the text corrections of a TEI document into the PDF's OCR text layer
  * @typedef {Object} TextCorrectionsRequest
  * @property {string} stable_id - stable_id of the TEI document
  * @property {boolean=} skip_unwritable - Write the corrections even though some differences cannot be written (they are skipped)
- * @property {string|null=} progress_id - Id of a progress widget of the client that shows the steps of the request (via SSE)
+ * @property {string|null=} job_id - Id of a client job (type `ocr.text-corrections`) of the user that the request runs as: it reports its steps to the job, and the job's cancel makes the request fail with 409 `{code: 'cancelled'}`
  * @property {Array<number>|null=} pages - Only the corrections on these pages (0-based page indices of the PDF, see OcrReviewPlanResponse.pages). Writing them updates the given version instead of creating a new one
  */
 
@@ -1719,6 +1689,26 @@
  */
 
 /**
+ * Request of `POST /api/v1/extract/job`: an extraction run as a job, with text recognition as its optional first step
+ * @typedef {Object} ExtractJobRequest
+ * @property {string} extractor - ID of the extractor to use
+ * @property {string} file_id - File identifier (stable ID or hash)
+ * @property {Record<string, any>=} options - Extractor-specific options (e.g., doi, collection, variant_id)
+ * @property {OcrRequest|null=} ocr - If set and the extractor extracts from the PDF, text recognition is applied to the PDF (`stable_id` must be the PDF of `file_id`) before the extraction, which then extracts from the new PDF
+ */
+
+/**
+ * Result of a job of type `extract`: the extraction response, and the result of the text recognition if it ran
+ * @typedef {Object} ExtractJobResult
+ * @property {string|null=} id - Document ID (for PDF-based extractions)
+ * @property {string|null=} pdf - PDF file (stable_id), if applicable
+ * @property {string|null=} xml - Extracted XML file (stable_id); null if nothing was extracted because the job was cancelled after the text recognition result was stored
+ * @property {LanguageConflict|null=} language_conflict - Set if the declared language contradicts the detected one
+ * @property {OcrResponse|null=} ocr - Result of the text recognition, if the job ran it
+ * @property {boolean=} cancelled - The job was cancelled after the text recognition result was stored (also during its LLM correction pass): the new PDF is kept, nothing was extracted
+ */
+
+/**
  * Request to check whether an extractor can run now
  * @typedef {Object} ExtractorCheckRequest
  * @property {string} extractor - ID of the extractor
@@ -1731,6 +1721,129 @@
  * @property {boolean} ready - Whether the extractor can run now
  * @property {string|null=} message - Why the extractor cannot run, if it is not ready
  */
+
+/**
+ * Progress of a job
+ * @typedef {Object} JobProgress
+ * @property {number|null} value - Percentage 0-100, or null if indeterminate
+ * @property {number|null} done - Units done in the current phase
+ * @property {number|null} total - Units of the current phase
+ * @property {string|null} unit - Name of the units, e.g. 'pages'
+ * @property {string|null} phase - Name of the current phase
+ * @property {number|null} eta_seconds - Estimated seconds until the phase is done
+ */
+
+/**
+ * Error of a failed job
+ * @typedef {Object} JobErrorInfo
+ * @property {string} message
+ * @property {number} status - HTTP-like status: below 500 for errors caused by the request, 500 and above for failures
+ */
+
+/**
+ * A checkpoint saved by a client job
+ * @typedef {Object} JobStep
+ * @property {*} result
+ * @property {string} at
+ */
+
+/**
+ * A job of the job queue (`/api/v1/jobs`)
+ * @typedef {Object} Job
+ * @property {string} id
+ * @property {string} type
+ * @property {string} owner
+ * @property {string} visibility - 'owner' or 'shared'
+ * @property {string} driver - 'server' or 'client'
+ * @property {string} status - 'queued', 'active', 'interrupted', 'done', 'error', 'cancelled' or 'expired'
+ * @property {JobProgress} progress
+ * @property {string|null=} message
+ * @property {*=} data
+ * @property {*=} params
+ * @property {string|null=} input_hash
+ * @property {*=} result - Set when the status is 'done'
+ * @property {JobErrorInfo|null=} error - Set when the status is 'error'
+ * @property {Array<string>} resources
+ * @property {{holder: string, expires_at: string}|null=} lease
+ * @property {string|null=} lease_holder - Holder of the lease, if the host adds it
+ * @property {boolean} cancel_requested
+ * @property {number} attempts
+ * @property {number} seq - Sequence number of the latest event
+ * @property {string} created_at
+ * @property {string} updated_at
+ * @property {string|null=} finished_at
+ * @property {string|null=} expires_at
+ * @property {Record<string, JobStep>|null=} steps - Only included where requested
+ */
+
+/**
+ * An event of the job event streams
+ * @typedef {Object} JobEvent
+ * @property {number|null} id - Global event id, null in snapshots
+ * @property {number} seq - Sequence number within the job
+ * @property {string} job_id
+ * @property {string} type
+ * @property {string} status
+ * @property {JobProgress} progress
+ * @property {string|null=} message
+ * @property {*=} data
+ * @property {*=} result - Only in the 'done' event
+ * @property {JobErrorInfo|null=} error - Only in the 'error' event
+ * @property {boolean} cancel_requested
+ * @property {string} at
+ * @property {string=} owner - The job's owner; set in the `job` events of the editor's SSE stream (`/api/v1/sse/subscribe`)
+ */
+
+/**
+ * A registered job type (`GET /api/v1/jobs/types`)
+ * @typedef {Object} JobTypeInfo
+ * @property {string} name
+ * @property {string} title
+ * @property {string} driver - 'server' or 'client'
+ * @property {Array<string>} roles - Roles allowed to submit the type; empty if every user may
+ */
+
+/**
+ * Request body of {@link ApiClientV1#jobsSubmit}
+ * @typedef {Object} JobSubmitRequest
+ * @property {string} type
+ * @property {*=} params
+ * @property {string=} visibility
+ * @property {Array<string>=} resources
+ * @property {string=} input_hash
+ */
+
+/**
+ * Filter of {@link ApiClientV1#jobsList}
+ * @typedef {Object} JobListFilter
+ * @property {string|Array<string>=} status
+ * @property {string=} type
+ * @property {boolean=} mine
+ * @property {boolean=} resumable
+ */
+
+/**
+ * Filter of the bulk operations {@link ApiClientV1#jobsCancelAll} and {@link ApiClientV1#jobsDeleteAll}
+ * @typedef {Object} JobBulkFilter
+ * @property {string=} type
+ * @property {string=} owner
+ * @property {string|Array<string>=} status
+ */
+
+/**
+ * Build the query string of a jobs request. Array values are repeated, undefined and null are skipped.
+ * @param {Record<string, string|number|boolean|Array<string>|null|undefined>} params
+ * @returns {string} Query string with a leading "?", or an empty string
+ */
+function jobsQuery(params) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue
+    for (const item of Array.isArray(value) ? value : [value]) query.append(key, String(item))
+  }
+  const text = query.toString()
+  return text ? `?${text}` : ''
+}
 
 /**
  * API Client for FastAPI v1 endpoints
@@ -2479,6 +2592,21 @@ export class ApiClientV1 {
   }
 
   /**
+   * Submit a job (type `extract`) that runs the extraction of {@link ApiClientV1#extract}, with
+   * text recognition of the PDF first if `ocr` is set. Invalid requests are rejected at once (400,
+   * 404, and for `ocr` the errors of {@link ApiClientV1#ocr}), a PDF that another job holds with
+   * 409. Wait for the job with the `jobs` plugin; its result is an {@link ExtractJobResult}. An
+   * extractor that needs an API key the user has not stored fails the job with status 428.
+   *
+   * @param {ExtractJobRequest} requestBody
+   * @returns {Promise<Job>}
+   */
+  async extractJob(requestBody) {
+    const endpoint = `/extract/job`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
    * List the available OCR engines with their languages and parameters.
    *
    * @returns {Promise<Array<OcrEngineInfo>>}
@@ -2502,12 +2630,13 @@ export class ApiClientV1 {
   }
 
   /**
-   * Start applying OCR to a PDF; the stored PDF is replaced with the result and the stable_id stays
-   * the same. The run happens in the background: poll {@link ApiClientV1#ocrJob} for the result.
-   * Rejected with 409 if a job for the PDF is already queued or running.
+   * Submit a job (type `ocr`) that applies OCR to a PDF and stores the result as a new PDF of the
+   * document. Invalid requests are rejected at once (400, 403, 404, 428 if the provider of the
+   * LLM correction needs a key of the user), a PDF that another job holds with 409. Wait for the
+   * job with the `jobs` plugin; its result is an {@link OcrResponse}.
    *
    * @param {OcrRequest} requestBody
-   * @returns {Promise<OcrJob>}
+   * @returns {Promise<Job>}
    */
   async ocr(requestBody) {
     const endpoint = `/ocr`
@@ -2515,42 +2644,16 @@ export class ApiClientV1 {
   }
 
   /**
-   * Start correcting the OCR errors of the text layer of a stored PDF with an LLM, e.g. after the
-   * correction pass of an OCR run was cancelled. The run is a job like an OCR run: poll
-   * {@link ApiClientV1#ocrJob} for the result, cancel it with {@link ApiClientV1#ocrCancelJob}.
-   * Rejected with 409 if a job for the PDF is already queued or running.
+   * Submit a job (type `ocr.llm-correction`) that corrects the OCR errors of the text layer of a
+   * stored PDF with an LLM, e.g. after the correction pass of an OCR run was cancelled. Rejected
+   * like {@link ApiClientV1#ocr}; the job's result is an {@link OcrResponse}.
    *
    * @param {OcrLlmCorrectionRequest} requestBody
-   * @returns {Promise<OcrJob>}
+   * @returns {Promise<Job>}
    */
   async ocrLlmCorrection(requestBody) {
     const endpoint = `/ocr/llm-correction`
     return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Return the status of an OCR run started with {@link ApiClientV1#ocr}, and its result when it is done.
-   *
-   * @param {string} jobId - Id of the job
-   * @returns {Promise<OcrJob>}
-   */
-  async ocrJob(jobId) {
-    const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}`
-    return this.callApi(endpoint);
-  }
-
-  /**
-   * Cancel an OCR run started with {@link ApiClientV1#ocr}; the stored PDF stays unchanged. A queued
-   * job stops at once, a running one at the next progress report of the engine or of the LLM
-   * correction pass. Poll {@link ApiClientV1#ocrJob} until the status is 'cancelled', or 'done' if
-   * only the correction pass was stopped. A finished job is returned as it is.
-   *
-   * @param {string} jobId - Id of the job
-   * @returns {Promise<OcrJob>}
-   */
-  async ocrCancelJob(jobId) {
-    const endpoint = `/ocr/jobs/${encodeURIComponent(jobId)}/cancel`
-    return this.callApi(endpoint, 'POST');
   }
 
   /**
@@ -2603,21 +2706,6 @@ export class ApiClientV1 {
   async ocrTextCorrectionsApply(requestBody) {
     const endpoint = `/ocr/text-corrections/apply`
     return this.callApi(endpoint, 'POST', requestBody);
-  }
-
-  /**
-   * Cancel the preview or the write of text corrections of this session that reports its steps to
-   * the progress widget `progressId`. The request stops at its next page or step and is rejected
-   * with 409 and the detail `{code: 'cancelled', message}`; the PDF and the document stay
-   * unchanged. A request past the point where it stores its result finishes as usual.
-   * Requires the reviewer role.
-   *
-   * @param {string} progressId
-   * @returns {Promise<{requested: boolean}>}
-   */
-  async ocrTextCorrectionsCancel(progressId) {
-    const endpoint = `/ocr/text-corrections/cancel/${encodeURIComponent(progressId)}`
-    return this.callApi(endpoint, 'POST');
   }
 
   /**
@@ -3882,6 +3970,158 @@ export class ApiClientV1 {
    */
   async files(document_id) {
     const endpoint = `/files/${document_id}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Submit a job. With `idempotencyKey`, a retry returns the same job.
+   *
+   * @param {JobSubmitRequest} requestBody
+   * @param {{idempotencyKey?: string}} [options]
+   * @returns {Promise<Job>}
+   */
+  async jobsSubmit(requestBody, { idempotencyKey } = {}) {
+    const endpoint = `/jobs`
+    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}
+    return this.callApi(endpoint, 'POST', requestBody, undefined, headers);
+  }
+
+  /**
+   * List the jobs visible to the user, oldest first.
+   *
+   * @param {JobListFilter} [filter]
+   * @returns {Promise<Array<Job>>}
+   */
+  async jobsList({ status, type, mine, resumable } = {}) {
+    const endpoint = `/jobs${jobsQuery({ status, type, mine, resumable })}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Return a job.
+   *
+   * @param {string} jobId
+   * @param {{steps?: boolean}} [options] - `steps`: include the saved steps
+   * @returns {Promise<Job>}
+   */
+  async jobsGet(jobId, { steps = false } = {}) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}${jobsQuery({ steps: steps || undefined })}`
+    return this.callApi(endpoint);
+  }
+
+  /**
+   * Cancel a job: a queued or interrupted one at once, an active one at its driver's next check.
+   *
+   * @param {string} jobId
+   * @returns {Promise<Job>}
+   */
+  async jobsCancel(jobId) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/cancel`
+    return this.callApi(endpoint, 'POST');
+  }
+
+  /**
+   * Delete a job.
+   *
+   * @param {string} jobId
+   * @returns {Promise<void>}
+   */
+  async jobsDelete(jobId) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * Start, take over or resume a client job. Returns the job with its steps.
+   * Rejected with 409 if another holder's lease is valid.
+   *
+   * @param {string} jobId
+   * @param {{holder: string}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsClaim(jobId, { holder }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/claim`
+    return this.callApi(endpoint, 'POST', { holder });
+  }
+
+  /**
+   * Renew the lease of a client job; the job says whether a cancel was requested.
+   *
+   * @param {string} jobId
+   * @param {{holder: string}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsHeartbeat(jobId, { holder }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/heartbeat`
+    return this.callApi(endpoint, 'POST', { holder });
+  }
+
+  /**
+   * Save a step (checkpoint) of a client job.
+   *
+   * @param {string} jobId
+   * @param {string} key
+   * @param {{holder: string, result: *}} requestBody
+   * @returns {Promise<void>}
+   */
+  async jobsSaveStep(jobId, key, { holder, result }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/steps/${encodeURIComponent(key)}`
+    return this.callApi(endpoint, 'PUT', { holder, result });
+  }
+
+  /**
+   * Report progress of a client job and renew its lease.
+   *
+   * @param {string} jobId
+   * @param {{holder: string, progress?: Partial<JobProgress>, message?: string, data?: *}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsReport(jobId, { holder, progress, message, data }) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/report`
+    return this.callApi(endpoint, 'POST', { holder, progress, message, data });
+  }
+
+  /**
+   * Finish a client job with `{holder, result}`, `{holder, error: {message, status}}` or `{holder, cancelled: true}`.
+   *
+   * @param {string} jobId
+   * @param {{holder: string, result?: *, error?: JobErrorInfo, cancelled?: boolean}} requestBody
+   * @returns {Promise<Job>}
+   */
+  async jobsFinish(jobId, requestBody) {
+    const endpoint = `/jobs/${encodeURIComponent(jobId)}/finish`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Cancel all matching unfinished jobs (admin).
+   *
+   * @param {JobBulkFilter} [filter]
+   * @returns {Promise<{count: number}>}
+   */
+  async jobsCancelAll(filter = {}) {
+    const endpoint = `/jobs/cancel-all`
+    return this.callApi(endpoint, 'POST', filter);
+  }
+
+  /**
+   * Delete all matching jobs (admin).
+   *
+   * @param {JobBulkFilter} [filter]
+   * @returns {Promise<{count: number}>}
+   */
+  async jobsDeleteAll({ type, owner, status } = {}) {
+    const endpoint = `/jobs${jobsQuery({ type, owner, status })}`
+    return this.callApi(endpoint, 'DELETE');
+  }
+
+  /**
+   * List the registered job types.
+   *
+   * @returns {Promise<Array<JobTypeInfo>>}
+   */
+  async jobsTypes() {
+    const endpoint = `/jobs/types`
     return this.callApi(endpoint);
   }
 

@@ -3,7 +3,7 @@
  * shows why nothing can be written and offers no Write button. The apply path is tested with the
  * preview and apply routes mocked (the real write needs the GROBID service and is covered by the
  * backend tests): the client shows the busy state and loads the new version and the PDF, and the
- * cancel button of the progress widget cancels the write on the backend.
+ * cancel button of the job's progress widget cancels the job, which makes the write fail as cancelled.
  *
  * @testCovers app/src/plugins/text-corrections.js
  * @testCovers app/src/modules/text-corrections.js
@@ -71,7 +71,13 @@ async function cleanUp(page, ids) {
   await releaseAllLocks(page);
   await page.evaluate(async (ids) => {
     const api = /** @type {any} */ (window).client.apiClient;
+    const jobsPlugin = /** @type {any} */ (window).jobs;
     for (const id of ids) await api.filesDelete({ files: [id] }).catch(() => {});
+    // the tests that mock the routes leave the jobs of their requests queued (no route takes them)
+    const jobs = await jobsPlugin.client.list({ mine: true, status: ['queued'] });
+    for (const job of jobs) {
+      if (job.type === 'ocr.text-corrections') await jobsPlugin.client.cancel(job.id).catch(() => {});
+    }
   }, ids).catch(() => {});
 }
 
@@ -196,7 +202,7 @@ test.describe('Text corrections', () => {
     }
   });
 
-  test('the cancel button of the progress widget cancels the write', async ({ page }) => {
+  test('the cancel button of the job widget cancels the write', async ({ page }) => {
     test.setTimeout(90000);
     const consoleLogs = setupTestConsoleCapture(page);
     // the cancelled request is answered with 409
@@ -213,17 +219,18 @@ test.describe('Text corrections', () => {
         json: { corrections: [{ page: 0, line: 3, old: 'teh', new: 'the' }], unwritable: [], reason: null }
       }));
       /** @type {string[]} */
-      const cancelled = [];
+      const jobIds = [];
       /** @type {() => void} */
       let release = () => {};
       const cancelRequested = new Promise(resolve => { release = () => resolve(undefined); });
-      await page.route('**/api/v1/ocr/text-corrections/cancel/*', route => {
-        cancelled.push(decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop() ?? ''));
+      // the job is cancelled through the job API; the write is answered after that, like the backend does
+      await page.route('**/api/v1/jobs/*/cancel', async route => {
+        const response = await route.fetch();
+        await route.fulfill({ response });
         release();
-        return route.fulfill({ json: { requested: true } });
       });
-      // the write runs until it is cancelled, and is then answered like the backend does
       await page.route('**/api/v1/ocr/text-corrections/apply', async route => {
+        jobIds.push(route.request().postDataJSON().job_id);
         await cancelRequested;
         await route.fulfill({
           status: 409,
@@ -238,15 +245,21 @@ test.describe('Text corrections', () => {
       await dialog.locator('sl-button[name="write"]').click();
       await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_WRITING', 10000);
 
-      const progressId = `text-corrections-write-${stableId}`;
-      const cancelButton = page.locator(`.progress-widget[data-progress-id="${progressId}"] [data-name="cancelBtn"]`);
+      // the jobs plugin shows the widget of the job
+      // (the other tests mock the routes, so the jobs they submit are never taken and stay queued)
+      await expect.poll(() => jobIds.length).toBe(1);
+      const widget = page.locator(`.progress-widget[data-progress-id="job-${jobIds[0]}"]`);
+      const cancelButton = widget.locator('[data-name="cancelBtn"]');
       await expect(cancelButton).toBeVisible();
       await cancelButton.click();
 
       await waitForTestMessage(consoleLogs, 'TEXT_CORRECTIONS_CANCELLED', 10000);
-      expect(cancelled).toEqual([progressId]);
+      expect(jobIds).toHaveLength(1);
+      const job = await page.evaluate(id => window.jobs.client.get(id), jobIds[0]);
+      expect(job.type).toBe('ocr.text-corrections');
+      expect(job.status).toBe('cancelled');
       await expect(dialog).not.toHaveAttribute('open', '');
-      await expect(page.locator(`.progress-widget[data-progress-id="${progressId}"]`)).toHaveCount(0);
+      await expect(widget).toHaveCount(0);
       expect(consoleLogs.some(log => log.message === 'TEXT_CORRECTIONS_APPLIED')).toBe(false);
       // the document stays open
       const state = await page.evaluate(() => /** @type {any} */ (window).app.getCurrentState());

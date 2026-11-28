@@ -4,8 +4,7 @@ text layer (#931).
 
 @testCovers fastapi_app/routers/ocr.py::preview_text_corrections
 @testCovers fastapi_app/routers/ocr.py::apply_text_corrections
-@testCovers fastapi_app/routers/ocr.py::cancel_text_corrections
-@testCovers fastapi_app/lib/ocr/cancel_requests.py
+@testCovers fastapi_app/lib/ocr/job_types.py
 @testCovers fastapi_app/lib/repository/file_repository.py::get_current_pdf_teis
 @testCovers fastapi_app/lib/models/models_ocr.py
 @testCovers fastapi_app/lib/ocr/text_layer.py::read_text_layer
@@ -13,7 +12,9 @@ text layer (#931).
 """
 
 import gc
-import json
+import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 import shutil
 import tempfile
 import unittest
@@ -23,21 +24,24 @@ from unittest.mock import MagicMock, patch
 
 import pikepdf
 from lxml import etree
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+from fastapi_jobqueue import MemoryJobStore
 
 from fastapi_app.lib.core.database import DatabaseManager
 from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, get_session_manager, get_sse_service, require_authenticated_user
 from fastapi_app.lib.core.locking import acquire_lock, check_lock
 from fastapi_app.lib.models.models import FileCreate, FileMetadata
-from fastapi_app.lib.ocr.cancel_requests import CancelRequests
-from fastapi_app.lib.ocr.jobs import OcrJobStore
+from fastapi_app.lib.jobs import create_job_manager, set_job_manager
+from fastapi_app.lib.jobs import manager as manager_module
+from fastapi_app.lib.jobs.routes import include_job_routes
 from fastapi_app.lib.ocr.text_corrections import CorrectedPdfMismatch, register_corrected_pdf_handler, unregister_corrected_pdf_handler
 from fastapi_app.lib.ocr.text_layer import read_text_layer
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.storage.file_storage import FileStorage
 from fastapi_app.lib.tei.layout import LineLayout, register_layout_provider, unregister_layout_provider
 from fastapi_app.lib.tei.zone_lines import ZoneLabel
+from fastapi_app.lib.ocr import job_types as ocr_job_types
 from fastapi_app.routers import ocr as ocr_router
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -97,23 +101,37 @@ class TestTextCorrectionRoutes(unittest.TestCase):
 
         self.allowed = True
         self.access = patch.object(ocr_router, "check_file_access", lambda file, user, op: self.allowed)
+        # the PDF checks are shared with the OCR jobs
+        self.enterContext(patch.object(ocr_job_types, "check_file_access", lambda file, user, op: self.allowed))
         self.access.start()
-        self.jobs = OcrJobStore(self.tmp / "jobs")
         self.user: dict[str, Any] = REVIEWER
-        app = FastAPI()
+        self.saved_manager = manager_module._manager
+        self.manager = create_job_manager(MemoryJobStore())
+        self.manager.poll_interval = 0.05
+        self.manager.lease_ttl = 0.3
+        set_job_manager(self.manager)
+
+        @asynccontextmanager
+        async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+            async with self.manager.lifespan():
+                yield
+
+        app = FastAPI(lifespan=lifespan)
         app.include_router(ocr_router.router)
+        api_v1 = APIRouter(prefix="/api/v1")
+        include_job_routes(api_v1)
+        app.include_router(api_v1)
         app.dependency_overrides[require_authenticated_user] = lambda: self.user
         app.dependency_overrides[get_file_repository] = lambda: self.repo
         app.dependency_overrides[get_file_storage] = lambda: self.storage
-        app.dependency_overrides[ocr_router.get_ocr_job_store] = lambda: self.jobs
-        self.cancels = CancelRequests(self.tmp / "cancel")
-        app.dependency_overrides[ocr_router.get_text_corrections_cancels] = lambda: self.cancels
         self.sse = MagicMock()
         app.dependency_overrides[get_sse_service] = lambda: self.sse
         app.dependency_overrides[get_session_manager] = lambda: MagicMock()
         self.client = TestClient(app, headers={"X-Session-ID": SESSION})
+        self.enterContext(self.client)
 
     def tearDown(self):
+        manager_module._manager = self.saved_manager
         self.access.stop()
         unregister_layout_provider(VARIANT)
         unregister_corrected_pdf_handler(VARIANT)
@@ -127,7 +145,7 @@ class TestTextCorrectionRoutes(unittest.TestCase):
     def handler(self, xml: str, doc_id: str, pdf_path: Path, pdf_hash: str, corrected_lines: frozenset[int]) -> str:
         self.handler_calls.append((xml, doc_id, pdf_path, pdf_hash, corrected_lines))
         if self.cancel_in_handler:
-            self.cancels.request(SESSION, "p1")
+            self.cancel_job(self.running_job_id)
         if self.handler_error is not None:
             raise self.handler_error
         return xml.replace("OLD-HASH", pdf_hash)
@@ -193,36 +211,61 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         _, doc_id, pdf_path, pdf_hash, lines = self.handler_calls[0]
         self.assertEqual((doc_id, pdf_hash, lines), ("doc1", pdf.id, frozenset({0})))
 
-    def progress_labels(self, progress_id: str) -> list[str]:
-        """The labels sent to the progress widget of the client."""
-        labels = []
-        for call in self.sse.send_message.call_args_list:
-            data = json.loads(call.kwargs["data"])
-            self.assertEqual((call.kwargs["client_id"], data["progress_id"]), (SESSION, progress_id))
-            if call.kwargs["event_type"] == "progressLabel":
-                labels.append(data["label"])
-        return labels
+    def submit_job(self, mode: str = "apply") -> str:
+        """Submit the client job that the client passes to the route."""
+        response = self.client.post("/api/v1/jobs", json={"type": "ocr.text-corrections", "params": {"stable_id": "tei1", "mode": mode}})
+        self.assertEqual(response.status_code, 201, response.text)
+        job_id = response.json()["id"]
+        self.running_job_id = job_id
+        return job_id
 
-    def test_preview_reports_progress(self):
-        self.preview(progress_id="p1")
-        self.assertEqual(self.progress_labels("p1"), [
-            "Reading the lines of the document",
-            "Reading the text layer of the PDF: page 1 of 1",
-            "Comparing the document with the text layer: page 1 of 1",
-        ])
+    def get_job(self, job_id: str) -> dict[str, Any]:
+        return self.client.get(f"/api/v1/jobs/{job_id}").json()
 
-    def test_apply_reports_progress(self):
-        self.assertEqual(self.apply(progress_id="p2").status_code, 200)
-        self.assertEqual(self.progress_labels("p2")[-3:], [
-            "Writing 1 correction into the PDF",
-            "Updating the document for the corrected PDF. This can take a minute.",
-            "Saving the new version of the document",
-        ])
+    def wait_for_job(self, job_id: str, status: str) -> dict[str, Any]:
+        deadline = time.monotonic() + 5
+        job = self.get_job(job_id)
+        while job["status"] != status and time.monotonic() < deadline:
+            time.sleep(0.02)
+            job = self.get_job(job_id)
+        self.assertEqual(job["status"], status, job)
+        return job
 
-    def test_no_progress_without_progress_id(self):
+    def cancel_job(self, job_id: str) -> None:
+        """Cancel through the job API, and wait until the request has seen it (its heartbeat)."""
+        response = self.client.post(f"/api/v1/jobs/{job_id}/cancel")
+        self.assertEqual(response.status_code, 200, response.text)
+        time.sleep(self.manager.lease_ttl)
+
+    def test_preview_reports_to_its_job(self):
+        job_id = self.submit_job("preview")
+        self.preview(job_id=job_id)
+        job = self.wait_for_job(job_id, "done")
+        self.assertEqual(job["progress"]["phase"], "Comparing the document with the text layer")
+        self.assertEqual((job["progress"]["done"], job["progress"]["total"], job["progress"]["unit"]), (1, 1, "pages"))
+
+    def test_apply_reports_to_its_job_and_finishes_it(self):
+        job_id = self.submit_job()
+        self.assertEqual(self.apply(job_id=job_id).status_code, 200)
+        job = self.wait_for_job(job_id, "done")
+        self.assertEqual(job["progress"]["phase"], "Saving the new version of the document")
+        self.assertEqual(job["result"]["corrections"], 1)
+
+    def test_failed_apply_finishes_its_job_with_the_error(self):
+        job_id = self.submit_job()
+        response = self.apply(job_id=job_id, pages=[1])
+        self.assertEqual(response.status_code, 409)
+        job = self.wait_for_job(job_id, "error")
+        self.assertEqual(job["error"]["status"], 409)
+
+    def test_unknown_job_is_refused(self):
+        self.assertEqual(self.apply(job_id="nope").status_code, 404)
+        self.assertEqual(self.client.post("/ocr/text-corrections/preview", json={"stable_id": "tei1", "job_id": "nope"}).status_code, 404)
+
+    def test_no_job_without_job_id(self):
         self.preview()
         self.assertEqual(self.apply().status_code, 200)
-        self.sse.send_message.assert_not_called()
+        self.assertEqual(self.client.get("/api/v1/jobs").json(), [])
 
     def test_version_of_an_older_pdf_writes_from_its_own_pdf(self):
         # another lineage has a newer PDF, which is the canonical one
@@ -268,7 +311,8 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.assertEqual([(u["line"], u["tei_text"]) for u in preview["unwritable"]], [(3, "neu")])
 
     def test_active_ocr_job_conflicts(self):
-        self.jobs.create("pdf1", "someone")
+        # a job (e.g. text recognition) holds the lock of the PDF
+        self.assertTrue(acquire_lock("pdf1", "job:ocr-1", self.tmp, ocr_router.logger))
         self.assertIsNotNone(self.preview()["reason"])
         self.assertEqual(self.apply().status_code, 409)
         self.assertEqual(self.repo.get_file_by_stable_id("pdf1").id, self.pdf_hash)  # type: ignore[union-attr]
@@ -432,9 +476,8 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.assertEqual(self.repo.get_file_by_stable_id("tei2").pdf_stable_id, "pdf1")  # type: ignore[union-attr]
 
     def test_page_write_only_reads_its_pages(self):
-        preview = self.preview(pages=[1], progress_id="p1")
+        preview = self.preview(pages=[1])
         self.assertEqual((preview["corrections"], preview["reason"]), ([], ocr_router.NO_PAGE_CORRECTIONS_MESSAGE))
-        self.assertNotIn("Reading the text layer of the PDF: page 1 of 1", self.progress_labels("p1"))
         response = self.apply(pages=[1])
         self.assertEqual((response.status_code, response.json()["detail"]), (409, ocr_router.NO_PAGE_CORRECTIONS_MESSAGE))
 
@@ -468,66 +511,61 @@ class TestTextCorrectionRoutes(unittest.TestCase):
         self.assertEqual(self.repo.get_file_by_stable_id("tei1").pdf_stable_id, "pdf1")  # type: ignore[union-attr]
 
     def cancel_while_reading(self) -> None:
-        """Cancel the request with progress widget "p1" while it reads the lines of the document."""
+        """Cancel the job of the request while it reads the lines of the document."""
         def layout(xml: str, doc_id: str) -> LineLayout | None:
-            self.cancels.request(SESSION, "p1")
+            self.cancel_job(self.running_job_id)
             return self.layout
         unregister_layout_provider(VARIANT)
         register_layout_provider(VARIANT, "test", layout)
 
-    def assert_cancelled(self, response: Any) -> None:
+    def assert_cancelled(self, response: Any, job_id: str) -> None:
         self.assertEqual(response.status_code, 409, response.text)
         self.assertEqual(response.json()["detail"], {"code": "cancelled", "message": ocr_router.CANCELLED_MESSAGE})
-        # nothing was changed, and the request is forgotten
+        self.wait_for_job(job_id, "cancelled")
+        # nothing was changed
         self.assertEqual([p.stable_id for p in self.repo.get_document_pdfs("doc1")], ["pdf1"])
         tei = self.repo.get_file_by_stable_id("tei1")
         assert tei is not None
         self.assertEqual(tei.pdf_stable_id, "pdf1")
         self.assertEqual(self.storage.read_file(tei.id, "tei"), tei_xml(corrected(LINES)).encode())
         self.assertEqual(self.repo.get_latest_tei_version("doc1", VARIANT).stable_id, "tei2")  # type: ignore[union-attr]
-        self.assertFalse(self.cancels.is_requested(SESSION, "p1"))
 
     def test_cancel_preview(self):
         self.cancel_while_reading()
+        job_id = self.submit_job("preview")
         with self.assertLogs("fastapi_app.routers.ocr", level="INFO"):
-            response = self.client.post("/ocr/text-corrections/preview", json={"stable_id": "tei1", "progress_id": "p1"})
-        self.assert_cancelled(response)
-        # it stopped at the first page
-        self.assertNotIn("Comparing the document with the text layer: page 1 of 1", self.progress_labels("p1"))
+            response = self.client.post("/ocr/text-corrections/preview", json={"stable_id": "tei1", "job_id": job_id})
+        self.assert_cancelled(response, job_id)
 
     def test_cancel_write_of_pages(self):
         self.cancel_while_reading()
+        job_id = self.submit_job()
         with self.assertLogs("fastapi_app.routers.ocr", level="INFO"):
-            response = self.apply(pages=[0], progress_id="p1")
-        self.assert_cancelled(response)
+            response = self.apply(pages=[0], job_id=job_id)
+        self.assert_cancelled(response, job_id)
 
     def test_cancel_write_while_the_extractor_runs(self):
         stored = set(self.stored_pdfs())
         self.assertTrue(stored)
         self.cancel_in_handler = True
+        job_id = self.submit_job()
         with self.assertLogs("fastapi_app.routers.ocr", level="INFO"):
-            response = self.apply(progress_id="p1")
+            response = self.apply(job_id=job_id)
         self.assertEqual(len(self.handler_calls), 1)
-        self.assert_cancelled(response)
+        self.assert_cancelled(response, job_id)
         # the corrected PDF stored for the extractor is removed again
         self.assertEqual(set(self.stored_pdfs()), stored)
-        self.assertNotIn("Saving the new version of the document", self.progress_labels("p1"))
 
-    def test_cancel_of_an_earlier_run_does_not_apply(self):
-        self.assertEqual(self.client.post("/ocr/text-corrections/cancel/p1").json(), {"requested": True})
-        self.assertTrue(self.cancels.is_requested(SESSION, "p1"))
-        self.assertEqual(self.apply(progress_id="p1").status_code, 200)
-        self.assertFalse(self.cancels.is_requested(SESSION, "p1"))
+    def test_the_cancel_route_is_gone(self):
+        self.assertEqual(self.client.post("/ocr/text-corrections/cancel/p1").status_code, 404)
 
-    def test_cancel_applies_to_own_session_only(self):
-        self.cancels.request("other-session", "p1")
-        self.cancel_in_handler = False
-        self.assertEqual(self.apply(progress_id="p1").status_code, 200)
-
-    def test_cancel_requires_reviewer(self):
-        self.user = ANNOTATOR
-        self.assertEqual(self.client.post("/ocr/text-corrections/cancel/p1").status_code, 403)
-        self.assertFalse(self.cancels.is_requested(SESSION, "p1"))
+    def test_cancelling_an_unclaimed_job_finishes_it(self):
+        # the client does so when its request fails before the route takes the job (e.g. a validation error)
+        job_id = self.submit_job()
+        self.assertEqual(self.client.post("/ocr/text-corrections/apply", json={"job_id": job_id}).status_code, 422)
+        self.assertEqual(self.get_job(job_id)["status"], "queued")
+        self.client.post(f"/api/v1/jobs/{job_id}/cancel")
+        self.assertEqual(self.get_job(job_id)["status"], "cancelled")
 
     def stored_pdfs(self) -> list[Path]:
         return sorted((self.tmp / "files").rglob("*.pdf"))

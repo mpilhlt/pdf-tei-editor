@@ -30,6 +30,7 @@ For comprehensive guides, see the documentation in the `docs/code-assistant/` di
 - **[Backend Plugins](docs/code-assistant/backend-plugins.md)** - Creating backend plugins, role-based access, custom routes
 - **[Testing Guide](docs/code-assistant/testing-guide.md)** - E2E tests, backend tests, debugging, test logging
 - **[Database Connections](docs/code-assistant/database-connections.md)** - SQLite connection pooling, WAL mode, and transaction handling
+- **[Long-Running Jobs](docs/code-assistant/jobs.md)** - Background jobs on fastapi-jobqueue: job types, handlers, progress, cancel, file locks, job output files
 - **[CLI](docs/user-manual/cli.md)** - Command Line Interface reference
 - **[API Client](docs/code-assistant/api-client.md)** - FastAPI client usage, type safety, patterns
 

@@ -64,15 +64,16 @@ class SSEService:
 
         return msg_queue
 
-    def remove_queue(self, client_id: str) -> None:
+    def remove_queue(self, client_id: str, only_if: Optional[queue.Queue] = None) -> None:
         """
         Remove message queue for a client.
 
         Args:
             client_id: Client identifier
+            only_if: Remove the queue only if it is this one (a stream removes its own queue, not the one of a newer stream of the session)
         """
         with self.lock:
-            removed = client_id in self.message_queues
+            removed = client_id in self.message_queues and (only_if is None or self.message_queues[client_id] is only_if)
             if removed:
                 del self.message_queues[client_id]
                 del self.queue_timestamps[client_id]
@@ -133,8 +134,12 @@ class SSEService:
         Yields:
             Formatted SSE message strings
         """
-        # Create queue if it doesn't exist
-        msg_queue = self.create_queue(client_id)
+        # A new queue for each stream: after a page reload, the new stream of the session may
+        # start before the old one ends, which must then not remove the new stream's queue
+        msg_queue: queue.Queue = queue.Queue()
+        with self.lock:
+            self.message_queues[client_id] = msg_queue
+            self.queue_timestamps[client_id] = datetime.now()
 
         if self.logger:
             self.logger.info(f"Starting SSE stream for client: {client_id}")
@@ -165,7 +170,7 @@ class SSEService:
                 self.logger.info(f"SSE stream closed for client: {client_id}")
         finally:
             # Clean up queue when stream ends
-            self.remove_queue(client_id)
+            self.remove_queue(client_id, only_if=msg_queue)
 
     def _format_sse_message(self, event: str, data: str) -> str:
         """

@@ -65,17 +65,17 @@ test.describe('PDFs of a document after OCR', () => {
       }, { pdfId, xml: tei('first version') });
       expect(docId).toBeTruthy();
 
-      // Text recognition creates a new PDF of the document
+      // Text recognition (a job of type `ocr`) creates a new PDF of the document
       const result = await page.evaluate(async ({ pdfId, engine }) => {
         const api = /** @type {any} */(window).client.apiClient;
         let job = await api.ocr({ stable_id: pdfId, engine: engine.id, languages: engine.default_languages, options: {}, rebuild: false });
-        while (job.status === 'queued' || job.status === 'running') {
+        while (job.status === 'queued' || job.status === 'active') {
           await new Promise(resolve => setTimeout(resolve, 500));
-          job = await api.ocrJob(job.job_id);
+          job = await api.jobsGet(job.id);
         }
         return job;
       }, { pdfId, engine: engines[0] });
-      expect(result.status, result.error).toBe('done');
+      expect(result.status, result.error?.message).toBe('done');
       expect(result.result.changed).toBe(true);
       expect(result.result.source_stable_id).toBe(pdfId);
       const ocrPdfId = result.result.stable_id;

@@ -192,7 +192,9 @@ class TestDataRestore(unittest.TestCase):
 
             clock.now.return_value = real_datetime(2030, 1, 1)
             apply_pending_restore(self.data, self.logger, now=clock.now)
-        self.assertEqual(read_applied_restore(self.data)["id"], "20300101_000000")
+        applied = read_applied_restore(self.data)
+        assert applied is not None
+        self.assertEqual(applied["id"], "20300101_000000")
 
     def test_nothing_staged(self):
         from fastapi_app.lib.core.data_restore import apply_pending_restore
@@ -475,6 +477,38 @@ class TestBackupArchive(unittest.TestCase):
         self.assertEqual([p.name for p in (self.data / "tmp").iterdir() if p.name != "ignored.txt"], [zip_path.name])
 
 
+    def test_job_queue_files_are_excluded(self):
+        from fastapi_app.plugins.backup_restore.archive import create_backup_zip
+
+        for name in ("jobs.db", "jobs.db-wal", "jobs.db-shm"):
+            (self.data / "db" / name).write_text("x")
+        (self.data / "jobs" / "j1").mkdir(parents=True)
+        (self.data / "jobs" / "j1" / "backup_old.zip").write_text("x")
+
+        zip_path, _ = create_backup_zip(self.data, self.data / "jobs" / "j2", "0.76.0")
+        with zipfile.ZipFile(zip_path) as zf:
+            names = zf.namelist()
+        self.assertFalse([n for n in names if n.startswith("db/jobs.db")], names)
+        self.assertFalse([n for n in names if n.startswith("jobs/")], names)
+        self.assertIn("db/users.json", names)
+
+    def test_progress_and_cancel(self):
+        from fastapi_app.plugins.backup_restore.archive import create_backup_zip
+
+        calls: list[tuple[int, int, str]] = []
+        create_backup_zip(self.data, self.data / "tmp", "0.76.0", progress=lambda *a: calls.append(a))
+        self.assertEqual([c[0] for c in calls], [1, 2, 3, 4])
+        self.assertEqual({c[1] for c in calls}, {4})
+
+        def cancel() -> None:
+            raise RuntimeError("cancelled")
+
+        out = self.data / "cancel"
+        with self.assertRaises(RuntimeError):
+            create_backup_zip(self.data, out, "0.76.0", check_cancelled=cancel)
+        self.assertEqual(list(out.iterdir()), [])
+
+
 class TestDownloadRoute(unittest.TestCase):
     """Test the download endpoint end to end with dependency overrides."""
 
@@ -661,6 +695,198 @@ class TestDownloadRoute(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("const canBackup = false;", r.text)
         self.assertIn("const canRestore = true;", r.text)
+
+
+class TestBackupJob(unittest.TestCase):
+    """Test the `backup-restore.backup` job type end to end on a job manager."""
+
+    def setUp(self):
+        import gc
+        import os
+        from contextlib import asynccontextmanager
+
+        from fastapi import APIRouter, FastAPI
+        from fastapi.testclient import TestClient
+        from fastapi_jobqueue import MemoryJobStore
+
+        from fastapi_app.config import get_settings
+        from fastapi_app.lib.core.dependencies import get_auth_manager, get_session_manager
+        from fastapi_app.lib.jobs import create_job_manager, set_job_manager
+        from fastapi_app.lib.jobs import manager as manager_module
+        from fastapi_app.lib.jobs.routes import include_job_routes
+        from fastapi_app.plugins.backup_restore.plugin import register_job_types
+        from fastapi_app.plugins.backup_restore.routes import router
+
+        self.root = Path(tempfile.mkdtemp())
+        self.data = self.root
+        (self.data / "db").mkdir()
+        (self.data / "files").mkdir()
+        (self.data / "db" / "users.json").write_text("[]")
+        (self.data / "db" / "config.json").write_text("{}")
+        (self.data / "db" / "jobs.db").write_text("x")
+        for i in range(3):
+            (self.data / "files" / f"f{i}.xml").write_text("<TEI/>")
+
+        env = patch.dict(os.environ, {"DATA_ROOT": str(self.data)})
+        env.start()
+        get_settings.cache_clear()
+        self.saved_manager = manager_module._manager
+
+        def cleanup() -> None:
+            manager_module._manager = self.saved_manager
+            env.stop()
+            get_settings.cache_clear()
+            gc.collect()
+            shutil.rmtree(self.root, ignore_errors=True)
+
+        self.addCleanup(cleanup)
+
+        users = {
+            "alice": {"username": "alice", "roles": ["backup"]},
+            "bob": {"username": "bob", "roles": ["restore"]},
+            "carol": {"username": "carol", "roles": ["backup"]},
+        }
+        sessions = {"alice-session": users["alice"], "bob-session": users["bob"], "carol-session": users["carol"]}
+        session_manager = MagicMock()
+        session_manager.is_session_valid.return_value = True
+        auth_manager = MagicMock()
+        auth_manager.get_user_by_session_id.side_effect = lambda sid, _sm: sessions.get(sid)
+        auth_manager.get_user_by_username.side_effect = users.get
+        auth_patch = patch("fastapi_app.lib.jobs.auth.get_auth_manager", lambda: auth_manager)
+        auth_patch.start()
+        self.addCleanup(auth_patch.stop)
+
+        register_job_types()
+        self.manager = create_job_manager(MemoryJobStore())
+        self.manager.poll_interval = 0.05
+        set_job_manager(self.manager)
+
+        app = FastAPI(lifespan=self.manager.lifespan)
+        api_v1 = APIRouter(prefix="/api/v1")
+        include_job_routes(api_v1)
+        app.include_router(api_v1)
+        app.include_router(router)
+        app.dependency_overrides[get_session_manager] = lambda: session_manager
+        app.dependency_overrides[get_auth_manager] = lambda: auth_manager
+        self.client = TestClient(app)
+        self.client.__enter__()
+        self.addCleanup(self.client.__exit__, None, None, None)
+
+    def submit(self, session: str = "alice-session"):
+        return self.client.post("/api/plugins/backup-restore/backup", headers={"X-Session-ID": session})
+
+    def wait_for(self, job_id: str, statuses: tuple[str, ...]) -> dict:
+        import time
+
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            job = self.client.get(f"/api/v1/jobs/{job_id}", headers={"X-Session-ID": "alice-session"}).json()
+            if job["status"] in statuses:
+                return job
+            time.sleep(0.02)
+        self.fail(f"Job {job_id} did not reach {statuses}: {job}")
+
+    def test_backup_job_produces_download(self):
+        r = self.submit()
+        self.assertEqual(r.status_code, 202, r.text)
+        job = self.wait_for(r.json()["id"], ("done", "error"))
+        self.assertEqual(job["status"], "done", job)
+        result = job["result"]
+        self.assertTrue(result["filename"].startswith("backup_") and result["filename"].endswith(".zip"))
+        self.assertTrue(result["download"].startswith(f"/api/v1/jobs/{job['id']}/files/"))
+        download = self.client.get(result["download"], headers={"X-Session-ID": "alice-session"})
+        self.assertEqual(download.status_code, 200)
+        self.assertEqual(hashlib.sha256(download.content).hexdigest(), result["sha256"])
+        self.assertEqual(len(download.content), result["size"])
+        with zipfile.ZipFile(io.BytesIO(download.content)) as zf:
+            names = zf.namelist()
+        self.assertIn("db/users.json", names)
+        self.assertNotIn("db/jobs.db", names)
+        self.assertFalse([n for n in names if n.startswith("jobs/")])
+
+    def test_plugin_routes_status_and_streamed_file(self):
+        base = "/api/plugins/backup-restore/backup"
+        alice = {"X-Session-ID": "alice-session"}
+        job_id = self.submit().json()["id"]
+        job = self.wait_for(job_id, ("done", "error"))
+        self.assertEqual(job["status"], "done", job)
+
+        status = self.client.get(f"{base}/{job_id}", headers=alice)
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()["status"], "done")
+
+        file = self.client.get(f"{base}/{job_id}/file", headers=alice)
+        self.assertEqual(file.status_code, 200, file.text)
+        self.assertEqual(file.headers["content-type"], "application/zip")
+        self.assertIn(job["result"]["filename"], file.headers["content-disposition"])
+        self.assertEqual(hashlib.sha256(file.content).hexdigest(), job["result"]["sha256"])
+
+        other = {"X-Session-ID": "carol-session"}
+        self.assertEqual(self.client.get(f"{base}/{job_id}/file", headers=other).status_code, 403)
+        self.assertEqual(self.client.get(f"{base}/{job_id}", headers=other).status_code, 403)
+        self.assertEqual(self.client.post(f"{base}/{job_id}/cancel", headers=other).status_code, 403)
+        self.assertEqual(self.client.get(f"{base}/{job_id}/file", headers={"X-Session-ID": "bob-session"}).status_code, 403)
+        self.assertEqual(self.client.get(f"{base}/nonexistent/file", headers=alice).status_code, 404)
+
+    def test_plugin_file_route_unfinished_job_is_404_and_cancel_works(self):
+        import threading
+
+        from fastapi_app.plugins.backup_restore import archive
+
+        started = threading.Event()
+        release = threading.Event()
+        original = archive.snapshot_sqlite
+
+        def slow_snapshot(source: Path, target: Path) -> None:
+            started.set()
+            release.wait(10)
+            original(source, target)
+
+        sqlite3.connect(self.data / "db" / "metadata.db").close()
+        base = "/api/plugins/backup-restore/backup"
+        alice = {"X-Session-ID": "alice-session"}
+        with patch.object(archive, "snapshot_sqlite", slow_snapshot):
+            job_id = self.submit().json()["id"]
+            self.assertTrue(started.wait(10))
+            self.assertEqual(self.client.get(f"{base}/{job_id}/file", headers=alice).status_code, 404)
+            self.assertEqual(self.client.post(f"{base}/{job_id}/cancel", headers=alice).status_code, 200)
+            release.set()
+            job = self.wait_for(job_id, ("cancelled", "done", "error"))
+        self.assertEqual(job["status"], "cancelled")
+
+    def test_backup_job_requires_role(self):
+        self.assertEqual(self.submit("bob-session").status_code, 403)
+        r = self.client.post(
+            "/api/v1/jobs", json={"type": "backup-restore.backup"}, headers={"X-Session-ID": "bob-session"}
+        )
+        self.assertEqual(r.status_code, 403, r.text)
+
+    def test_backup_job_cancel_leaves_no_file(self):
+        import threading
+
+        from fastapi_app.plugins.backup_restore import archive
+
+        started = threading.Event()
+        release = threading.Event()
+        original = archive.snapshot_sqlite
+
+        def slow_snapshot(source: Path, target: Path) -> None:
+            started.set()
+            release.wait(10)
+            original(source, target)
+
+        (self.data / "db" / "metadata.db").write_bytes(b"")
+        sqlite3.connect(self.data / "db" / "metadata.db").close()
+        with patch.object(archive, "snapshot_sqlite", slow_snapshot):
+            job_id = self.submit().json()["id"]
+            self.assertTrue(started.wait(10))
+            cancel = self.client.post(f"/api/v1/jobs/{job_id}/cancel", headers={"X-Session-ID": "alice-session"})
+            self.assertEqual(cancel.status_code, 200, cancel.text)
+            release.set()
+            job = self.wait_for(job_id, ("cancelled", "done", "error"))
+        self.assertEqual(job["status"], "cancelled", job)
+        out = self.data / "jobs" / job_id
+        self.assertEqual(list(out.glob("*")) if out.exists() else [], [])
 
 
 class TestSupervisorDetection(unittest.TestCase):

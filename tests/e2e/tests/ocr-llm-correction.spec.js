@@ -41,6 +41,24 @@ const SCANNED_PDF = 'tests/e2e/fixtures/pdf/scanned-document.pdf';
 const CHECKBOX = 'sl-dialog[name="ocrOptionsDialog"] sl-checkbox[name="llmCorrection"]';
 
 /**
+ * A job as the job API returns it (`POST /api/v1/ocr` answers with the submitted job)
+ * @param {string} id
+ * @param {string} status
+ * @param {object} [fields]
+ * @returns {object}
+ */
+function job(id, status, fields = {}) {
+  return {
+    id, type: 'ocr', owner: 'testreviewer', visibility: 'owner', driver: 'server', status,
+    progress: { value: null, done: null, total: null, unit: null, phase: null, eta_seconds: null },
+    message: null, data: null, params: {}, input_hash: null, result: null, error: null, resources: ['file:abc'],
+    lease: null, cancel_requested: false, attempts: 0, seq: 1,
+    created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:01Z', finished_at: null, expires_at: null,
+    ...fields
+  };
+}
+
+/**
  * Mock the model routes, then log in and make the inference settings load them.
  * @param {import('@playwright/test').Page} page
  * @param {boolean} withDefault - Whether a default model is configured
@@ -78,13 +96,11 @@ test.describe('OCR dialog: LLM correction', () => {
       await page.route('**/api/v1/ocr', async route => {
         if (route.request().method() !== 'POST') return route.fallback();
         requestBody = route.request().postDataJSON();
-        await route.fulfill({ json: { job_id: 'job-1', stable_id: 'abc', status: 'queued', username: 'x', pid: 1, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00' } });
+        await route.fulfill({ status: 202, json: job('ocr-job-1', 'queued') });
       });
-      await page.route('**/api/v1/ocr/jobs/*', route => route.fulfill({
-        json: {
-          job_id: 'job-1', stable_id: 'abc', status: 'done', username: 'x', pid: 1, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:01',
-          result: { stable_id: 'abc', changed: true, quality: { status: 'good', summary: 'ok', reasons: [] }, llm_corrections: CORRECTIONS }
-        }
+      // jobs.wait() fetches the job: it is already finished
+      await page.route('**/api/v1/jobs/ocr-job-1', route => route.fulfill({
+        json: job('ocr-job-1', 'done', { result: { stable_id: 'abc', changed: true, quality: { status: 'good', summary: 'ok', reasons: [] }, llm_corrections: CORRECTIONS } })
       }));
       await setUp(page, true);
 
@@ -146,13 +162,10 @@ test.describe('OCR dialog: LLM correction', () => {
             json: { detail: { code: 'secret_required', message: 'Mock Provider needs your API key', service: 'mock-provider', label: 'Mock Provider', description: '', help_url: '' } }
           });
         }
-        await route.fulfill({ status: 202, json: { job_id: 'job-2', stable_id: 'abc', status: 'queued', username: 'x', pid: 1, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:00' } });
+        await route.fulfill({ status: 202, json: job('ocr-job-2', 'queued') });
       });
-      await page.route('**/api/v1/ocr/jobs/*', route => route.fulfill({
-        json: {
-          job_id: 'job-2', stable_id: 'abc', status: 'done', username: 'x', pid: 1, created_at: '2026-01-01T00:00:00', updated_at: '2026-01-01T00:00:01',
-          result: { stable_id: 'abc', changed: true, message, quality: { status: 'good', summary: 'ok', reasons: [] }, llm_corrections: [] }
-        }
+      await page.route('**/api/v1/jobs/ocr-job-2', route => route.fulfill({
+        json: job('ocr-job-2', 'done', { result: { stable_id: 'abc', changed: true, message, quality: { status: 'good', summary: 'ok', reasons: [] }, llm_corrections: [] } })
       }));
       await setUp(page, true);
 

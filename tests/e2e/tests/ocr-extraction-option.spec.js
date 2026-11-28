@@ -9,6 +9,7 @@
  * @testCovers app/src/plugins/extraction.js
  * @testCovers app/src/modules/language-chooser.js
  * @testCovers fastapi_app/routers/ocr.py
+ * @testCovers fastapi_app/lib/extraction/job_types.py
  */
 
 /** @import { namedElementsTree } from '../../../app/src/ui.js' */
@@ -107,23 +108,42 @@ test.describe('OCR extraction option', () => {
       });
 
       // Applying OCR stores a new PDF of the document with a text layer (#944); the source is
-      // not changed. OCR runs as a background job.
+      // not changed. OCR runs as a job of type `ocr`.
       const job = await page.evaluate(async ({ id, engine }) => {
         const apiClient = /** @type {any} */(window).client.apiClient;
         let job = await apiClient.ocr({ stable_id: id, engine, languages: ['en'] });
-        while (job.status === 'queued' || job.status === 'running') {
+        while (job.status === 'queued' || job.status === 'active') {
           await new Promise(resolve => setTimeout(resolve, 500));
-          job = await apiClient.ocrJob(job.job_id);
+          job = await apiClient.jobsGet(job.id);
         }
         return job;
       }, { id: stableId, engine: engines[0].id });
-      expect(job.status, job.error).toBe('done');
+      expect(job.type).toBe('ocr');
+      expect(job.status, job.error?.message).toBe('done');
       const result = job.result;
       expect(result.source_stable_id).toBe(stableId);
       expect(result.stable_id).not.toBe(stableId);
       expect(result.changed).toBe(true);
       expect(result.quality.status).toBe('good');
       expect(result.quality.ocr_applied.languages).toEqual(['en']);
+
+      // An extraction job with text recognition as its first step: OCR runs under the lock of
+      // the PDF that the extraction job holds, and the extraction extracts from the new PDF
+      const extractJob = await page.evaluate(async ({ id, engine }) => {
+        const apiClient = /** @type {any} */(window).client.apiClient;
+        let job = await apiClient.extractJob({ extractor: 'mock-extractor', file_id: id, options: {}, ocr: { stable_id: id, engine, languages: ['en'] } });
+        while (job.status === 'queued' || job.status === 'active') {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          job = await apiClient.jobsGet(job.id);
+        }
+        return job;
+      }, { id: stableId, engine: engines[0].id });
+      expect(extractJob.type).toBe('extract');
+      expect(extractJob.status, extractJob.error?.message).toBe('done');
+      expect(extractJob.result.ocr.source_stable_id).toBe(stableId);
+      expect(extractJob.result.pdf).toBe(extractJob.result.ocr.stable_id);
+      expect(extractJob.result.xml).toBeTruthy();
+      expect(extractJob.result.cancelled).toBe(false);
     } finally {
       await releaseAllLocks(page);
       await performLogout(page);
@@ -141,11 +161,14 @@ test.describe('OCR extraction option', () => {
     await page.route('**/api/v1/extract/check', route => route.fulfill({
       json: { ready: false, message: 'The extraction service is not reachable' }
     }));
+    // text recognition is the first step of the extraction job, or a job of its own
     let ocrStarted = false;
-    await page.route('**/api/v1/ocr', route => {
-      ocrStarted = true;
-      return route.continue();
-    });
+    for (const url of ['**/api/v1/ocr', '**/api/v1/extract/job']) {
+      await page.route(url, route => {
+        ocrStarted = true;
+        return route.continue();
+      });
+    }
 
     try {
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');

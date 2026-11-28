@@ -7,6 +7,8 @@ For FastAPI migration - Phase 5.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 
+from .models_ocr import OcrRequest, OcrResponse
+
 
 class AnnotationGuideInfo(BaseModel):
     """Information about an annotation guide for one or more variants."""
@@ -244,3 +246,27 @@ class ExtractResponse(BaseModel):
             "xml": "789ghi012jkl"
         }
     })
+
+
+class ExtractJobRequest(ExtractRequest):
+    """Request of `POST /api/v1/extract/job`: an extraction run as a job, with text recognition as its optional first step."""
+    ocr: Optional[OcrRequest] = Field(
+        default=None,
+        description="If set and the extractor extracts from the PDF, text recognition is applied to the PDF (`stable_id` must be the PDF of `file_id`) before the extraction, which then extracts from the new PDF"
+    )
+
+
+class ExtractJobResult(ExtractResponse):
+    """Result of a job of type `extract`: the `ExtractResponse`, and the result of the text recognition if it ran."""
+    xml: Optional[str] = Field(
+        default=None,
+        description="Extracted XML file (stable_id); None if nothing was extracted because the job was cancelled after the text recognition result was stored"
+    )
+    ocr: Optional[OcrResponse] = Field(
+        default=None,
+        description="Result of the text recognition, if the job ran it"
+    )
+    cancelled: bool = Field(
+        default=False,
+        description="The job was cancelled after the text recognition result was stored (also during its LLM correction pass): the new PDF is kept, nothing was extracted"
+    )

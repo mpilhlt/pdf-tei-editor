@@ -7,43 +7,40 @@ kept in a context variable, which `asyncio.to_thread()` passes on to the worker 
 signature of `recognize()` does not change and engines that do not report progress need no
 change. Reports from other threads than the one running `recognize()` are not received.
 
-A run is cancelled through its progress reports: if the caller passes `is_cancelled` to
-`progress_reporter()` and it returns True, the next report raises `OcrCancelled`, which stops the
-engine at the point where it reports. Engines that do not report progress run to the end; the
-caller checks `is_cancelled` again afterwards.
+The OCR jobs (`fastapi_app/lib/ocr/job_types.py`) pass the job's `ctx.report_threadsafe` and
+`ctx.check_cancelled`. A run is cancelled through its progress reports: once the job is
+cancelled, the next report raises `JobCancelled`, which stops the engine at the point where it
+reports. Engines that do not report progress run to the end; the caller checks for a cancel again
+afterwards.
 """
 
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Optional
-
-from fastapi_app.lib.models.models_ocr import OcrProgress
-
-ProgressCallback = Callable[[OcrProgress], None]
+from typing import Optional, Protocol
 
 
+class ProgressReport(Protocol):
+    """Receives a progress report; the signature of `JobContext.report_threadsafe`."""
 
-class OcrCancelled(BaseException):
-    """
-    The user cancelled the OCR run.
+    def __call__(self, *, phase: str, done: Optional[int], total: Optional[int], unit: Optional[str], eta_seconds: Optional[int]) -> None: ...
 
-    A BaseException like `asyncio.CancelledError`, so that the `except Exception` handlers that
-    keep a run going despite errors (e.g. of the LLM correction pass) do not catch it.
-    """
+
+CancelCheck = Callable[[], None]
+"""Raises (e.g. `JobCancelled`) if the run was cancelled; `JobContext.check_cancelled`."""
 
 
 _reporter: ContextVar[Optional["ProgressTracker"]] = ContextVar("ocr_progress_reporter", default=None)
 
 
 class ProgressTracker:
-    """Turns progress reports into `OcrProgress` with an estimate of the remaining time."""
+    """Passes progress reports on with an estimate of the remaining time."""
 
-    def __init__(self, callback: ProgressCallback, clock: Callable[[], float] = time.monotonic, is_cancelled: Optional[Callable[[], bool]] = None):
-        self._callback = callback
+    def __init__(self, report: ProgressReport, clock: Callable[[], float] = time.monotonic, check_cancelled: Optional[CancelCheck] = None):
+        self._report = report
         self._clock = clock
-        self._is_cancelled = is_cancelled
+        self._check_cancelled = check_cancelled
         self._phase = ""
         self._phase_started = 0.0
 
@@ -55,7 +52,7 @@ class ProgressTracker:
         done so far.
 
         Raises:
-            OcrCancelled: if the run was cancelled
+            JobCancelled: (from `check_cancelled`) if the run was cancelled
         """
         self.check_cancelled()
         now = self._clock()
@@ -66,27 +63,28 @@ class ProgressTracker:
             eta = round((now - self._phase_started) / done * (total - done))
         elif done and total:
             eta = 0
-        self._callback(OcrProgress(phase=phase, done=done, total=total, unit=unit, eta_seconds=eta))
+        self._report(phase=phase, done=done, total=total, unit=unit, eta_seconds=eta)
 
     def check_cancelled(self) -> None:
         """
         Raises:
-            OcrCancelled: if the run was cancelled
+            JobCancelled: (from `check_cancelled`) if the run was cancelled
         """
-        if self._is_cancelled is not None and self._is_cancelled():
-            raise OcrCancelled()
+        if self._check_cancelled is not None:
+            self._check_cancelled()
 
 
 @contextmanager
-def progress_reporter(callback: ProgressCallback, is_cancelled: Optional[Callable[[], bool]] = None) -> Iterator[ProgressTracker]:
+def progress_reporter(report: ProgressReport, check_cancelled: Optional[CancelCheck] = None) -> Iterator[ProgressTracker]:
     """
     Receive the progress reports of code run inside this context.
 
     Args:
-        callback: Receives the reports
-        is_cancelled: Returns whether the run was cancelled; then the next report raises `OcrCancelled`
+        report: Receives the reports, e.g. `ctx.report_threadsafe` of a job
+        check_cancelled: Raises if the run was cancelled, e.g. `ctx.check_cancelled`; it is called
+            before each report
     """
-    tracker = ProgressTracker(callback, is_cancelled=is_cancelled)
+    tracker = ProgressTracker(report, check_cancelled=check_cancelled)
     token = _reporter.set(tracker)
     try:
         yield tracker
@@ -105,7 +103,7 @@ def report_progress(phase: str, done: Optional[int] = None, total: Optional[int]
         unit: The unit, e.g. "page"
 
     Raises:
-        OcrCancelled: if the run was cancelled
+        JobCancelled: if the run was cancelled
     """
     tracker = _reporter.get()
     if tracker is not None:

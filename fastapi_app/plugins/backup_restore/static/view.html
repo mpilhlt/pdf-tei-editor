@@ -90,6 +90,9 @@
         <button class="primary" id="downloadBtn" onclick="downloadBackup()">
             Download Backup
         </button>
+        <button class="warning" id="cancelBtn" onclick="cancelBackup()" hidden>
+            Cancel
+        </button>
         <div id="downloadStatus" class="status"></div>
     </div>
 
@@ -123,21 +126,129 @@
             el.textContent = message;
         }
 
-        function downloadBackup() {
+        const POLL_INTERVAL_MS = 2000;
+
+        /** @type {string | null} Id of the backup job in progress */
+        let backupJobId = null;
+
+        /**
+         * Show or hide the cancel button next to the backup button.
+         * @param {boolean} visible
+         */
+        function setCancelVisible(visible) {
+            document.getElementById('cancelBtn').hidden = !visible;
+        }
+
+        /**
+         * Restore the backup button after a backup ended.
+         */
+        function resetBackupButton() {
+            const btn = document.getElementById('downloadBtn');
+            btn.disabled = false;
+            btn.textContent = 'Download Backup';
+            setCancelVisible(false);
+            backupJobId = null;
+        }
+
+        /**
+         * Text for the progress of a backup job.
+         * @param {{status: string, message?: string|null, progress?: {phase?: string|null, done?: number|null, total?: number|null}}} job
+         * @returns {string}
+         */
+        function progressText(job) {
+            if (job.status === 'queued') return 'Waiting for another backup to finish...';
+            const p = job.progress || {};
+            const parts = [p.phase || 'Creating backup'];
+            if (p.total) parts.push(p.done + ' of ' + p.total + ' files');
+            return parts.join(', ') + '...';
+        }
+
+        /**
+         * Resolve after the given time.
+         * @param {number} ms
+         * @returns {Promise<void>}
+         */
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        /**
+         * Poll the job every 2 s until it is finished. Conditional requests (If-None-Match) answer 304
+         * while the job did not change. This page has no jobs plugin, so it polls itself.
+         * @param {string} jobId
+         * @returns {Promise<any>} The finished job
+         */
+        async function waitForJob(jobId) {
+            let etag = null;
+            let job = null;
+            for (;;) {
+                const headers = etag ? { 'If-None-Match': etag } : {};
+                const response = await fetch('/api/plugins/backup-restore/backup/' + jobId, { headers });
+                if (response.status !== 304) {
+                    if (!response.ok) throw new Error('Could not read the backup job (' + response.status + ')');
+                    etag = response.headers.get('ETag');
+                    job = await response.json();
+                    setStatus('downloadStatus', progressText(job), 'info');
+                    if (['done', 'error', 'cancelled', 'expired'].includes(job.status)) return job;
+                }
+                await sleep(POLL_INTERVAL_MS);
+            }
+        }
+
+        /**
+         * Download the backup ZIP of a finished job by navigating to the plugin route, which the
+         * plugin session cookie authenticates and which streams the file to disk.
+         * @param {string} jobId
+         */
+        function saveBackup(jobId) {
+            window.location.href = '/api/plugins/backup-restore/backup/' + jobId + '/file';
+        }
+
+        /**
+         * Create a backup as a server job, show its progress and download the result.
+         * @returns {Promise<void>}
+         */
+        async function downloadBackup() {
             const btn = document.getElementById('downloadBtn');
             btn.disabled = true;
-            btn.textContent = 'Preparing...';
-            setStatus('downloadStatus', 'Preparing backup...', 'info');
+            btn.textContent = 'Creating backup...';
+            setStatus('downloadStatus', 'Creating backup...', 'info');
+            try {
+                const response = await fetch('/api/plugins/backup-restore/backup', { method: 'POST' });
+                if (!response.ok) {
+                    const body = await response.json().catch(() => ({}));
+                    throw new Error(body.detail || 'Backup failed (' + response.status + ')');
+                }
+                const submitted = await response.json();
+                backupJobId = submitted.id;
+                setCancelVisible(true);
+                const job = await waitForJob(submitted.id);
+                if (job.status === 'done') {
+                    setStatus('downloadStatus', 'Downloading...', 'info');
+                    saveBackup(job.id);
+                    setTimeout(() => setStatus('downloadStatus', 'Download started: ' + job.result.filename, 'success'), 1500);
+                } else if (job.status === 'cancelled') {
+                    setStatus('downloadStatus', 'Backup cancelled.', 'info');
+                } else {
+                    const message = job.error && job.error.message;
+                    setStatus('downloadStatus', 'Backup failed: ' + (message || job.status), 'error');
+                }
+            } catch (err) {
+                setStatus('downloadStatus', err.message, 'error');
+            } finally {
+                resetBackupButton();
+            }
+        }
 
-            // Direct browser download via a new window/tab
-            window.location.href = '/api/plugins/backup-restore/download';
-
-            // Re-enable after a delay (download starts in background)
-            setTimeout(() => {
-                btn.disabled = false;
-                btn.textContent = 'Download Backup';
-                setStatus('downloadStatus', 'Download started.', 'success');
-            }, 2000);
+        /**
+         * Ask the server to cancel the backup in progress; the polling loop reports the result.
+         * @returns {Promise<void>}
+         */
+        async function cancelBackup() {
+            if (!backupJobId) return;
+            document.getElementById('cancelBtn').hidden = true;
+            setStatus('downloadStatus', 'Cancelling...', 'info');
+            await fetch('/api/plugins/backup-restore/backup/' + backupJobId + '/cancel', { method: 'POST' }).catch(() => {});
         }
 
         function selectRestoreFile() {

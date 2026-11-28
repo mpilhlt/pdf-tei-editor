@@ -70,8 +70,9 @@ This schema is used to auto-generate the frontend API client.
 
 **Extraction**
 
-- `/api/v1/extraction/list` - List available extractors
-- `/api/v1/extraction` - Extract TEI from PDF
+- `/api/v1/extract/list` - List available extractors
+- `/api/v1/extract` - Extract TEI from PDF or XML (synchronous)
+- `/api/v1/extract/job` - Extract as a job (type `extract`, optionally with text recognition first)
 
 **Validation**
 
@@ -227,6 +228,7 @@ npm run docs:backend:json
 - `validation.py` - XML validation
 - `sync.py` - WebDAV sync
 - `sse.py` - Server-sent events
+- `fastapi_app/lib/jobs/routes.py` - Job queue routes under `/api/v1/jobs` (see [Long-Running Jobs](../code-assistant/jobs.md))
 - `users.py`, `groups.py`, `roles.py` - RBAC management
 
 ## 4. Hand-maintained API Client

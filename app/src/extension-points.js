@@ -227,6 +227,16 @@ const extensionPoints = {
      */
     collectionRelabeled: "rbac.collectionRelabeled"
   },
+  jobs: {
+    /**
+     * Collected by JobsPlugin after login (also after a reload) to resume interrupted client jobs:
+     * those of this browser tab without asking, others after the user confirmed. Jobs of a type
+     * without a contribution are cancelled.
+     * Function signature: () => JobResumeContribution | JobResumeContribution[], where a contribution
+     * is `{ type: string, resume: (job: Job) => Promise<void> }` (see app/src/plugins/jobs.js)
+     */
+    resume: "jobs.resume"
+  },
   title: {
     /**
      * Merges the given slot values into the browser tab title (see `state.titleTemplate`)

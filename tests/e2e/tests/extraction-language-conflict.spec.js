@@ -2,8 +2,9 @@
  * After an extraction whose declared language (e.g. from CrossRef) contradicts the language
  * detected from the text, the user is asked whether to declare the detected language.
  *
- * The conflict is added to the response of the extraction request, so that any extractor
- * (including the mock extractor) can be used.
+ * The extraction runs as a job (`POST /api/v1/extract/job`). The test lets the real job run, and
+ * answers the submit with a stand-in job (`test.progress`) whose result is that of the real job
+ * with a conflict added, so that any extractor (including the mock extractor) can be used.
  *
  * @testCovers app/src/plugins/extraction.js
  */
@@ -24,10 +25,27 @@ test.describe('Extraction language conflict', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, [
       'Failed to load resource.*401.*UNAUTHORIZED'
     ]);
-    await page.route('**/api/v1/extract', async route => {
-      const response = await route.fetch();
-      const json = await response.json();
-      await route.fulfill({ response, json: { ...json, language_conflict: { declared: 'en', detected: 'de' } } });
+    await page.route('**/api/v1/extract/job', async route => {
+      const request = route.request();
+      const submitted = await (await route.fetch()).json();
+      const { 'content-length': _length, ...headers } = request.headers();
+      // wait for the real job, then answer with a stand-in job whose result has the conflict
+      const jobUrl = new URL(request.url());
+      jobUrl.pathname = `/api/v1/jobs/${submitted.id}`;
+      let job = submitted;
+      while (job.status === 'queued' || job.status === 'active') {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        job = await (await route.fetch({ url: jobUrl.toString(), method: 'GET', headers })).json();
+      }
+      expect(job.status, job.error?.message).toBe('done');
+      jobUrl.pathname = '/api/v1/jobs';
+      const response = await route.fetch({
+        url: jobUrl.toString(),
+        method: 'POST',
+        headers,
+        postData: JSON.stringify({ type: 'test.progress', params: { steps: 1, delay_ms: 10, result: { ...job.result, language_conflict: { declared: 'en', detected: 'de' } } } })
+      });
+      await route.fulfill({ response, json: await response.json() });
     });
 
     // The uploaded PDF and the extraction result, deleted at the end

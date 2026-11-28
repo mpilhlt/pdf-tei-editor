@@ -88,7 +88,7 @@ class TextCorrectionsRequest(BaseModel):
 
     stable_id: str = Field(..., min_length=1, description="stable_id of the TEI document")
     skip_unwritable: bool = Field(False, description="Write the corrections even though some differences cannot be written (they are skipped)")
-    progress_id: str | None = Field(None, description="Id of a progress widget of the client that shows the steps of the request (via SSE)")
+    job_id: str | None = Field(None, description="Id of a client job (type ocr.text-corrections) of the user that the request runs as: it reports its steps to the job, and the job can be cancelled through the job API")
     pages: list[int] | None = Field(None, description="Only the corrections on these pages (0-based page indices of the PDF, see OcrReviewPlanResponse.pages). Writing them updates the given version instead of creating a new one")
 
 
@@ -155,40 +155,6 @@ class TextQualityReport(BaseModel):
     layout_position_match: Optional[float] = Field(default=None, description="Share of matching words that are at the same place in the text layer (0-1)")
     layout_order_agreement: Optional[float] = Field(default=None, description="Share of matching words that are in the same order in the text layer (0-1)")
     ocr_applied: Optional[dict[str, str | list[str]]] = Field(default=None, description="Record of a previous OCR run by this application")
-
-
-OcrJobStatus = Literal["queued", "running", "done", "failed", "cancelled"]
-
-
-class OcrProgress(BaseModel):
-    """Progress of a running OCR job."""
-
-    phase: str = Field(..., description="What the engine is doing, e.g. 'Recognizing text'")
-    done: Optional[int] = Field(None, description="Units of the phase done so far, if the phase is counted")
-    total: Optional[int] = Field(None, description="Units of the phase in total, if the phase is counted")
-    unit: Optional[str] = Field(None, description="Unit of 'done' and 'total', e.g. 'page'")
-    eta_seconds: Optional[int] = Field(None, description="Estimated seconds until the phase is finished, extrapolated from the units done so far")
-
-
-class OcrJob(BaseModel):
-    """
-    An OCR run in the background. OCR of a long document can take longer than a reverse proxy
-    waits for a response, so `POST /api/v1/ocr` returns the job at once and the client polls
-    `GET /api/v1/ocr/jobs/{job_id}` until the status is 'done', 'failed' or 'cancelled'. Only one
-    OCR run happens at a time on the server; other jobs wait with the status 'queued'.
-    """
-
-    job_id: str = Field(..., description="Id of the job")
-    stable_id: str = Field(..., description="stable_id of the PDF")
-    status: OcrJobStatus = Field(..., description="'queued' (waiting for another run to finish), 'running', 'done' (see 'result'), 'failed' (see 'error') or 'cancelled' (stopped by the user, see `POST /api/v1/ocr/jobs/{job_id}/cancel`)")
-    progress: Optional[OcrProgress] = Field(None, description="Progress of the run if the status is 'running' and the engine reports it")
-    result: Optional[OcrResponse] = Field(None, description="Result of the run if the status is 'done'")
-    error: Optional[str] = Field(None, description="Error message if the status is 'failed'")
-    error_status: Optional[int] = Field(None, description="HTTP status code corresponding to the error (4xx: invalid request, 5xx: failure of the engine or the server)")
-    username: str = Field("", description="User who started the job")
-    pid: int = Field(0, description="Id of the server process that runs the job")
-    created_at: str = Field(..., description="ISO timestamp of the start of the job")
-    updated_at: str = Field(..., description="ISO timestamp of the last status change")
 
 
 class OcrReviewPlanRequest(BaseModel):

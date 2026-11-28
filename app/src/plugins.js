@@ -22,6 +22,7 @@ import {
   ConfigEditorPlugin,
   ConfigPlugin,
   PluginAdminPlugin,
+  JobsAdminPlugin,
   DiagnosticsDrawerPlugin,
   SyncPromptPlugin,
   DialogPlugin,
@@ -44,6 +45,7 @@ import {
   MoveFilesPlugin,
   PdfViewerPlugin,
   ProgressPlugin,
+  JobsPlugin,
   RbacManagerPlugin,
   ServicesPlugin,
   SsePlugin,
@@ -95,6 +97,7 @@ const plugins = [
   RbacManagerPlugin,   // Manage Access & Projects
   ConfigEditorPlugin,  // Configuration Editor
   PluginAdminPlugin,   // Manage Plugins
+  JobsAdminPlugin,     // Jobs
 
   // Other plugins
   InfoPlugin,          // User Manual (first)
@@ -132,6 +135,7 @@ const plugins = [
   MoveFilesPlugin,
   SsePlugin,
   ProgressPlugin,
+  JobsPlugin,           // job progress widgets, cancel, resume after reload — depends on ProgressPlugin
   AccessControlPlugin,
   HeartbeatPlugin,
   StartPlugin

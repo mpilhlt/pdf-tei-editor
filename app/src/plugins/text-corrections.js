@@ -10,11 +10,13 @@
  * write in its revision history, and the editor and the viewer are updated in place. The dialog is
  * only shown if some changes cannot be written.
  *
- * Each step is shown in a progress widget; the backend reports its steps and the pages it has done
- * to that widget via SSE (`progress_id` of the requests). The cancel button of the widget cancels
- * the preview or the write on the backend (`POST /api/v1/ocr/text-corrections/cancel/{progress_id}`),
- * which then stops at its next page or step without changing the PDF or the document. A write
- * that has already stored its result finishes as usual.
+ * The preview and the write run as a client job (type `ocr.text-corrections`) that is driven by the
+ * request: the plugin submits the job and passes its id (`job_id`) to the route, which reports its
+ * steps and the pages it has done to the job. The `jobs` plugin shows the job's progress widget;
+ * its cancel button cancels the job, which makes the route stop at its next page or step and answer
+ * 409 `cancelled`, without changing the PDF or the document. A write that has already stored its
+ * result finishes as usual. The response of the route is the result; the plugin does not wait for
+ * the job. If the request fails before the route takes the job, the plugin cancels the job.
  *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlMenuItem } from '../ui.js'
@@ -47,14 +49,11 @@ const VERSION_NOTE = 'The corrections are written into a copy of the PDF, which 
 /** Note of the dialog when the corrections of some pages are written */
 const PAGES_NOTE = 'The corrections are written into a copy of the PDF, which this version is then attached to. Other versions keep their PDF.'
 
-/** Title of the progress widgets */
+/** Title of the progress widget of loading the result */
 const PROGRESS_TITLE = 'Writing text corrections to PDF'
 
 /** Shown when the user cancelled the preview or the write */
 const CANCELLED_MESSAGE = 'Writing the text corrections was cancelled. The PDF and the document are unchanged.'
-
-/** Shown when the user cancelled a write that had already stored its result */
-const TOO_LATE_MESSAGE = 'The corrections had already been saved when you cancelled, so they were written.'
 
 /**
  * Whether an error of a preview or write request says that the user cancelled it.
@@ -71,12 +70,14 @@ const UNSAVED_MESSAGE = 'The document has changes that could not be saved, for e
 class TextCorrectionsPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'text-corrections', deps: ['client', 'tools', 'progress'] })
+    super(context, { name: 'text-corrections', deps: ['client', 'tools', 'progress', 'jobs'] })
   }
 
   get #client() { return this.getDependency('client') }
 
   get #progress() { return this.getDependency('progress') }
+
+  get #jobs() { return this.getDependency('jobs') }
 
   /** @type {SlDialog & textCorrectionsDialogPart} */
   #dialogUi = null
@@ -200,27 +201,39 @@ class TextCorrectionsPlugin extends Plugin {
   }
 
   /**
-   * Show a progress widget whose cancel button cancels the request that reports to it.
-   * @param {string} progressId
-   * @param {string} label
-   * @returns {{cancelled: boolean}} `cancelled` becomes true when the user clicks the cancel button
+   * Run a request of a text corrections job: submit the job, which the `jobs` plugin shows as a
+   * progress widget, and call the route with its id. The route finishes the job with the request.
+   * The plugin waits for the job only so that its error is not notified a second time (the error of
+   * the route is reported by the caller). Unless the request finished the job (success, or the
+   * route's answer to the user's cancel), the job is cancelled in `finally`: this finishes a job
+   * that the route has not taken (e.g. after a validation error), and does nothing to a job that is
+   * finished. If this fails too, the server cancels the job after UNCLAIMED_CLIENT_JOB_MAX_AGE.
+   * @template T
+   * @param {string} stableId
+   * @param {'preview'|'apply'} mode
+   * @param {(jobId: string) => Promise<T>} request - Calls the route with the job id
+   * @returns {Promise<T>}
    */
-  #showProgress(progressId, label) {
-    const run = { cancelled: false }
-    this.#progress.show(progressId, {
-      title: PROGRESS_TITLE,
-      label,
-      value: null,
-      cancellable: true,
-      onCancel: () => {
-        run.cancelled = true
-        testLog('TEXT_CORRECTIONS_CANCEL_REQUESTED', { progressId })
-        this.#client.apiClient.ocrTextCorrectionsCancel(progressId).catch(error => {
-          this.getDependency('logger').warn(`Could not cancel writing the text corrections: ${error}`)
+  async #runJob(stableId, mode, request) {
+    const jobs = this.#jobs
+    const job = await jobs.submit('ocr.text-corrections', { stable_id: stableId, mode })
+    jobs.wait(job.id).catch(() => {})
+    let finished = false
+    try {
+      const result = await request(job.id)
+      finished = true
+      return result
+    } catch (error) {
+      // the route finishes its job as cancelled when the user cancelled it
+      finished = isCancelledError(error)
+      throw error
+    } finally {
+      if (!finished) {
+        await jobs.cancel(job.id).catch(cancelError => {
+          this.getDependency('logger').warn(`Could not cancel text corrections job ${job.id}: ${cancelError}`)
         })
       }
-    })
-    return run
+    }
   }
 
   /** Tell the user that the preview or the write was cancelled. */
@@ -230,45 +243,33 @@ class TextCorrectionsPlugin extends Plugin {
   }
 
   /**
-   * Write the corrections, showing the steps in a progress widget whose cancel button cancels the
-   * write.
+   * Write the corrections as a job, whose progress widget cancels the write.
    * @param {string} stableId
    * @param {boolean} skipUnwritable
    * @param {number[]|null} pages - Only the corrections on these pages; null for the whole document
    * @returns {Promise<TextCorrectionsResult|null>} The result, or null if the user cancelled the write
    */
   async #write(stableId, skipUnwritable, pages) {
-    const progressId = `text-corrections-write-${stableId}`
     testLog('TEXT_CORRECTIONS_WRITING', { stableId, pages })
-    // the backend shows its steps in the widget
-    const run = this.#showProgress(progressId, 'Writing the corrections to the PDF…')
     try {
-      const result = await this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipUnwritable, progress_id: progressId, pages })
-      // the backend had stored the result before it saw the cancel request
-      if (run.cancelled) notify(TOO_LATE_MESSAGE, 'primary', 'info-circle')
-      return result
+      return await this.#runJob(stableId, 'apply', jobId => this.#client.apiClient.ocrTextCorrectionsApply({ stable_id: stableId, skip_unwritable: skipUnwritable, job_id: jobId, pages }))
     } catch (error) {
       if (isCancelledError(error)) {
         this.#notifyCancelled()
         return null
       }
       throw error
-    } finally {
-      this.#progress.hide(progressId)
     }
   }
 
   /**
-   * Save the document and find the corrections that can be written, showing the steps in a
-   * progress widget.
+   * Save the document and find the corrections that can be written, as a job.
    * @param {string} stableId
    * @param {number[]|null} [pages] - Only the corrections on these pages; null for the whole document
    * @returns {Promise<TextCorrectionsPreview|null>} The preview, or null if the document could not
    *   be saved or the user cancelled
    */
   async #preview(stableId, pages = null) {
-    const progressId = `text-corrections-preview-${stableId}`
-    const run = this.#showProgress(progressId, 'Saving the document…')
     testLog('TEXT_CORRECTIONS_PROGRESS', { step: 'preview' })
     try {
       const xmlEditor = this.getDependency('xmleditor')
@@ -279,33 +280,19 @@ class TextCorrectionsPlugin extends Plugin {
         testLog('TEXT_CORRECTIONS_REFUSED', { reason: 'unsaved' })
         return null
       }
-      if (run.cancelled) {
-        this.#notifyCancelled()
-        return null
-      }
-      // the backend shows its steps in the widget
-      this.#progress.setLabel(progressId, 'Comparing the document with the text layer of the PDF…')
-      const preview = await this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId, progress_id: progressId, pages })
-      // the preview changes nothing: drop it if it finished before the backend saw the cancel request
-      if (run.cancelled) {
-        this.#notifyCancelled()
-        return null
-      }
-      return preview
+      return await this.#runJob(stableId, 'preview', jobId => this.#client.apiClient.ocrTextCorrectionsPreview({ stable_id: stableId, job_id: jobId, pages }))
     } catch (error) {
       if (isCancelledError(error)) {
         this.#notifyCancelled()
         return null
       }
       throw error
-    } finally {
-      this.#progress.hide(progressId)
     }
   }
 
   /**
    * Fill and show the dialog. When the user confirms, the corrections are written while the dialog
-   * stays open with the Write button in loading state, and the steps are shown in a progress widget.
+   * stays open with the Write button in loading state, and the write is a job (see `#write`).
    * @param {TextCorrectionsPreview} preview
    * @param {string} stableId
    * @param {number[]|null} [pages] - Only the corrections on these pages; null for the whole document

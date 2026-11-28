@@ -3,9 +3,9 @@
  * errors of the text layer of the open PDF, without running text recognition again. This is the
  * correction pass of text recognition on its own, e.g. to run it again after it was cancelled.
  *
- * The run happens in the background with a cancellable progress widget. Cancelling leaves the PDF
- * unchanged. When it is finished, the corrected PDF is loaded if the user still has the same
- * documents open; otherwise the user is asked first.
+ * The run is a job of the server (type `ocr.llm-correction`), whose progress widget the `jobs`
+ * plugin shows. Cancelling it leaves the PDF unchanged. When it is finished, the corrected PDF is
+ * loaded if the user still has the same documents open; otherwise the user is asked first.
  *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlMenuItem } from '../ui.js'
@@ -35,7 +35,7 @@ function escapeHtml(text) {
 class OcrCorrectionPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'ocr-correction', deps: ['tools', 'ocr', 'progress', 'dialog', 'services', 'file-selection', 'inference-settings'] })
+    super(context, { name: 'ocr-correction', deps: ['tools', 'ocr', 'dialog', 'services', 'file-selection', 'inference-settings'] })
   }
 
   /** @type {SlMenuItem|null} */
@@ -92,27 +92,11 @@ class OcrCorrectionPlugin extends Plugin {
     if (!confirmed) return
 
     const started = { pdf: this.state.pdf, xml: this.state.xml }
-    const progress = this.getDependency('progress')
-    const progressId = `ocr-correction-${stableId}`
-    const controller = new AbortController()
     this.#running.add(stableId)
-    progress.show(progressId, {
-      title: 'OCR correction',
-      label: `Correcting OCR errors using ${label}…`,
-      value: null,
-      cancellable: true,
-      onCancel: () => controller.abort()
-    })
     let result
     try {
-      result = await this.getDependency('ocr').correct(stableId, {
-        signal: controller.signal,
-        onStatus: (_status, message, job) => {
-          progress.setLabel(progressId, message)
-          const total = job.progress?.total
-          progress.setValue(progressId, total ? Math.min(100, Math.round(((job.progress?.done ?? 0) / total) * 100)) : null)
-        }
-      })
+      // the jobs plugin shows the progress widget of the job, whose cancel button cancels it
+      result = await this.getDependency('ocr').correct(stableId)
     } catch (error) {
       if (error instanceof OcrCancelledError) {
         notify('The correction was cancelled. The PDF is unchanged.', 'primary', 'info-circle')
@@ -121,7 +105,6 @@ class OcrCorrectionPlugin extends Plugin {
       throw error
     } finally {
       this.#running.delete(stableId)
-      progress.hide(progressId)
     }
     if (!result.changed) return
     await loadWhenFinished({

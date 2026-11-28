@@ -69,7 +69,7 @@ Open **Backup & Restore** from the plugins menu (category "Administration"). The
 2. Wait while the server prepares the file. For large collections this can take a while; the browser starts the download when it is ready.
 3. Your browser saves a file named `backup_YYYYMMDD_HHMMSS.zip` to its download folder.
 
-The application stays usable while the backup is created, and the backup is consistent even if users are working at that moment. Only one backup is created at a time: if someone else (or the scheduled script) is currently making one, you get an error message. Wait a minute and try again.
+The application stays usable while the backup is created, and the backup is consistent even if users are working at that moment. The backup runs as a server job with a progress display and a Cancel button. Backups made in the web interface wait for each other (one at a time); the scheduled script (`GET /download`) still gets an error message while another script backup runs. The job queue (`db/jobs.db`) and the job output directory are not part of a backup.
 
 Keep the file somewhere other than the server itself, for example on a different machine or in your institution's storage.
 

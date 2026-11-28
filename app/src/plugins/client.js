@@ -11,7 +11,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { AuthenticationData } from './authentication.js'
- * @import { LockedDetail } from '../modules/api-client-v1.js'
+ * @import { LockedDetail, OcrRequest, Job } from '../modules/api-client-v1.js'
  */
 
 import Plugin from '../modules/plugin-base.js';
@@ -193,10 +193,11 @@ function nonJsonResponseError(response, method) {
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST').
  * @param {object|null} body - The request body (optional).  Will be stringified to JSON.
  * @param {Number} [retryAttempts] - The number of retry attempts after a timeout
+ * @param {Record<string, string>} [headers] - Additional request headers, e.g. `Idempotency-Key`
  * @returns {Promise<any>} - A promise that resolves to the response data,
  *                           or rejects with an error message if the request fails.
  */
-async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3) {
+async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3, headers = {}) {
   // If endpoint already starts with /api, use it directly (skip api_base_url prefix)
   let url = endpoint.startsWith('/api') ? endpoint : `${api_base_url}${endpoint}`;
   /** @type {RequestInit} */
@@ -204,6 +205,7 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
     method,
     headers: {
       'X-Session-ID': sessionId || '',
+      ...headers,
     }
   };
 
@@ -241,6 +243,11 @@ async function callApi(endpoint, method = 'GET', body = null, retryAttempts = 3)
 
     // save the last  HTTP status code for later use   
     lastHttpStatus = response.status
+
+    // 204 No Content (e.g. saving a job step) has no body
+    if (response.status === 204) {
+      return null
+    }
 
     let result;
     try {
@@ -437,6 +444,29 @@ async function extract(file_id, options) {
     file_id: file_id,
     extractor: extractor,
     options: extractionOptions
+  });
+}
+
+/**
+ * Submit an extraction job (type `extract`), with text recognition of the PDF as its first step if
+ * `ocr` is given. Wait for the job with the `jobs` plugin; its result is an `ExtractJobResult`.
+ * @param {string} file_id The stable_id of the source document to extract from
+ * @param {any} options The options for the extraction, including the extractor
+ * @param {OcrRequest|null} [ocr] Text recognition to apply to the PDF before the extraction
+ * @returns {Promise<Job>}
+ */
+async function extractJob(file_id, options, ocr = null) {
+  const extractor = options.extractor;
+  if (!extractor) {
+    throw new Error("No extractor given");
+  }
+  const extractionOptions = { ...options };
+  delete extractionOptions.extractor;
+  return await apiClient.extractJob({
+    file_id: file_id,
+    extractor: extractor,
+    options: extractionOptions,
+    ...(ocr ? { ocr } : {})
   });
 }
 
@@ -783,6 +813,7 @@ const api = {
   getAutocompleteData,
   saveXml,
   extract,
+  extractJob,
   getExtractorList,
   deleteFiles,
   createVersionFromUpload,

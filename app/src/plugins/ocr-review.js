@@ -15,7 +15,16 @@
  * Requires the line layout of the document (`GET /api/v1/files/{stable_id}/layout`), which only
  * zone documents with a layout provider have.
  *
+ * The review runs as the client job `ocr.llm-review`, whose progress widget the `jobs` plugin
+ * shows. The findings of each page window are saved as step `window-<index>`; after a reload, the
+ * job is resumed (`jobs.resume`) with the saved findings, and only the remaining windows are
+ * reviewed. A resume is discarded if the XML of the document is no longer the one reviewed
+ * (`xml_file_id`, its content hash).
+ *
  * @import { PluginContext } from '../modules/plugin-context.js'
+ * @import { Job } from '../modules/api-client-v1.js'
+ * @import { JobRun } from '../modules/job-client.js'
+ * @import { JobResumeContribution } from './jobs.js'
  * @import { SlMenuItem } from '../ui.js'
  * @import { Finding } from '../modules/llm-findings.js'
  * @import { OcrCorrectionsRecord } from '../modules/tei-utils.js'
@@ -32,9 +41,62 @@ import { SessionStorage } from '../modules/session-storage.js'
 import * as lintUtils from '../modules/lint-utils.js'
 import { getRevisionStatus, recordOcrCorrections } from '../modules/tei-utils.js'
 import { prettyPrintXmlDom } from '../modules/xml-utils.js'
+import { JobCancelledError } from '../modules/job-client.js'
+import { sha256Hex } from '../modules/sha256.js'
+import ep from '../extension-points.js'
 
 /** Diagnostic source tag identifying this plugin's diagnostics */
 const SOURCE = 'ocr-review'
+
+/** The client job type of a review (registered in fastapi_app/lib/ocr/job_types.py) */
+const JOB_TYPE = 'ocr.llm-review'
+
+/** Milliseconds a resumed review waits for the reviewed document to be loaded */
+const RESUME_LOAD_TIMEOUT = 20000
+
+/**
+ * The parameters of an `ocr.llm-review` job. The XML is not among them: it is read from the
+ * editor, also when the job is resumed.
+ * @typedef {Object} OcrReviewJobParams
+ * @property {string} stable_id - The TEI document
+ * @property {string} xml_file_id - The content hash (SHA-256, hex) of the reviewed XML, checked on resume
+ * @property {string} provider_id - The provider of the model
+ * @property {string} model_id - The model
+ * @property {string} [scope] - The XML of the node whose pages are reviewed; the whole document without it
+ * @property {string} [xpath] - The XPath of that node
+ */
+
+/**
+ * The saved result of the step of a page window.
+ * @typedef {Object} OcrReviewWindowResult
+ * @property {Finding[]} findings
+ * @property {number} [window_count]
+ */
+
+/** A page window of a review failed */
+class ReviewWindowError extends Error {
+  /**
+   * @param {unknown} cause - The error of the request
+   * @param {number} index - The 0-based index of the page window
+   */
+  constructor(cause, index) {
+    super(/** @type {Error} */ (cause)?.message ?? String(cause))
+    this.name = 'ReviewWindowError'
+    this.index = index
+  }
+}
+
+/**
+ * The content hash (SHA-256, hex) of the XML, which is the file id of the XML as stored. Uses the
+ * Web Crypto API if the page is a secure context.
+ * @param {string} xml
+ * @returns {Promise<string>}
+ */
+async function contentHash(xml) {
+  if (!globalThis.crypto?.subtle) return sha256Hex(xml)
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(xml))
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
 
 /** Tooltip of the menu item */
 const TOOLTIP = 'The language model suggests corrections in the TEI document, which you review one by one. The PDF is not changed: use "Write text corrections to PDF" afterwards.'
@@ -54,7 +116,25 @@ function escapeHtml(text) {
 class OcrReviewPlugin extends Plugin {
   /** @param {PluginContext} context */
   constructor(context) {
-    super(context, { name: 'ocr-review', deps: ['client', 'tools'] })
+    super(context, { name: 'ocr-review', deps: ['client', 'tools', 'xmleditor', 'logger', 'dialog', 'jobs', 'inference-settings', 'text-corrections'] })
+  }
+
+  static extensionPoints = [ep.jobs.resume];
+
+  /**
+   * Extension point handler for `ep.jobs.resume`.
+   * Called by JobsPlugin after login (also after a reload) to resume interrupted client jobs.
+   * Delegates to {@link OcrReviewPlugin#getResumeContribution}.
+   * @returns {JobResumeContribution}
+   */
+  [ep.jobs.resume]() { return this.getResumeContribution() }
+
+  /**
+   * The contribution that resumes interrupted `ocr.llm-review` jobs.
+   * @returns {JobResumeContribution}
+   */
+  getResumeContribution() {
+    return { type: JOB_TYPE, resume: (job) => this.#resume(job) }
   }
 
   get #client() { return this.getDependency('client') }
@@ -366,9 +446,8 @@ class OcrReviewPlugin extends Plugin {
   }
 
   /**
-   * Confirm with the model's name, then review the document page window by page window behind a
-   * cancellable progress widget. The findings are shown as each window completes, so that a
-   * failing or cancelled run keeps those found so far.
+   * Confirm with the model's name, then review the document page window by page window as a
+   * client job (see {@link OcrReviewPlugin#review}).
    * @param {{wholeDocument?: boolean}} [options] wholeDocument reviews the whole document even
    *   while node navigation has selected a node (the Tools menu item)
    * @returns {Promise<void>}
@@ -411,82 +490,177 @@ class OcrReviewPlugin extends Plugin {
       }
     }
 
-    const progress = this.getDependency('progress')
-    const progressId = 'ocr-review'
-    const heading = `Finding OCR errors using ${label}…`
+    /** @type {OcrReviewJobParams} */
+    const params = {
+      stable_id: stableId,
+      xml_file_id: await contentHash(xml),
+      provider_id: model.providerId,
+      model_id: model.modelId,
+      ...scoped,
+      ...(xpath ? { xpath } : {})
+    }
+    await this.#review(params, xml)
+  }
+
+  /**
+   * Resume an interrupted review once the reviewed document is loaded, or discard it if the
+   * document is not loaded or its XML changed since the review started.
+   * @param {Job} job
+   * @returns {Promise<void>}
+   */
+  async #resume(job) {
+    const params = /** @type {OcrReviewJobParams} */ (job.params)
+    const xml = await this.#loadedXml(params.stable_id)
+    if (xml === null || await contentHash(xml) !== params.xml_file_id) {
+      await this.#discard(job)
+      notify('The document changed; the review was discarded', 'warning', 'exclamation-triangle')
+      testLog('OCR_REVIEW_DISCARDED', { jobId: job.id })
+      return
+    }
+    await this.#review(params, xml, job.id)
+  }
+
+  /**
+   * Wait until the editor has loaded a document after a reload.
+   * @param {string} stableId - The document the caller expects
+   * @returns {Promise<string|null>} The XML in the editor if it is that document; null if
+   *   another or no document was loaded within {@link RESUME_LOAD_TIMEOUT}
+   */
+  async #loadedXml(stableId) {
+    const xmlEditor = this.getDependency('xmleditor')
+    const deadline = Date.now() + RESUME_LOAD_TIMEOUT
+    while (Date.now() < deadline) {
+      const current = this.state?.xml
+      const view = xmlEditor.getView()
+      if (current && xmlEditor.isReady() && view && view.state.doc.length > 0) {
+        return current === stableId ? view.state.doc.toString() : null
+      }
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    return null
+  }
+
+  /**
+   * Finish an interrupted review as cancelled. The job is claimed and finished at once, since a
+   * cancel request alone would leave a job whose lease this tab holds active until the lease expires.
+   * @param {Job} job
+   * @returns {Promise<void>}
+   */
+  async #discard(job) {
+    const jobs = this.getDependency('jobs')
+    try {
+      await jobs.runClientJob(JOB_TYPE, job.params, async () => { throw new JobCancelledError() }, { jobId: job.id })
+    } catch (error) {
+      if (error instanceof JobCancelledError) return
+      await jobs.cancel(job.id).catch((/** @type {unknown} */ cancelError) => {
+        this.getDependency('logger').warn(`Could not discard OCR review job ${job.id}: ${cancelError}`)
+      })
+    }
+  }
+
+  /**
+   * Review the document page window by page window as the client job `ocr.llm-review`, whose
+   * widget the `jobs` plugin shows. The findings are shown as each window completes, so that a
+   * failing or cancelled run keeps those found so far; the findings of the windows saved by an
+   * interrupted run (`jobId`) are shown again without reviewing these windows again.
+   * @param {OcrReviewJobParams} params
+   * @param {string} xml - The XML of the document in the editor
+   * @param {string} [jobId] - The job to resume
+   * @returns {Promise<void>}
+   */
+  async #review(params, xml, jobId) {
+    const display = this.#display
+    if (!display) return
+    if (this.#busy) {
+      notify('An OCR review is already running.', 'primary', 'info-circle')
+      return
+    }
+    const stableId = params.stable_id
+    const xpath = params.xpath ?? null
+    const scoped = params.scope === undefined ? {} : { scope: params.scope }
+    const label = this.getDependency('inference-settings').getModelLabel(params.provider_id, params.model_id)
+    const heading = `Using ${label}`
     const documentChanged = () => this.state?.xml !== stableId
-    let cancelled = false
     let windowsDone = 0
     let total = 0
     let count = 0
     /** @type {number[]} */
     let pages = []
-    this.#busy = true
-    this.#updateMenuState()
-    progress.show(progressId, { title: 'Finding OCR errors', label: heading, value: null, cancellable: true, onCancel: () => { cancelled = true } })
-    try {
-      try {
-        const plan = await this.#client.apiClient.ocrLlmReviewPlan({ stable_id: stableId, xml, ...scoped })
-        total = plan.window_count
-        pages = plan.pages ?? []
-      } catch (error) {
-        this.#fail(error)
-        return
-      }
+
+    /**
+     * The body of the job.
+     * @param {JobRun} run
+     * @returns {Promise<{findings: number, windows: number}>}
+     */
+    const body = async (run) => {
+      const plan = await this.#client.apiClient.ocrLlmReviewPlan({ stable_id: stableId, xml, ...scoped })
+      total = plan.window_count
+      pages = plan.pages ?? []
       for (let index = 0; index < total; index++) {
-        if (cancelled || documentChanged()) break
-        progress.setValue(progressId, Math.round((index / total) * 100))
-        progress.setLabel(progressId, `${heading} (page window ${index + 1} of ${total})`)
-        /** @type {Finding[]} */
-        let found
+        // a review of another document is stopped
+        if (documentChanged()) throw new JobCancelledError()
+        await run.report({ phase: heading, done: index, total, unit: 'page windows', value: Math.round((index / total) * 100) })
+        /** @type {OcrReviewWindowResult} */
+        let result
         try {
-          const response = await this.#client.apiClient.ocrLlmReview({
-            stable_id: stableId, xml, ...scoped, provider_id: model.providerId, model_id: model.modelId, window_index: index
+          result = await run.step(`window-${index}`, async () => {
+            const response = await this.#client.apiClient.ocrLlmReview({
+              stable_id: stableId, xml, ...scoped, provider_id: params.provider_id, model_id: params.model_id, window_index: index
+            })
+            return { findings: response.findings, window_count: response.window_count }
           })
-          total = response.window_count ?? total
-          found = response.findings
         } catch (error) {
-          if (!documentChanged()) {
-            const reason = /** @type {Error} */ (error)?.message ?? String(error)
-            notify(`Finding OCR errors failed in page window ${index + 1} of ${total}: ${reason}. ${count} possible error(s) found before.`, 'danger', 'exclamation-octagon', 10000)
-            testLog('OCR_REVIEW_FAILED', { window: index + 1, message: reason, findings: count })
-          }
-          return
+          throw new ReviewWindowError(error, index)
         }
+        total = result.window_count ?? total
         windowsDone = index + 1
         // findings of another document must not attach to the one now open
-        if (documentChanged()) return
+        if (documentChanged()) throw new JobCancelledError()
         // the findings of the previous review are replaced by those of this one
-        if (index === 0) this.#display.clear()
+        if (index === 0) display.clear()
         // appended, so that findings dismissed or applied meanwhile do not come back; the drawer
         // opens for the first findings only
         // the model is kept with each finding, for the document history when the fix is accepted
-        if (found.length) count += this.#display.append(found.map(f => ({ ...f, model: label })), count === 0)
+        if (result.findings.length) count += display.append(result.findings.map(f => ({ ...f, model: label })), count === 0)
       }
+      return { findings: count, windows: windowsDone }
+    }
+
+    this.#busy = true
+    this.#updateMenuState()
+    try {
+      await this.getDependency('jobs').runClientJob(JOB_TYPE, params, body, jobId ? { jobId } : {})
+    } catch (error) {
       if (documentChanged()) return
-      if (cancelled) {
+      if (error instanceof JobCancelledError) {
         notify(`Review cancelled after ${windowsDone} of ${total} page windows; ${count} possible OCR error(s) so far.`, 'warning', 'exclamation-triangle')
-        return
+        testLog('OCR_REVIEW_CANCELLED', { windows: windowsDone, findings: count })
+      } else if (error instanceof ReviewWindowError) {
+        notify(`Finding OCR errors failed in page window ${error.index + 1} of ${total}: ${error.message}. ${count} possible error(s) found before.`, 'danger', 'exclamation-octagon', 10000)
+        testLog('OCR_REVIEW_FAILED', { window: error.index + 1, message: error.message, findings: count })
+      } else {
+        this.#fail(error)
       }
-      // the node gets the button that writes its corrections
-      if (xpath && count && pages.length) {
-        if (!this.#unwrittenUnits.has(stableId)) this.#unwrittenUnits.set(stableId, new Map())
-        this.#unwrittenUnits.get(stableId)?.set(xpath, pages)
-      }
-      const writeHint = xpath ? 'click "Write text corrections to PDF"' : 'use Tools > Write text corrections to PDF'
-      notify(
-        count
-          ? `Found ${count} possible OCR error${count === 1 ? '' : 's'}. Accept the ones you agree with, then ${writeHint}.`
-          : 'No OCR errors found.',
-        count ? 'primary' : 'success',
-        count ? 'info-circle' : 'check-circle'
-      )
-      testLog('OCR_REVIEW_DONE', { findings: count, windows: windowsDone })
+      return
     } finally {
       this.#busy = false
       this.#updateMenuState()
-      progress.hide(progressId)
     }
+    if (documentChanged()) return
+    // the node gets the button that writes its corrections
+    if (xpath && count && pages.length) {
+      if (!this.#unwrittenUnits.has(stableId)) this.#unwrittenUnits.set(stableId, new Map())
+      this.#unwrittenUnits.get(stableId)?.set(xpath, pages)
+    }
+    const writeHint = xpath ? 'click "Write text corrections to PDF"' : 'use Tools > Write text corrections to PDF'
+    notify(
+      count
+        ? `Found ${count} possible OCR error${count === 1 ? '' : 's'}. Accept the ones you agree with, then ${writeHint}.`
+        : 'No OCR errors found.',
+      count ? 'primary' : 'success',
+      count ? 'info-circle' : 'check-circle'
+    )
+    testLog('OCR_REVIEW_DONE', { findings: count, windows: windowsDone })
   }
 
   /**
