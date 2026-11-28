@@ -56,12 +56,33 @@ export function pagesOf(entries) {
 }
 
 /**
- * The text of the prompt, naming the PDF text layer and the targets of the entries.
- * @param {SyncEntry[]} entries
+ * Why the prompt is shown: `edit` for differences added by an edit, `load` for differences that
+ * were there when the document was loaded
+ * @typedef {'edit'|'load'} PromptReason
+ */
+
+/**
+ * Items joined with commas and "and".
+ * @param {string[]} items
  * @returns {string}
  */
-export function promptText(entries) {
+function joinList(items) {
+  return items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}` : (items[0] ?? '')
+}
+
+/**
+ * The text of the prompt, naming the PDF text layer and the targets of the entries.
+ * @param {SyncEntry[]} entries
+ * @param {PromptReason} [reason]
+ * @returns {string}
+ */
+export function promptText(entries, reason = 'edit') {
   const targets = [...new Set([TEXT_LAYER_TARGET, ...entries.map(e => e.target)])].map(t => `the ${t}`)
-  const list = targets.length > 1 ? `${targets.slice(0, -1).join(', ')} and ${targets[targets.length - 1]}` : targets[0]
-  return `You changed the text of this document. If the changes are intentional, ${list} ${targets.length > 1 ? 'need' : 'needs'} to be updated to match.`
+  const update = `${joinList(targets)} ${targets.length > 1 ? 'need' : 'needs'} to be updated to match.`
+  if (reason === 'load') {
+    const pages = pagesOf(entries).map(p => String(p + 1))
+    const where = `${entries.length} ${entries.length === 1 ? 'place' : 'places'} (${pages.length === 1 ? 'page' : 'pages'} ${joinList(pages)})`
+    return `The text of this document differs from the PDF in ${where}. If these differences are intended, for example corrections that were not written into the PDF yet, ${update}`
+  }
+  return `You changed the text of this document. If the changes are intentional, ${update}`
 }

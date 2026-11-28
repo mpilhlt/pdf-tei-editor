@@ -7,22 +7,30 @@
  * the diagnostics drawer, where their fixes undo the changes.
  *
  * The prompt opens about two seconds after the last edit, for diagnostics that were not there
- * before the first edit since the document was loaded and that it did not ask about before.
+ * before the first edit since the document was loaded and that it did not ask about before. If the
+ * document already has such diagnostics when it is loaded (e.g. corrections saved without writing
+ * them into the PDF, or an extraction step that changed the text after the PDF was read), it asks
+ * about them once per document version in this browser session, before the first edit.
  * Annotators, read-only documents and documents for which "Don't ask again" was checked (stored in
  * the browser by document id) get no prompt.
+ *
+ * The plugin also provides the "Write to PDF" button of the diagnostics drawer's "Differences from
+ * the PDF" section, which writes the text corrections of the pages of the listed sync diagnostics.
  *
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { ApplicationState } from '../state.js'
  * @import { SlDialog } from '../ui.js'
  * @import { ViewUpdate } from '@codemirror/view'
  * @import { syncPromptDialogPart } from '../templates/sync-prompt-dialog.types.js'
- * @import { SyncEntry } from '../modules/sync-prompt.js'
+ * @import { SyncEntry, PromptReason } from '../modules/sync-prompt.js'
+ * @import { SyncDiagnostic } from '../modules/lint-utils.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
 import { registerTemplate, createSingleFromTemplate } from '../modules/ui-system.js'
 import { userHasReviewerRole, userIsAdmin } from '../modules/acl-utils.js'
 import { getFileDataById } from '../modules/file-data-utils.js'
+import { notify } from '../modules/sl-utils.js'
 import { replacesDiagnostics, syncSourceNames } from '../modules/lint-utils.js'
 import { newEntries, pagesOf, promptText, syncEntries } from '../modules/sync-prompt.js'
 import { testLog } from '../modules/test-log.js'
@@ -61,11 +69,19 @@ class SyncPromptPlugin extends Plugin {
   /** True while the prompt is shown or its synchronization runs */
   #busy = false
 
+  /** @type {Set<string>} Versions (stable_id) whose differences at load were asked about in this session */
+  #askedAtLoad = new Set()
+
   /** @param {ApplicationState} state */
   async install(state) {
     await super.install(state)
     this.#ui = this.createUi(createSingleFromTemplate('sync-prompt-dialog', document.body))
     this.getDependency('xmleditor').addUpdateListener(update => this.#onEditorUpdate(update))
+    this.getDependency('diagnostics-drawer').setSyncAction({
+      label: 'Write to PDF',
+      title: 'Write the changes on these pages into the PDF',
+      run: diagnostics => this.#writeDiagnostics(diagnostics)
+    })
   }
 
   /**
@@ -98,8 +114,16 @@ class SyncPromptPlugin extends Plugin {
     const entries = syncEntries(view.state)
     const added = newEntries(entries, this.#known)
     for (const entry of entries) this.#known.add(entry.key)
-    if (!this.#edited || added.length === 0 || !this.#mayAsk()) return null
-    return await this.#ask(added)
+    if (!this.#mayAsk()) return null
+    if (!this.#edited) {
+      // differences that were there when the document was loaded
+      const stableId = /** @type {string} */ (this.state?.xml)
+      if (entries.length === 0 || this.#askedAtLoad.has(stableId)) return null
+      this.#askedAtLoad.add(stableId)
+      return await this.#ask(entries, 'load')
+    }
+    if (added.length === 0) return null
+    return await this.#ask(added, 'edit')
   }
 
   /**
@@ -170,16 +194,39 @@ class SyncPromptPlugin extends Plugin {
   }
 
   /**
+   * Writes the text corrections of the pages of the given sync diagnostics (the "Write to PDF"
+   * button of the diagnostics drawer).
+   * @param {SyncDiagnostic[]} diagnostics
+   * @returns {Promise<void>}
+   */
+  async #writeDiagnostics(diagnostics) {
+    const user = this.state?.user ?? null
+    if (!userHasReviewerRole(user) && !userIsAdmin(user)) {
+      notify('Only reviewers can write text corrections into the PDF.', 'warning', 'lock')
+      return
+    }
+    const pages = [...new Set(diagnostics.map(d => d.page).filter(p => Number.isInteger(p)))]
+      .map(p => /** @type {number} */ (p)).sort((a, b) => a - b)
+    if (pages.length === 0) {
+      notify('These differences cannot be written page by page. Use Tools › OCR › Write text corrections to PDF.', 'primary', 'info-circle')
+      return
+    }
+    testLog('SYNC_WRITE_PAGES', { pages })
+    await this.getDependency('text-corrections').writePages(pages)
+  }
+
+  /**
    * Shows the prompt and carries out the choice.
-   * @param {SyncEntry[]} entries - The new sync diagnostics
+   * @param {SyncEntry[]} entries - The sync diagnostics asked about
+   * @param {PromptReason} reason
    * @returns {Promise<PromptChoice>}
    */
-  async #ask(entries) {
+  async #ask(entries, reason) {
     this.#busy = true
     try {
       const pages = pagesOf(entries)
-      const choice = await this.#showDialog(entries)
-      testLog('SYNC_PROMPT_CLOSED', { choice, pages, dontAsk: this.#ui.dontAsk.checked })
+      const choice = await this.#showDialog(entries, reason)
+      testLog('SYNC_PROMPT_CLOSED', { choice, pages, reason, dontAsk: this.#ui.dontAsk.checked })
       if (this.#ui.dontAsk.checked) this.#setDontAsk()
       if (choice === 'show') {
         this.getDependency('diagnostics-drawer').showSources(syncSourceNames(), 'Sync changes')
@@ -194,16 +241,17 @@ class SyncPromptPlugin extends Plugin {
 
   /**
    * @param {SyncEntry[]} entries
+   * @param {PromptReason} reason
    * @returns {Promise<PromptChoice>}
    */
-  async #showDialog(entries) {
+  async #showDialog(entries, reason) {
     const dlg = this.#ui
-    dlg.message.textContent = promptText(entries)
+    dlg.message.textContent = promptText(entries, reason)
     dlg.dontAsk.checked = false
     const controller = new AbortController()
     const { signal } = controller
     dlg.show()
-    testLog('SYNC_PROMPT_OPENED', { pages: pagesOf(entries), count: entries.length })
+    testLog('SYNC_PROMPT_OPENED', { pages: pagesOf(entries), count: entries.length, reason })
     try {
       return await new Promise(resolve => {
         dlg.addEventListener('sl-request-close', () => resolve('cancel'), { signal })

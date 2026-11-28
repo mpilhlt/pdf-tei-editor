@@ -25,6 +25,14 @@
  * applies the fixes (`replacement`, see lint-utils.js) of, or dismisses, the
  * checked diagnostics; both switch off the merge view first.
  *
+ * The diagnostics of sync sources (`registerSyncSource()` in lint-utils.js: differences between the
+ * text and data derived from the PDF, e.g. GROBID's feature file) are listed in their own section,
+ * "Differences from the PDF", below the others. Their fix undoes the change ("Revert to PDF text"),
+ * so they are never checked automatically and "Select all" leaves them out: applying the checked
+ * fixes must not revert intended corrections along with the fixes that improve the document. The
+ * section has a button for writing the changes into the PDF if a plugin provides it
+ * ({@link DiagnosticsDrawerPlugin#setSyncAction}, see sync-prompt.js).
+ *
  * {@link DiagnosticsDrawerPlugin#showSources} lists only the diagnostics of some sources (e.g. the
  * sync diagnostics, see sync-prompt.js), with a button in the header that removes the filter. The
  * filter is also removed when a document is loaded and when no diagnostic of these sources is left.
@@ -35,7 +43,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { SlDrawer, SlCheckbox } from '../ui.js'
  * @import { ViewUpdate } from '@codemirror/view'
- * @import { FixableDiagnostic } from '../modules/lint-utils.js'
+ * @import { FixableDiagnostic, SyncDiagnostic } from '../modules/lint-utils.js'
  * @import { diagnosticsDrawerPart, diagnosticsButtonPart } from '../templates/diagnostics-drawer.types.js'
  */
 
@@ -54,7 +62,8 @@ import {
   fixChanges,
   notifyFixesApplied,
   replacesDiagnostics,
-  revealsDiagnostics
+  revealsDiagnostics,
+  syncSourceOptions
 } from '../modules/lint-utils.js'
 
 /**
@@ -63,7 +72,19 @@ import {
  * @property {FixableDiagnostic} diagnostic - With positions in the current editor state
  * @property {string} key - See {@link diagnosticKey}
  * @property {number} line - 1-based line of the diagnostic's start
+ * @property {boolean} sync - Whether it is a diagnostic of a sync source, listed in its own section
  */
+
+/**
+ * The button of the "Differences from the PDF" section (see {@link DiagnosticsDrawerPlugin#setSyncAction})
+ * @typedef {object} SyncAction
+ * @property {string} label - Text of the button
+ * @property {string} title - Its tooltip
+ * @property {(diagnostics: SyncDiagnostic[]) => (void|Promise<void>)} run - Called with the listed sync diagnostics
+ */
+
+/** Label of the fix button of sync diagnostics, whose fix undoes a change of the text */
+export const REVERT_FIX_LABEL = 'Revert to PDF text'
 
 /** @type {Record<string, number>} Order of severities in the list, most severe first */
 const SEVERITY_ORDER = { error: 0, warning: 1, info: 2, hint: 3 }
@@ -110,6 +131,9 @@ class DiagnosticsDrawerPlugin extends Plugin {
   /** @type {Set<string>|null} Sources whose diagnostics are listed, null for all */
   #sourceFilter = null
 
+  /** @type {SyncAction|null} */
+  #syncAction = null
+
   /**
    * @param {ApplicationState} state
    */
@@ -147,11 +171,13 @@ class DiagnosticsDrawerPlugin extends Plugin {
       }
     })
 
+    // sync diagnostics are only checked one by one
     this.#ui.footer.selectAll.addEventListener('sl-change', () => {
       const checked = this.#ui.footer.selectAll.checked
-      this.#checked = checked ? new Set(this.#entries.map(e => e.key)) : new Set()
+      this.#checked = checked ? new Set([...this.#checked, ...this.#entries.filter(e => !e.sync).map(e => e.key)]) : new Set()
       this.#render()
     })
+    this.#ui.syncGroup.syncAction.addEventListener('click', () => this.#runSyncAction())
     this.#ui.header.filterButton.addEventListener('click', () => this.showSources(null))
     this.#ui.footer.applyBtn.addEventListener('click', () => this.applyChecked())
     this.#ui.footer.dismissBtn.addEventListener('click', () => this.dismissChecked())
@@ -299,6 +325,16 @@ class DiagnosticsDrawerPlugin extends Plugin {
   }
 
   /**
+   * Sets the button of the "Differences from the PDF" section, which is hidden without one.
+   * @param {SyncAction|null} action
+   * @returns {void}
+   */
+  setSyncAction(action) {
+    this.#syncAction = action
+    this.#render()
+  }
+
+  /**
    * The sources whose diagnostics are listed, or null if all are listed.
    * @returns {string[]|null}
    */
@@ -337,6 +373,14 @@ class DiagnosticsDrawerPlugin extends Plugin {
     const button = this.#ui.header.filterButton
     button.filterLabel.textContent = label
     button.hidden = !sources
+  }
+
+  /** Runs the action of the sync section with the listed sync diagnostics. */
+  async #runSyncAction() {
+    const action = this.#syncAction
+    if (!action || this.state?.editorReadOnly) return
+    const diagnostics = this.#entries.filter(e => e.sync).map(e => /** @type {SyncDiagnostic} */ (e.diagnostic))
+    await action.run(diagnostics)
   }
 
   /**
@@ -385,15 +429,19 @@ class DiagnosticsDrawerPlugin extends Plugin {
       .map(diagnostic => ({
         diagnostic,
         key: diagnosticKey(state, diagnostic),
-        line: state.doc.lineAt(diagnostic.from).number
+        line: state.doc.lineAt(diagnostic.from).number,
+        sync: syncSourceOptions(diagnostic.source) !== null
       }))
-      .sort((a, b) => a.diagnostic.from - b.diagnostic.from
+      // in the order of the list: the other diagnostics, then those of the sync section
+      .sort((a, b) => Number(a.sync) - Number(b.sync)
+        || a.diagnostic.from - b.diagnostic.from
         || SEVERITY_ORDER[a.diagnostic.severity] - SEVERITY_ORDER[b.diagnostic.severity])
     const added = this.#takeAddedKeys()
     // otherwise, checks are kept for diagnostics that are not listed: replacing the diagnostic set
     // (e.g. a validation run) removes the diagnostics of other sources until they re-merge them
+    // not sync diagnostics: their fix reverts a change that may be intended
     const fixable = this.#entries
-      .filter(e => added.has(e.key) && typeof e.diagnostic.replacement === 'string')
+      .filter(e => added.has(e.key) && !e.sync && typeof e.diagnostic.replacement === 'string')
       .map(e => e.key)
     // added to the checks, so that the suggestions of all parts of a chunked LLM review stay checked
     for (const key of fixable) this.#checked.add(key)
@@ -441,8 +489,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #scrollToEntries(keys) {
     const body = /** @type {HTMLElement|null|undefined} */ (this.#ui.shadowRoot?.querySelector('[part~="body"]'))
-    const items = /** @type {HTMLElement[]} */ (Array.from(this.#ui.list.children))
-      .filter((_item, index) => keys.has(this.#entries[index]?.key ?? ''))
+    const items = this.#items().filter(item => keys.has(item.dataset.key ?? ''))
     const first = items[0]
     const last = items[items.length - 1]
     if (!body || !first || !last) return
@@ -472,8 +519,25 @@ class DiagnosticsDrawerPlugin extends Plugin {
       count.setAttribute('variant', variant)
     }
     this.#updateButton()
-    this.#ui.list.replaceChildren(...this.#entries.map(entry => this.#renderEntry(entry)))
+    this.#ui.list.replaceChildren(...this.#entries.filter(e => !e.sync).map(entry => this.#renderEntry(entry)))
+    const sync = this.#entries.filter(e => e.sync)
+    const { syncGroup } = this.#ui
+    syncGroup.hidden = sync.length === 0
+    syncGroup.syncList.replaceChildren(...sync.map(entry => this.#renderEntry(entry)))
+    const action = this.#syncAction
+    syncGroup.syncAction.hidden = !action
+    syncGroup.syncAction.textContent = action?.label ?? ''
+    syncGroup.syncAction.title = action?.title ?? ''
+    syncGroup.syncAction.disabled = Boolean(this.state?.editorReadOnly)
     this.#updateFooter()
+  }
+
+  /**
+   * The list items of the entries, in the order of the entries
+   * @returns {HTMLElement[]}
+   */
+  #items() {
+    return /** @type {HTMLElement[]} */ ([...this.#ui.list.children, ...this.#ui.syncGroup.syncList.children])
   }
 
   /**
@@ -488,6 +552,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
     // lets a source style its entries' stripe (e.g. unit review states, see app.css)
     if (diagnostic.markClass) item.classList.add(...diagnostic.markClass.split(/\s+/).filter(Boolean))
     item.classList.toggle('selected', key === this.#selectedKey)
+    item.dataset.key = key
     item.setAttribute('role', 'listitem')
     item.title = 'Show in the XML editor'
 
@@ -535,8 +600,8 @@ class DiagnosticsDrawerPlugin extends Plugin {
       const button = document.createElement('button')
       button.type = 'button'
       button.className = 'diagnostics-drawer-action diagnostics-drawer-apply-fix'
-      button.textContent = 'Apply fix'
-      button.title = 'Apply this fix without confirmation'
+      button.textContent = entry.sync ? REVERT_FIX_LABEL : 'Apply fix'
+      button.title = entry.sync ? 'Undo this change: restore the text the PDF has here' : 'Apply this fix without confirmation'
       button.disabled = Boolean(this.state?.editorReadOnly)
       button.addEventListener('click', event => {
         event.stopPropagation()
@@ -557,9 +622,12 @@ class DiagnosticsDrawerPlugin extends Plugin {
   #updateFooter() {
     const { selectAll, applyBtn, dismissBtn, deleteBtn } = this.#ui.footer
     const count = this.#entries.filter(e => this.#checked.has(e.key)).length
-    selectAll.checked = count > 0 && count === this.#entries.length
-    selectAll.indeterminate = count > 0 && count < this.#entries.length
-    selectAll.disabled = this.#entries.length === 0
+    // "Select all" checks all but the sync diagnostics
+    const selectable = this.#entries.filter(e => !e.sync)
+    const selected = selectable.filter(e => this.#checked.has(e.key)).length
+    selectAll.checked = selected > 0 && selected === selectable.length
+    selectAll.indeterminate = count > 0 && !selectAll.checked
+    selectAll.disabled = selectable.length === 0
     const fixable = this.#entries.some(e => this.#checked.has(e.key) && typeof e.diagnostic.replacement === 'string')
     applyBtn.disabled = !fixable || Boolean(this.state?.editorReadOnly)
     dismissBtn.disabled = count === 0
@@ -576,9 +644,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
     const current = this.#findCurrent(key)
     if (!current) return
     this.#selectedKey = key
-    for (const [index, item] of Array.from(this.#ui.list.children).entries()) {
-      item.classList.toggle('selected', this.#entries[index]?.key === key)
-    }
+    for (const item of this.#items()) item.classList.toggle('selected', item.dataset.key === key)
     const view = this.#xmlEditor.getView()
     view.dispatch({
       selection: { anchor: current.from, head: current.to },

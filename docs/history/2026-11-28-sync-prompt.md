@@ -17,3 +17,10 @@ Issue #968; general text layer drift is the follow-up #970.
 ## Prompt rules
 
 The prompt considers the error and warning diagnostics of sync sources with a `page`, keyed by `diagnosticKey()` (source, severity, message, covered text). Keys present before the first user edit since loading, and keys it already asked about, do not open it. It runs two seconds after the last edit or diagnostics change.
+
+## Follow-up: sync diagnostics in the drawer (2026-11-28)
+
+A document extracted with OCR and LLM correction showed eight `Sync: expected "-dieser", found "-"` errors, all checked in the drawer, so that **Apply** would have changed the text. They were false positives of the GROBID lint: the PDF and the TEI have "— dieser", GROBID's segmentation feature row "-dieser" (no space after a token ending with a dash). Fixed in the grobid plugin (pte-plugins), which also keeps dismissed diagnostics dismissed after edits. Decisions (Christian):
+
+- Sync diagnostics get their own drawer section "Differences from the PDF" with a "Write to PDF" button; their fix is labelled "Revert to PDF text"; they are never checked automatically and "Select all" leaves them out.
+- Sync diagnostics present when a document is loaded open the prompt once per version and browser session, with a text that does not say the user changed the text.

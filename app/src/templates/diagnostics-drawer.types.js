@@ -5,6 +5,7 @@
  * @typedef {object} diagnosticsDrawerPart
  * @property {HTMLDivElement & headerPart} header
  * @property {HTMLDivElement} list
+ * @property {HTMLDivElement & syncGroupPart} syncGroup
  * @property {HTMLDivElement & footerPart} footer
  */
 
@@ -17,6 +18,12 @@
 /**
  * @typedef {object} filterButtonPart
  * @property {HTMLSpanElement} filterLabel
+ */
+
+/**
+ * @typedef {object} syncGroupPart
+ * @property {HTMLButtonElement} syncAction
+ * @property {HTMLDivElement} syncList
  */
 
 /**
