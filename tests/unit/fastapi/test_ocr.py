@@ -393,6 +393,7 @@ class OcrJobsHarness:
         auth_manager.get_user_by_username.side_effect = lambda username: user if username == user["username"] else None
         test.enterContext(patch("fastapi_app.lib.jobs.auth.get_auth_manager", lambda: auth_manager))
         test.enterContext(patch.object(ocr_job_types, "_file_repository", lambda: repo))
+        test.enterContext(patch("fastapi_app.lib.jobs.hooks._file_repository", lambda: repo))
         test.enterContext(patch.object(ocr_job_types, "_file_storage", lambda: storage))
         app = FastAPI(lifespan=self.manager.lifespan)
         app.include_router(ocr_router.router)
@@ -454,6 +455,7 @@ class TestOcrRouter(OcrJobsHarness, unittest.TestCase):
         OcrEngineRegistry.get_instance().register(UnavailableEngine())
         self.allowed = True
         self.enterContext(patch.object(ocr_job_types, "check_file_access", lambda file, user, op: self.allowed))
+        self.enterContext(patch("fastapi_app.lib.jobs.hooks.check_file_access", lambda file, user, op: self.allowed))
         self.start_app(self, self.repo, self.storage, USER)
 
     def start(self, payload: dict[str, Any]) -> dict[str, Any]:

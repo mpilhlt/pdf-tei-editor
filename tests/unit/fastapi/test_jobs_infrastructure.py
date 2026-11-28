@@ -22,6 +22,7 @@ import unittest
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -94,6 +95,18 @@ async def run_write_file(ctx: JobContext, params: Any) -> dict[str, Any]:
     return {}
 
 
+class FakeFileRepository:
+    """Stands in for the file repository of `EditorJobHooks`: every stable id names a file except those that start with `missing`."""
+
+    def get_file_by_stable_id(self, stable_id: str) -> SimpleNamespace | None:
+        return None if stable_id.startswith("missing") else SimpleNamespace(stable_id=stable_id)
+
+
+def fake_check_file_access(file: SimpleNamespace, user: dict[str, Any], operation: str) -> bool:
+    """Files whose stable id starts with `readonly` cannot be edited by non-admins."""
+    return user["username"] == "admin" or not file.stable_id.startswith("readonly")
+
+
 def headers(session: str) -> dict[str, str]:
     return {"X-Session-ID": session}
 
@@ -118,8 +131,17 @@ class JobsTestCase(unittest.TestCase):
         self.auth_manager.get_user_by_username.side_effect = USERS.get
         self.auth_patch = patch("fastapi_app.lib.jobs.auth.get_auth_manager", lambda: self.auth_manager)
         self.auth_patch.start()
+        # Files of the `file:` resources: every id names a file except `missing*`; `readonly*` files cannot be edited
+        self.files_patches = [
+            patch("fastapi_app.lib.jobs.hooks._file_repository", FakeFileRepository),
+            patch("fastapi_app.lib.jobs.hooks.check_file_access", fake_check_file_access),
+        ]
+        for files_patch in self.files_patches:
+            files_patch.start()
 
     def tearDown(self) -> None:
+        for files_patch in self.files_patches:
+            files_patch.stop()
         self.auth_patch.stop()
         manager_module._manager = self.saved_manager
         self.env.stop()
@@ -307,6 +329,26 @@ class TestJobsInfrastructure(JobsTestCase):
         self.assertIn("busy is being edited by another user or job", response.json()["detail"])
         # the lock taken before the refusal was given back
         self.assertEqual(self.lock_of("free"), {"is_locked": False, "locked_by": None})
+
+    def test_resources_are_checked_on_submit(self) -> None:
+        cases = (
+            # the OCR engine lock and other local resources are not files
+            ("file:local:ocr-engine", 400, "is not a file"),
+            ("file:missing-file", 400, "File not found: missing-file"),
+            ("file:readonly-file", 403, "Not allowed to lock readonly-file"),
+        )
+        with self.make_client(self.make_manager()) as client:
+            for resource, status, detail in cases:
+                with self.subTest(resource=resource):
+                    response = client.post("/api/v1/jobs", json={"type": "test.progress", "params": {"steps": 1000000}, "resources": ["file:free-before", resource]}, headers=headers("alice-session"))
+                    self.assertEqual(response.status_code, status, response.text)
+                    self.assertIn(detail, response.json()["detail"])
+                    self.assertEqual(self.lock_of(resource[len("file:"):]), {"is_locked": False, "locked_by": None})
+                    self.assertEqual(self.lock_of("free-before"), {"is_locked": False, "locked_by": None})
+            self.assertEqual(client.get("/api/v1/jobs", headers=headers("alice-session")).json(), [])
+            # an admin may edit the file, so the same submit is accepted
+            job = self.submit(client, {"type": "test.progress", "params": {"steps": 1, "delay_ms": 1}, "resources": ["file:readonly-file"]}, session="admin-session")
+            self.wait_for(client, job["id"], ("done",))
 
     def test_deleted_hook_removes_output_dir(self) -> None:
         with self.make_client(self.make_manager()) as client:

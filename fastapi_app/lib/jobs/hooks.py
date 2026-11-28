@@ -14,12 +14,19 @@ import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from typing import Any
+
 from fastapi_jobqueue import Job, JobHooks, ResourceBusy
+from fastapi_jobqueue.errors import JobQueueError, PermissionDenied
 
 from fastapi_app.config import get_settings
-from fastapi_app.lib.core.locking import acquire_lock, register_lock_holder, release_lock
+from fastapi_app.lib.core.dependencies import get_db
+from fastapi_app.lib.core.locking import LOCAL_LOCK_PREFIX, acquire_lock, register_lock_holder, release_lock
+from fastapi_app.lib.permissions.access_control import check_file_access
+from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.utils.logging_utils import get_logger
 
+from .auth import job_user
 from .files import file_resource_ids, files_input_hash, job_output_path
 
 logger = get_logger(__name__)
@@ -35,13 +42,54 @@ UNCLAIMED_CLIENT_JOB_MAX_AGE = 300.0
 register_lock_holder(JOB_LOCK_HOLDER_PREFIX, "This document is locked while a background job runs on it.")
 
 
+def _file_repository() -> FileRepository:
+    """The file repository of the hooks, which run outside of a request (patched by tests)."""
+    return FileRepository(get_db())
+
+
+class InvalidResource(JobQueueError):
+    """A `file:` resource of a submitted job that names no file, or a lock that is not a file's (400)."""
+
+    status_code = 400
+
+
+def check_file_resources(job: Job) -> None:
+    """
+    Check that the owner of a job may lock the files of its `file:` resources: each one names an
+    existing file (not a local resource such as the OCR engine lock) that the owner may edit.
+
+    Raises:
+        InvalidResource: for a `local:` id or a file that does not exist (400 on submit)
+        PermissionDenied: if the owner no longer exists or may not edit a file (403 on submit)
+    """
+    stable_ids = file_resource_ids(job.resources)
+    if not stable_ids:
+        return
+    try:
+        user: dict[str, Any] = job_user(job)
+    except PermissionError as e:
+        raise PermissionDenied(str(e)) from e
+    repo = _file_repository()
+    for stable_id in stable_ids:
+        if stable_id.startswith(LOCAL_LOCK_PREFIX):
+            raise InvalidResource(f"file:{stable_id} is not a file")
+        file = repo.get_file_by_stable_id(stable_id)
+        if file is None:
+            raise InvalidResource(f"File not found: {stable_id}")
+        if not check_file_access(file, user, "edit"):
+            raise PermissionDenied(f"Not allowed to lock {stable_id}")
+
+
 def job_lock_holder(job: Job) -> str:
     """The session id under which a job holds its file locks."""
     return f"{JOB_LOCK_HOLDER_PREFIX}{job.id}"
 
 
 class EditorJobHooks(JobHooks):
-    """Locks the files of a job's `file:` resources while the job is unfinished, and removes its output when it is deleted."""
+    """
+    Locks the files of a job's `file:` resources while the job is unfinished (after checking that
+    its owner may edit them, see `check_file_resources`), and removes its output when it is deleted.
+    """
 
     async def acquire(self, job: Job) -> None:
         await asyncio.to_thread(self._acquire, job)
@@ -71,6 +119,7 @@ class EditorJobHooks(JobHooks):
 
     @staticmethod
     def _acquire(job: Job) -> None:
+        check_file_resources(job)
         db_dir = get_settings().db_dir
         holder = job_lock_holder(job)
         taken: list[str] = []

@@ -93,6 +93,7 @@ class _RouteTestCase(OcrJobsHarness, unittest.TestCase):
         self.provider = FakeProvider()
         LLMProviderRegistry.get_instance().register(self.provider)
         self.enterContext(patch.object(ocr_job_types, "check_file_access", lambda file, user, op: True))
+        self.enterContext(patch("fastapi_app.lib.jobs.hooks.check_file_access", lambda file, user, op: True))
         self.enterContext(patch.object(ocr_job_types, "get_config", lambda: FakeConfig()))
         self.enterContext(patch.object(llm_correction, "pages_needing_review", return_value=[0]))
         self.start_app(self, self.repo, self.storage, USER)

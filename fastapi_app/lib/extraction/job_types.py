@@ -19,7 +19,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi_jobqueue import Job, JobContext, JobManager, ResourceBusy
-from fastapi_jobqueue.errors import JobCancelled
+from fastapi_jobqueue.errors import JobCancelled, JobQueueError
 from pydantic import JsonValue
 
 from fastapi_app.config import Settings, get_settings
@@ -143,7 +143,8 @@ async def submit_extract_job(manager: JobManager, params: ExtractJobParams, sour
     a TEI source is not locked, since the user who extracts from it usually edits it.
 
     Raises:
-        HTTPException: 409 if another job or a user holds the lock of the PDF
+        HTTPException: 409 if another job or a user holds the lock of the PDF, 403 if the user
+            may not edit it
     """
     resources = [f"file:{source.file.stable_id}"] if source.reads_pdf else []
     try:
@@ -151,6 +152,9 @@ async def submit_extract_job(manager: JobManager, params: ExtractJobParams, sour
     except ResourceBusy as e:
         logger.info(f"Refused extraction job for {source.file.stable_id}: {e}")
         raise HTTPException(status_code=409, detail=EXTRACT_BUSY_MESSAGE) from e
+    except JobQueueError as e:
+        # e.g. the user may not edit the file (see EditorJobHooks)
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
 
 # --- The run ---------------------------------------------------------------------------------

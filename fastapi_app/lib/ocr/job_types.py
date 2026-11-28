@@ -27,7 +27,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi_jobqueue import Job, JobContext, JobManager, ResourceBusy
-from fastapi_jobqueue.errors import JobCancelled
+from fastapi_jobqueue.errors import JobCancelled, JobQueueError
 
 from fastapi_app.config import get_settings
 from fastapi_app.lib.core.dependencies import get_db, get_file_storage
@@ -255,13 +255,17 @@ async def submit_ocr_job(manager: JobManager, job_type_name: str, params: OcrJob
     Submit an OCR job of the user that holds the lock of its PDF.
 
     Raises:
-        HTTPException: 409 if another job or a user holds the lock of the PDF
+        HTTPException: 409 if another job or a user holds the lock of the PDF, 403 if the user
+            may not edit it
     """
     try:
         return await manager.submit(job_type_name, params, owner=user["username"], resources=[f"file:{params.stable_id}"])
     except ResourceBusy as e:
         logger.info(f"Refused {job_type_name} job for {params.stable_id}: {e}")
         raise HTTPException(status_code=409, detail=OCR_BUSY_MESSAGE) from e
+    except JobQueueError as e:
+        # e.g. the user may not edit the file (see EditorJobHooks)
+        raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
 
 # --- The run ---------------------------------------------------------------------------------

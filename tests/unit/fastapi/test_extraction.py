@@ -339,8 +339,10 @@ class TestExtractionJob(unittest.TestCase):
         self.enterContext(patch.object(extraction_job_types, "_file_repository", lambda: self.repo))
         self.enterContext(patch.object(extraction_job_types, "_file_storage", lambda: self.storage))
         self.enterContext(patch.object(ocr_job_types, "_file_repository", lambda: self.repo))
+        self.enterContext(patch("fastapi_app.lib.jobs.hooks._file_repository", lambda: self.repo))
         self.enterContext(patch.object(ocr_job_types, "_file_storage", lambda: self.storage))
         self.enterContext(patch.object(ocr_job_types, "check_file_access", lambda file, user, op: True))
+        self.enterContext(patch("fastapi_app.lib.jobs.hooks.check_file_access", lambda file, user, op: True))
         auth_manager = MagicMock()
         auth_manager.get_user_by_username.side_effect = lambda username: self.user if username == "alice" else None
         self.enterContext(patch("fastapi_app.lib.jobs.auth.get_auth_manager", lambda: auth_manager))
