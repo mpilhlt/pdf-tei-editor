@@ -345,6 +345,7 @@ CodeMirror keeps one global diagnostic set, and `setDiagnostics` replaces it who
 | `replacesDiagnostics(update)` | True if a view update replaced the diagnostic set |
 | `addDismissListener(listener)` | Called with the diagnostics the user dismissed in the diagnostics drawer; returns a function removing the listener |
 | `addFixListener(listener)` | Called with the diagnostics whose fix (`replacement`) the user applies in the diagnostics drawer, before the fixes are dispatched; returns a function removing the listener |
+| `registerSyncSource(source, {target})` | Marks the diagnostics of `source` as drift between the TEI text and data derived from the PDF (`target`, e.g. "GROBID training data"); returns a function removing the registration. See [Sync diagnostics](#sync-diagnostics) |
 
 Tag your diagnostics with a `source` (passed to the functions above). Other sources, such as `tei-validation`, replace the whole set when they run, so re-apply your diagnostics from an `xmleditor.addUpdateListener` handler when `replacesDiagnostics(update)` is true and you are not the one dispatching. An edit also replaces the set: it removes the diagnostics whose range it touches, in the same transaction, so your handler can restore those that still apply. Defer the re-apply with `setTimeout`, because dispatching inside an update listener is illegal. `applyMergedDiagnostics()` does not dispatch a merge that changes nothing, so sources re-applying after every replacement do not replace the set in turn forever; if you dispatch the merged set yourself, do the same, or re-apply only while your diagnostics are missing:
 
@@ -378,6 +379,10 @@ this.getDependency('lint-utils').addDismissListener(dismissed => {
 ```
 
 See `pte-plugins/plugins/annotation-review/src/pte_plugin_annotation_review/extensions/annotation-review.js` for a complete example.
+
+### Sync diagnostics
+
+A source registered with `registerSyncSource()` reports where the TEI text differs from data derived from the PDF, such as its text layer or an extractor's training data. When an edit adds error or warning diagnostics of a sync source that carry a `page` (0-based PDF page), the sync prompt (`app/src/plugins/sync-prompt.js`) asks reviewers whether to write the text corrections of these pages into the PDF; diagnostics without a `page` are only listed. Give the diagnostics a `replacement` that restores the original text where it is known, so that users can undo unintended changes. "Show changes" in the prompt lists only the diagnostics of the sync sources in the diagnostics drawer (`DiagnosticsDrawerPlugin#showSources()`). See `pte-plugins/plugins/grobid/src/pte_plugin_grobid/extensions/grobid-sync.js`.
 
 ## Migration from Function-Based Extensions
 

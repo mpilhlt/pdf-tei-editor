@@ -57,6 +57,7 @@ import './modules/panels/index.js';
  * @import {extractionOptionsPart} from './templates/extraction-dialog.types.js'
  * @import {ocrOptionsDialogPart} from './templates/ocr-dialog.types.js'
  * @import {textCorrectionsDialogPart} from './templates/text-corrections-dialog.types.js'
+ * @import {syncPromptDialogPart} from './templates/sync-prompt-dialog.types.js'
  * @import {HelpWidgetElements} from './plugins/help.js'
  * @import {infoDrawerPart} from './plugins/info.js'
  * @import {annotationGuideDrawerPart} from './plugins/annotation-guide.js'
@@ -107,6 +108,7 @@ import './modules/panels/index.js';
  * @property {UIPart<SlDialog, extractionOptionsPart>} extractionOptions - A dialog to choose extraction options
  * @property {UIPart<SlDialog, ocrOptionsDialogPart>} ocrOptionsDialog - A dialog to configure text recognition (added by ocr plugin)
  * @property {UIPart<SlDialog, textCorrectionsDialogPart>} textCorrectionsDialog - A dialog to preview and write text corrections to the PDF (added by text-corrections plugin)
+ * @property {UIPart<SlDialog, syncPromptDialogPart>} syncPromptDialog - A dialog asking to write text changes into the PDF (added by sync-prompt plugin)
  * @property {UIPart<SlDialog, loginDialog>} loginDialog - A dialog for login
  * @property {UIPart<SlDialog, saveDocumentDialogPart>} saveDocumentDialog - Save revision dialog (added by document-actions plugin)
  * @property {UIPart<SlDialog, backendPluginsResultDialogPart>} pluginResultDialog - Backend plugins result dialog (added by backend-plugins plugin)

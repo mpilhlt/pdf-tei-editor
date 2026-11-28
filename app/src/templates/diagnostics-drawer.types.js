@@ -11,6 +11,12 @@
 /**
  * @typedef {object} headerPart
  * @property {HTMLElement} count
+ * @property {HTMLButtonElement & filterButtonPart} filterButton
+ */
+
+/**
+ * @typedef {object} filterButtonPart
+ * @property {HTMLSpanElement} filterLabel
  */
 
 /**

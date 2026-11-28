@@ -24,6 +24,10 @@
  * "Apply fix" button that applies only that fix. The footer
  * applies the fixes (`replacement`, see lint-utils.js) of, or dismisses, the
  * checked diagnostics; both switch off the merge view first.
+ *
+ * {@link DiagnosticsDrawerPlugin#showSources} lists only the diagnostics of some sources (e.g. the
+ * sync diagnostics, see sync-prompt.js), with a button in the header that removes the filter. The
+ * filter is also removed when a document is loaded and when no diagnostic of these sources is left.
  */
 
 /**
@@ -103,6 +107,9 @@ class DiagnosticsDrawerPlugin extends Plugin {
   /** @type {{from: number, to: number}[]} Ranges of the current document edited since the last refresh */
   #editedRanges = []
 
+  /** @type {Set<string>|null} Sources whose diagnostics are listed, null for all */
+  #sourceFilter = null
+
   /**
    * @param {ApplicationState} state
    */
@@ -145,6 +152,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
       this.#checked = checked ? new Set(this.#entries.map(e => e.key)) : new Set()
       this.#render()
     })
+    this.#ui.header.filterButton.addEventListener('click', () => this.showSources(null))
     this.#ui.footer.applyBtn.addEventListener('click', () => this.applyChecked())
     this.#ui.footer.dismissBtn.addEventListener('click', () => this.dismissChecked())
     this.#ui.footer.deleteBtn.addEventListener('click', () => this.deleteChecked())
@@ -160,6 +168,7 @@ class DiagnosticsDrawerPlugin extends Plugin {
     if (changedKeys.includes('xml')) {
       this.#checked.clear()
       this.#knownKeys.clear()
+      this.#setSourceFilter(null, '')
       // a newly loaded document shows its diagnostics
       if (state.xml) this.#setExpanded(true)
     }
@@ -277,6 +286,27 @@ class DiagnosticsDrawerPlugin extends Plugin {
   }
 
   /**
+   * Lists only the diagnostics of the given sources and expands the drawer, or lists all again.
+   * The header shows `label` in a button that lists all diagnostics again.
+   * @param {string[]|null} sources - null lists all diagnostics
+   * @param {string} [label] - Name of the listed diagnostics, e.g. "Sync changes"
+   * @returns {void}
+   */
+  showSources(sources, label = 'Filtered') {
+    this.#setSourceFilter(sources, label)
+    this.#refresh()
+    if (sources) this.#setExpanded(true)
+  }
+
+  /**
+   * The sources whose diagnostics are listed, or null if all are listed.
+   * @returns {string[]|null}
+   */
+  getSourceFilter() {
+    return this.#sourceFilter ? [...this.#sourceFilter] : null
+  }
+
+  /**
    * Whether the drawer is fully shown (true) or retracted (false)
    * @returns {boolean}
    */
@@ -295,6 +325,18 @@ class DiagnosticsDrawerPlugin extends Plugin {
     if (revealsDiagnostics(update)) this.#setExpanded(true)
     if (update.docChanged) this.#addEditedRanges(update)
     if (update.docChanged || replacesDiagnostics(update)) this.#scheduleRefresh()
+  }
+
+  /**
+   * Sets the source filter and its button in the header, without refreshing the list.
+   * @param {string[]|null} sources
+   * @param {string} label
+   */
+  #setSourceFilter(sources, label) {
+    this.#sourceFilter = sources ? new Set(sources) : null
+    const button = this.#ui.header.filterButton
+    button.filterLabel.textContent = label
+    button.hidden = !sources
   }
 
   /**
@@ -334,7 +376,12 @@ class DiagnosticsDrawerPlugin extends Plugin {
    */
   #refresh() {
     const state = this.#xmlEditor.getView().state
-    this.#entries = collectDiagnostics(state)
+    const all = collectDiagnostics(state)
+    const filter = this.#sourceFilter
+    // the filter ends with the last of its diagnostics (fixed, dismissed or edited away)
+    if (filter && !all.some(d => filter.has(d.source ?? ''))) this.#setSourceFilter(null, '')
+    this.#entries = all
+      .filter(d => !this.#sourceFilter || this.#sourceFilter.has(d.source ?? ''))
       .map(diagnostic => ({
         diagnostic,
         key: diagnosticKey(state, diagnostic),

@@ -47,6 +47,29 @@ Afterwards, the unit has the **OCR auto-corrections** button again, so you can r
 
 Go to the next unit with **›** or the **↓** arrow key and repeat steps 2 to 4. Save a revision from time to time, for example at the end of a working day (see [Saving a Revision](editing-workflow.md#saving-a-revision)).
 
+## When the text no longer matches the PDF
+
+If you change the text of a GROBID document, for example to correct an OCR error by hand, the document no longer matches the text layer of the PDF and GROBID's training data for it. The Diagnostics drawer then lists the differences as `Sync:` entries of the source `grobid-sync`. Where the original text is known, an entry has an **Apply fix** button that undoes the change. In segmentation documents, this is only the case for the first word of a line, since GROBID's data only contains the first words of each line. Diagnostics you dismiss stay hidden until the next edit.
+
+If you have the reviewer role, the editor asks whether to write intended changes into the PDF, about two seconds after the edit:
+
+![The dialog "Synchronize text changes?" over the editor. It says that the text of the document was changed and that, if the changes are intentional, the PDF text layer and the GROBID training data need to be updated to match, and that unintended changes are undone with Apply fix in the diagnostics panel, followed by a "Show changes" link. Below is the checkbox "Don't ask again for this document. I will run Tools › OCR › Write text corrections to PDF myself." and the buttons "Not now" and "Synchronize". The Diagnostics drawer on the left lists the entry 'Sync: unexpected token "SYNC2"' with an Apply fix button](../images/sync-prompt-dialog.png)
+
+*The prompt after a change of the text*
+
+- **Synchronize** writes the text corrections of the pages with the new differences into the PDF, like the button "Write text corrections to PDF" of a unit (see [step 4](#4-write-the-corrections-into-the-pdf)): without a new version, and with a dialog only if some changes cannot be written.
+- **Show changes** lists only the `Sync:` entries in the Diagnostics drawer, where you can undo unintended changes with **Apply fix**. The **Sync changes** button in the header of the drawer lists all entries again.
+- **Not now** closes the prompt. It asks again only for differences it has not asked about yet.
+- **Don't ask again for this document** turns the prompt off for this document in this browser. Write the corrections with **Tools > OCR > Write text corrections to PDF** when you are done.
+
+![The Diagnostics drawer with the button "Sync changes ×" in its header, listing only the entry 'Sync: unexpected token "SYNC2"' with an Apply fix button](../images/sync-prompt-show-changes.png)
+
+*The Diagnostics drawer after Show changes*
+
+Annotators get no prompt: they undo unintended changes with **Apply fix** or dismiss the entries.
+
+On pages whose corrections were written page by page, GROBID's training data still has the old text until the whole document is written (see below). Instead of the `Sync:` entries of such a page, the drawer shows one note saying so.
+
 ## When the whole document is done
 
 Writing the corrections page by page does not update the data that the extraction service keeps for the PDF, such as GROBID's feature file of the PDF, since that takes a minute or longer for the whole PDF; the page layout of the document stays correct, since the corrections do not move the words. When you have finished the document, choose **Tools > OCR > Write text corrections to PDF**. It writes the corrections that are left, updates the document for the corrected PDF, and creates a new version labelled "Corrected text layer", also when all corrections were already written page by page. The dialog asks for confirmation and says what will be done.

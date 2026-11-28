@@ -11,7 +11,7 @@ import unittest
 
 from lxml import etree
 
-from fastapi_app.lib.ocr.provenance import text_layer_provenance
+from fastapi_app.lib.ocr.provenance import pending_text_correction_pages, text_layer_provenance
 from fastapi_app.lib.utils.tei_utils import amend_last_revision_change, extract_tei_metadata
 from fastapi_app.routers.extraction import _note_text_layer_provenance
 
@@ -81,3 +81,16 @@ class TestNoteTextLayerProvenance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PendingTextCorrectionPagesTest(unittest.TestCase):
+    def test_no_records(self):
+        self.assertEqual(pending_text_correction_pages({}), [])
+
+    def test_pages_since_the_last_whole_document_write(self):
+        records = [{"pages": [7]}, {"corrections": []}, {"pages": [3, 1]}, {"pages": [1, 2]}]
+        self.assertEqual(pending_text_correction_pages({"text_corrections": records}), [1, 2, 3])
+
+    def test_whole_document_write_last(self):
+        records = [{"pages": [3]}, {"corrections": []}]
+        self.assertEqual(pending_text_correction_pages({"text_corrections": records}), [])
