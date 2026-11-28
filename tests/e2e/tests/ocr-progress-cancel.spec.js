@@ -1,10 +1,11 @@
 /**
- * Text recognition in the extraction dialog runs as a job in the background instead of behind the
- * blocking spinner: the job's widget (shown by the jobs plugin) shows the progress, cancelling
- * stops the job and nothing is extracted, and a result that finishes after the user opened other
- * documents is only loaded if the user confirms. The OCR routes are answered with stand-in jobs
- * (`test.progress`, see helpers/ocr-job-helper.js), since the real run needs an OCR engine and is
- * covered by the backend tests; the extractor check and extraction routes are mocked.
+ * Text recognition in the extraction dialog is the first step of the extraction job, which runs in
+ * the background instead of behind the blocking spinner: the job's widget (shown by the jobs
+ * plugin) shows the progress, cancelling stops the job and nothing is extracted, and a result that
+ * finishes after the user opened other documents is only loaded if the user confirms. The
+ * extraction job route and the OCR routes are answered with stand-in jobs (`test.progress`, see
+ * helpers/ocr-job-helper.js), since the real run needs an OCR engine and is covered by the backend
+ * tests; the extractor check and the synchronous extraction route are mocked.
  *
  * @testCovers app/src/plugins/extraction.js
  * @testCovers app/src/plugins/ocr.js
@@ -87,10 +88,11 @@ async function startExtractionWithOcr(page, consoleLogs) {
 /**
  * The id of the job that the client submitted.
  * @param {ReturnType<typeof setupTestConsoleCapture>} consoleLogs
+ * @param {string} [message] - The test log message of the submit
  * @returns {Promise<string>}
  */
-async function submittedJobId(consoleLogs) {
-  const submitted = await waitForTestMessage(consoleLogs, 'OCR_JOB_SUBMITTED', 20000);
+async function submittedJobId(consoleLogs, message = 'OCR_JOB_SUBMITTED') {
+  const submitted = await waitForTestMessage(consoleLogs, message, 20000);
   return submitted.value.jobId;
 }
 
@@ -101,18 +103,21 @@ test.describe('Text recognition in the background', () => {
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
     try {
       const mocks = await mockRoutes(page);
-      await standInOcrJobs(page, '**/api/v1/ocr', () => ({ steps: 100, delay_ms: 300, phase: 'Recognizing text', unit: 'page' }));
+      const { requests } = await standInOcrJobs(page, '**/api/v1/extract/job', () => ({ steps: 100, delay_ms: 300, phase: 'Recognizing text', unit: 'page' }));
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
       await startExtractionWithOcr(page, consoleLogs);
 
-      const widget = jobWidget(page, await submittedJobId(consoleLogs));
+      const widget = jobWidget(page, await submittedJobId(consoleLogs, 'EXTRACTION_JOB_SUBMITTED'));
+      // text recognition is the first step of the extraction job
+      expect(requests[0].ocr.stable_id).toBe(requests[0].file_id);
+      expect(requests[0].ocr.engine).toBe(ENGINE.id);
       await expect(widget).toContainText('Recognizing text', { timeout: 20000 });
       // no blocking spinner and no widget of the extraction while the job runs
       expect(await page.evaluate(() => /** @type {any} */(window).ui.spinner.container.classList.contains('hidden'))).toBe(true);
       await expect(page.locator('.progress-widget[data-progress-id^="ocr-extraction-"]')).toHaveCount(0);
 
       await widget.locator('[data-name="cancelBtn"]').click();
-      await waitForTestMessage(consoleLogs, 'OCR_CANCELLED', 15000);
+      await waitForTestMessage(consoleLogs, 'EXTRACTION_CANCELLED', 15000);
       await expect(widget).toHaveCount(0);
       await expect(page.locator('sl-alert', { hasText: 'Text recognition was cancelled' })).toBeVisible();
       expect(mocks.extractCalls()).toBe(0);
@@ -130,18 +135,21 @@ test.describe('Text recognition in the background', () => {
     try {
       await mockRoutes(page);
       // cancelling during the correction pass keeps the OCR result: the job ends done with
-      // `llm_correction_cancelled`, and nothing is extracted
-      await standInOcrJobs(page, '**/api/v1/ocr', body => ({
+      // `cancelled` and the OCR result with `llm_correction_cancelled`, and nothing is extracted
+      await standInOcrJobs(page, '**/api/v1/extract/job', body => ({
         steps: 100,
         delay_ms: 300,
         phase: 'Correcting OCR errors',
         unit: 'window',
-        cancel_result: { stable_id: body.stable_id, source_stable_id: body.stable_id, changed: true, quality: QUALITY, llm_corrections: [], llm_correction_cancelled: true }
+        cancel_result: {
+          id: null, pdf: null, xml: null, language_conflict: null, cancelled: true,
+          ocr: { stable_id: body.ocr.stable_id, source_stable_id: body.ocr.stable_id, changed: true, quality: QUALITY, llm_corrections: [], llm_correction_cancelled: true }
+        }
       }));
       await navigateAndLogin(page, 'testreviewer', 'reviewerpass');
       await startExtractionWithOcr(page, consoleLogs);
 
-      const widget = jobWidget(page, await submittedJobId(consoleLogs));
+      const widget = jobWidget(page, await submittedJobId(consoleLogs, 'EXTRACTION_JOB_SUBMITTED'));
       await expect(widget).toContainText('Correcting OCR errors', { timeout: 20000 });
       // the user opens other documents meanwhile, then cancels the correction
       const loadResult = await selectFirstDocuments(page);

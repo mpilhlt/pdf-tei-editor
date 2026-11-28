@@ -378,8 +378,8 @@ class TestExtractionRouteSetsLanguage(unittest.TestCase):
         app.dependency_overrides[get_settings] = lambda: Settings(DATA_ROOT=str(self.test_dir))
 
         try:
-            with patch("fastapi_app.routers.extraction.create_extractor", return_value=_GermanExtractor()), \
-                    patch("fastapi_app.routers.extraction.extract_pdf_text", return_value=""):
+            with patch("fastapi_app.lib.extraction.run.create_extractor", return_value=_GermanExtractor()), \
+                    patch("fastapi_app.lib.extraction.run.extract_pdf_text", return_value=""):
                 response = TestClient(app).post(
                     "/api/v1/extract",
                     json={"extractor": "mock-extractor", "file_id": file_hash, "options": {}},

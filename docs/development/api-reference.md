@@ -70,8 +70,9 @@ This schema is used to auto-generate the frontend API client.
 
 **Extraction**
 
-- `/api/v1/extraction/list` - List available extractors
-- `/api/v1/extraction` - Extract TEI from PDF
+- `/api/v1/extract/list` - List available extractors
+- `/api/v1/extract` - Extract TEI from PDF or XML (synchronous)
+- `/api/v1/extract/job` - Extract as a job (type `extract`, optionally with text recognition first)
 
 **Validation**
 

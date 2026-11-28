@@ -1686,6 +1686,26 @@
  */
 
 /**
+ * Request of `POST /api/v1/extract/job`: an extraction run as a job, with text recognition as its optional first step
+ * @typedef {Object} ExtractJobRequest
+ * @property {string} extractor - ID of the extractor to use
+ * @property {string} file_id - File identifier (stable ID or hash)
+ * @property {Record<string, any>=} options - Extractor-specific options (e.g., doi, collection, variant_id)
+ * @property {OcrRequest|null=} ocr - If set and the extractor extracts from the PDF, text recognition is applied to the PDF (`stable_id` must be the PDF of `file_id`) before the extraction, which then extracts from the new PDF
+ */
+
+/**
+ * Result of a job of type `extract`: the extraction response, and the result of the text recognition if it ran
+ * @typedef {Object} ExtractJobResult
+ * @property {string|null=} id - Document ID (for PDF-based extractions)
+ * @property {string|null=} pdf - PDF file (stable_id), if applicable
+ * @property {string|null=} xml - Extracted XML file (stable_id); null if nothing was extracted because the job was cancelled after the text recognition result was stored
+ * @property {LanguageConflict|null=} language_conflict - Set if the declared language contradicts the detected one
+ * @property {OcrResponse|null=} ocr - Result of the text recognition, if the job ran it
+ * @property {boolean=} cancelled - The job was cancelled after the text recognition result was stored (also during its LLM correction pass): the new PDF is kept, nothing was extracted
+ */
+
+/**
  * Request to check whether an extractor can run now
  * @typedef {Object} ExtractorCheckRequest
  * @property {string} extractor - ID of the extractor
@@ -2565,6 +2585,21 @@ export class ApiClientV1 {
    */
   async extract(requestBody) {
     const endpoint = `/extract`
+    return this.callApi(endpoint, 'POST', requestBody);
+  }
+
+  /**
+   * Submit a job (type `extract`) that runs the extraction of {@link ApiClientV1#extract}, with
+   * text recognition of the PDF first if `ocr` is set. Invalid requests are rejected at once (400,
+   * 404, and for `ocr` the errors of {@link ApiClientV1#ocr}), a PDF that another job holds with
+   * 409. Wait for the job with the `jobs` plugin; its result is an {@link ExtractJobResult}. An
+   * extractor that needs an API key the user has not stored fails the job with status 428.
+   *
+   * @param {ExtractJobRequest} requestBody
+   * @returns {Promise<Job>}
+   */
+  async extractJob(requestBody) {
+    const endpoint = `/extract/job`
     return this.callApi(endpoint, 'POST', requestBody);
   }
 

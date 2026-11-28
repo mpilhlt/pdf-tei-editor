@@ -207,6 +207,7 @@ class TestSecretsRouter(unittest.TestCase):
 class TestExtractionMissingSecret(unittest.IsolatedAsyncioTestCase):
     async def test_missing_secret_becomes_428_with_service_info(self):
         from fastapi import HTTPException
+        from fastapi_app.lib.extraction import run as extraction_run
         from fastapi_app.routers import extraction
         SecretServiceRegistry.clear()
         register_secret_service("anthropic", "Anthropic Claude", help_url="https://console.anthropic.com/")
@@ -236,8 +237,8 @@ class TestExtractionMissingSecret(unittest.IsolatedAsyncioTestCase):
 
             request = extraction.ExtractRequest(extractor="x", file_id="abc123", options={})
             http_request = type("R", (), {"base_url": "http://localhost/"})()
-            with patch.object(extraction, "create_extractor", return_value=Extractor()), \
-                 patch.object(extraction, "get_storage_path", return_value=pdf):
+            with patch.object(extraction_run, "create_extractor", return_value=Extractor()), \
+                 patch.object(extraction_run, "get_storage_path", return_value=pdf):
                 with self.assertRaises(HTTPException) as ctx:
                     await extraction.extract_metadata(
                         request, http_request, Repo(), None, {"username": "alice"}, Settings()  # type: ignore[arg-type]

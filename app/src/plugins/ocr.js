@@ -8,7 +8,7 @@
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { SlDialog, SlSelect, SlInput, SlCheckbox } from '../ui.js'
  * @import { ocrOptionsDialogPart } from '../templates/ocr-dialog.types.js'
- * @import { Job, OcrEngineInfo, OcrOptionInfo, OcrOptionValue, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
+ * @import { Job, OcrEngineInfo, OcrOptionInfo, OcrOptionValue, OcrRequest, OcrResponse, TextQualityReport } from '../modules/api-client-v1.js'
  */
 
 import { Plugin } from '../modules/plugin-base.js'
@@ -310,18 +310,41 @@ class OcrPlugin extends Plugin {
   async recognize(stableId, run, { signal } = {}) {
     this.getDependency('logger').info(`Applying OCR (${run.engine}, ${run.languages.join(', ')}) to ${stableId}`)
     const client = this.#client
+    const request = this.createRequest(stableId, run)
+    const result = await this.#runJob(stableId, () => client.apiClient.ocr(request), signal)
+    this.reportResult(stableId, result, Boolean(request.llm_correction))
+    return result
+  }
+
+  /**
+   * The request of an OCR run, as `POST /api/v1/ocr` and the `ocr` step of an extraction job take
+   * it. With `run.llmCorrection`, the correction pass uses the default language model, if one is selected.
+   * @param {string} stableId - stable_id of the PDF
+   * @param {OcrRunOptions} run - Engine and parameters
+   * @returns {OcrRequest}
+   */
+  createRequest(stableId, run) {
     const model = run.llmCorrection ? this.getDependency('inference-settings').getDefaultModel() : null
-    const result = await this.#runJob(stableId, () => client.apiClient.ocr({
+    return {
       stable_id: stableId,
       engine: run.engine,
       languages: run.languages,
       options: run.options,
       rebuild: Boolean(run.rebuild),
       ...(model ? { llm_correction: true, provider_id: model.providerId, model_id: model.modelId } : {})
-    }), signal)
+    }
+  }
+
+  /**
+   * Log the result of a finished OCR run and tell the user what its LLM correction pass did; also
+   * for the OCR step of an extraction job.
+   * @param {string} stableId - stable_id of the PDF the run started from
+   * @param {OcrResponse} result
+   * @param {boolean} correctionRequested - Whether the LLM correction was requested
+   */
+  reportResult(stableId, result, correctionRequested) {
     testLog('OCR_COMPLETED', { stableId, changed: result.changed, status: result.quality.status, method: result.method ?? null })
-    this.#reportCorrections(result, Boolean(model))
-    return result
+    this.#reportCorrections(result, correctionRequested)
   }
 
   /**

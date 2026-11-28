@@ -11,7 +11,7 @@
  * @import { ApplicationState } from '../state.js'
  * @import { PluginContext } from '../modules/plugin-context.js'
  * @import { AuthenticationData } from './authentication.js'
- * @import { LockedDetail } from '../modules/api-client-v1.js'
+ * @import { LockedDetail, OcrRequest, Job } from '../modules/api-client-v1.js'
  */
 
 import Plugin from '../modules/plugin-base.js';
@@ -447,6 +447,29 @@ async function extract(file_id, options) {
   });
 }
 
+/**
+ * Submit an extraction job (type `extract`), with text recognition of the PDF as its first step if
+ * `ocr` is given. Wait for the job with the `jobs` plugin; its result is an `ExtractJobResult`.
+ * @param {string} file_id The stable_id of the source document to extract from
+ * @param {any} options The options for the extraction, including the extractor
+ * @param {OcrRequest|null} [ocr] Text recognition to apply to the PDF before the extraction
+ * @returns {Promise<Job>}
+ */
+async function extractJob(file_id, options, ocr = null) {
+  const extractor = options.extractor;
+  if (!extractor) {
+    throw new Error("No extractor given");
+  }
+  const extractionOptions = { ...options };
+  delete extractionOptions.extractor;
+  return await apiClient.extractJob({
+    file_id: file_id,
+    extractor: extractor,
+    options: extractionOptions,
+    ...(ocr ? { ocr } : {})
+  });
+}
+
 
 /**
  * Deletes all extraction document versions with the given file IDs
@@ -790,6 +813,7 @@ const api = {
   getAutocompleteData,
   saveXml,
   extract,
+  extractJob,
   getExtractorList,
   deleteFiles,
   createVersionFromUpload,
