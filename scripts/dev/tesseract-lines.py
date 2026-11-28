@@ -23,6 +23,7 @@ Example:
 Fine-tuning with tesstrain (https://github.com/tesseract-ocr/tesstrain), starting from the
 tessdata_best model, then evaluating the result:
 
+  make -C tesstrain tesseract-langdata   # once: stock unicharsets from langdata_lstm
   make -C tesstrain training MODEL_NAME=deu_pte START_MODEL=deu TESSDATA=<dir with best deu.traineddata> \
       GROUND_TRUTH_DIR=$PWD/gt/train MAX_ITERATIONS=10000
   uv run python scripts/dev/tesseract-lines.py eval gt/eval -m best/deu -m deu_pte --tessdata-dir <dir with all models>
