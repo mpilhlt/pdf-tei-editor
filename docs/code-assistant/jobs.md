@@ -94,6 +94,7 @@ Only one OCR engine run happens at a time on the server, whichever job runs it (
 
 - A busy engine means waiting, never 409. The job retries every `OCR_ENGINE_POLL_INTERVAL` (1 s), reports the phase `OCR_ENGINE_WAIT_PHASE` ("Waiting for another text recognition to finish") and can be cancelled while it waits; it then ends `cancelled` without running the engine.
 - While the engine runs, the lock is renewed every `OCR_ENGINE_RENEW_INTERVAL` (30 s, well below `LOCK_TIMEOUT_SECONDS`). It is released when the run ends, also after a cancel or an error. The lock of a worker that died becomes stale and is taken over.
+- The engine runs in a thread through the `OcrEngineRun` that `ocr_engine_lock()` yields (`await run_engine(engine.recognize, ...)`), not through a bare `asyncio.to_thread()`. A thread cannot be stopped: if the job's task is cancelled while the engine runs (worker stop, lost lease, deletion of an active job), the lock is kept and renewed until the thread returns, at most `OCR_ENGINE_STOP_TIMEOUT` (30 min), so that no second engine run starts meanwhile. A cancel through the progress reports ends the thread first and does not wait.
 - Ids with the prefix `LOCAL_LOCK_PREFIX` (`local:`, `fastapi_app/lib/core/locking.py`) lock resources of this instance, not files: `get_all_active_locks()` leaves them out, so neither the file list nor the lock sync with other instances (webdav-sync) sees them, and acquiring them ignores the locks of remote instances.
 
 ## Files a Job Produces

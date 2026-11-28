@@ -40,7 +40,7 @@ from fastapi_app.config import get_settings
 from fastapi_app.lib.core import locking
 from fastapi_app.lib.core.db_utils import close_all_connections
 from fastapi_app.lib.core.dependencies import get_file_repository, get_file_storage, require_authenticated_user
-from fastapi_app.lib.core.locking import check_lock, reset_locks_db_initialized
+from fastapi_app.lib.core.locking import acquire_lock, check_lock, release_lock, reset_locks_db_initialized
 from fastapi_app.lib.jobs import create_job_manager, set_job_manager
 from fastapi_app.lib.jobs import manager as manager_module
 import pypdfium2 as pdfium
@@ -665,6 +665,41 @@ class TestOcrRouter(OcrJobsHarness, unittest.TestCase):
         self.engine.error = RuntimeError("pipeline aborted")
         job = self.run_ocr({"stable_id": "pdf1", "engine": "fake"})
         self.assertEqual(job["status"], "cancelled")
+
+    def test_engine_lock_is_kept_until_a_cancelled_engine_returns(self):
+        # the job task is cancelled while the engine thread runs on, e.g. when the worker stops,
+        # the job loses its lease or an admin deletes the active job
+        db_dir, log = get_settings().db_dir, logging.getLogger(__name__)
+
+        def engine_lock_free() -> bool:
+            """Whether another job could take the OCR engine lock (which check_lock does not report)."""
+            if not acquire_lock(ocr_job_types.OCR_ENGINE_LOCK_ID, "job:probe", db_dir, log):
+                return False
+            release_lock(ocr_job_types.OCR_ENGINE_LOCK_ID, "job:probe", db_dir, log)
+            return True
+
+        started, release = self.block_engine()
+        try:
+            job = self.start({"stable_id": "pdf1", "engine": "fake"})
+            self.assertTrue(started.wait(10))
+            self.assertFalse(engine_lock_free())
+
+            async def cancel_task() -> None:
+                self.manager._running[job["id"]].task.cancel()
+
+            with self.assertLogs(ocr_job_types.logger.name, level="WARNING") as logs:
+                self.client.portal.call(cancel_task)
+                time.sleep(0.5)
+                # another worker must not start a second engine run meanwhile
+                self.assertFalse(engine_lock_free())
+                release.set()
+                deadline = time.monotonic() + 5
+                while not engine_lock_free() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(engine_lock_free())
+            self.assertTrue(any("still runs" in line for line in logs.output), logs.output)
+        finally:
+            release.set()
 
     def test_queued_job_is_cancelled_at_once(self):
         started, release = self.block_engine()

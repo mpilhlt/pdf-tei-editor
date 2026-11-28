@@ -18,12 +18,12 @@ stored before the LLM correction pass starts, so cancelling the pass keeps it; t
 
 import asyncio
 import tempfile
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
 from fastapi import HTTPException
 from fastapi_jobqueue import Job, JobContext, JobManager, ResourceBusy
@@ -74,6 +74,12 @@ OCR_ENGINE_POLL_INTERVAL = 1.0
 
 OCR_ENGINE_RENEW_INTERVAL = 30.0
 """Seconds between the renewals of the OCR engine lock while the engine runs; well below LOCK_TIMEOUT_SECONDS."""
+
+OCR_ENGINE_STOP_TIMEOUT = 1800.0
+"""Seconds that a cancelled job keeps (and renews) the OCR engine lock while the engine thread, which cannot be stopped, still runs."""
+
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
 
 
 class OcrJobParams(OcrRequest):
@@ -381,13 +387,38 @@ def _store_pdf(repo: FileRepository, storage: FileStorage, source: FileMetadata,
     return repo.create_pdf_version(source.stable_id, new_hash, len(content), file_metadata, created_by=str(user.get("username") or "") or None)
 
 
+class OcrEngineRun:
+    """
+    Runs the blocking engine call of a job in a thread (see `ocr_engine_lock()`), and keeps the
+    task that waits for the thread, so that the lock is held until the thread returned, even if
+    the job's task is cancelled meanwhile.
+    """
+
+    def __init__(self) -> None:
+        self.task: asyncio.Task[Any] | None = None
+
+    async def __call__(self, func: Callable[_P, _T], *args: _P.args, **kwargs: _P.kwargs) -> _T:
+        """Run `func` in a thread (with the context of the caller, e.g. its progress reporter) and return its result."""
+        task: asyncio.Task[_T] = asyncio.ensure_future(asyncio.to_thread(func, *args, **kwargs))
+        # an exception of a run whose caller was cancelled is not retrieved otherwise
+        task.add_done_callback(lambda t: t.cancelled() or t.exception())
+        self.task = task
+        # shielded: cancelling the job's task must not cancel the task that waits for the thread
+        return await asyncio.shield(task)
+
+
 @asynccontextmanager
-async def ocr_engine_lock(ctx: JobContext) -> AsyncIterator[None]:
+async def ocr_engine_lock(ctx: JobContext) -> AsyncIterator[OcrEngineRun]:
     """
     Hold the OCR engine lock while the body runs, so that only one OCR engine run happens at a
     time on the server (across all workers and job types). While another job holds it, wait and
     report `OCR_ENGINE_WAIT_PHASE`; the lock is renewed while the body runs and released afterwards.
     A lock left behind by a worker that died becomes stale after `LOCK_TIMEOUT_SECONDS` and is taken over.
+
+    The body runs the engine with the yielded `OcrEngineRun`. If the job's task is cancelled while
+    the engine thread runs (worker stop, lost lease, deletion of the active job), the thread cannot
+    be stopped: the lock is kept and renewed until it returns, at most `OCR_ENGINE_STOP_TIMEOUT`
+    seconds. A cancel through the progress reports ends the thread first and does not wait.
 
     Raises:
         JobCancelled: if the job is cancelled while it waits
@@ -413,15 +444,25 @@ async def ocr_engine_lock(ctx: JobContext) -> AsyncIterator[None]:
                 logger.exception(f"Could not renew the OCR engine lock of job {ctx.job_id}")
 
     renewal = asyncio.create_task(renew())
+    run = OcrEngineRun()
     try:
-        yield
+        yield run
     finally:
-        renewal.cancel()
         try:
-            # synchronous, so that a cancelled task still releases the lock
-            release_lock(OCR_ENGINE_LOCK_ID, holder, db_dir, logger)
-        except Exception:
-            logger.exception(f"Could not release the OCR engine lock of job {ctx.job_id}")
+            if run.task is not None and not run.task.done():
+                logger.warning(f"Job {ctx.job_id} ended while the OCR engine still runs; keeping the OCR engine lock until the engine returns")
+                done, _ = await asyncio.wait({run.task}, timeout=OCR_ENGINE_STOP_TIMEOUT)
+                if done:
+                    logger.info(f"The OCR engine run of job {ctx.job_id} returned; releasing the OCR engine lock")
+                else:
+                    logger.error(f"The OCR engine run of job {ctx.job_id} did not return within {OCR_ENGINE_STOP_TIMEOUT:.0f} s; releasing the OCR engine lock anyway")
+        finally:
+            renewal.cancel()
+            try:
+                # synchronous, so that a cancelled task still releases the lock
+                release_lock(OCR_ENGINE_LOCK_ID, holder, db_dir, logger)
+            except Exception:
+                logger.exception(f"Could not release the OCR engine lock of job {ctx.job_id}")
 
 
 async def recognize_for_job(ctx: JobContext, params: OcrJobParams, user: dict[str, Any]) -> OcrResponse:
@@ -464,11 +505,11 @@ async def _recognize(ctx: JobContext, params: OcrJobParams, user: dict[str, Any]
     input_path = pdf_path(storage, file)
     with tempfile.TemporaryDirectory(prefix="pte-ocr-") as tmp:
         output_path = Path(tmp) / "output.pdf"
-        async with ocr_engine_lock(ctx):
+        async with ocr_engine_lock(ctx) as run_engine:
             with progress_reporter(ctx.report_threadsafe, ctx.check_cancelled) as progress:
                 try:
-                    # to_thread passes the progress reporter on to the worker thread
-                    outcome = await asyncio.to_thread(engine.recognize, input_path, output_path, languages, options, params.rebuild)
+                    # the run passes the progress reporter on to the worker thread (like to_thread)
+                    outcome = await run_engine(engine.recognize, input_path, output_path, languages, options, params.rebuild)
                 except ValueError as e:
                     # an engine may turn the cancellation raised in its progress report into its own error
                     progress.check_cancelled()
