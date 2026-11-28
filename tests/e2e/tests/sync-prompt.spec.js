@@ -174,6 +174,8 @@ async function syncEntries(page) {
 test.describe('Sync prompt', () => {
 
   test('asks reviewers to synchronize new sync diagnostics', async ({ page }) => {
+    // two prompts with their delays, three choices and the drawer checks: ~20 s locally, slower in the CI container
+    test.setTimeout(90000);
     const consoleLogs = setupTestConsoleCapture(page);
     const stopErrorMonitoring = setupErrorFailure(consoleLogs, ALLOWED_ERROR_PATTERNS);
 
