@@ -90,6 +90,7 @@ from fastapi_app.lib.ocr.text_corrections import (
     register_corrected_pdf_handler,
     unregister_corrected_pdf_handler,
 )
+from fastapi_app.lib.ocr.provenance import pending_text_correction_pages
 from fastapi_app.lib.repository.file_repository import FileRepository
 from fastapi_app.lib.services.service_registry import BaseService, get_service_registry
 from fastapi_app.lib.sse.event_bus import EventBus, get_event_bus
@@ -140,6 +141,7 @@ __all__ = [
     "PAGES_UNIT_PATH",
     "get_completion_session",
     "get_corrected_pdf_handler",
+    "pending_text_correction_pages",
     "post_completion",
     "rate_limit_http_error",
     "ModelStatus",

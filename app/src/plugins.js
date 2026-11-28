@@ -23,6 +23,7 @@ import {
   ConfigPlugin,
   PluginAdminPlugin,
   DiagnosticsDrawerPlugin,
+  SyncPromptPlugin,
   DialogPlugin,
   DocumentActionsPlugin,
   DocumentRulesPlugin,
@@ -127,6 +128,7 @@ const plugins = [
   DocumentRulesPlugin,     // Tools menu — Document rules section (edit prompts/schemas, refresh)
   TeiValidationPlugin,
   DiagnosticsDrawerPlugin, // lists editor diagnostics in a drawer over the PDF viewer
+  SyncPromptPlugin,        // asks reviewers to write text changes that put the TEI out of sync with the PDF into it
   MoveFilesPlugin,
   SsePlugin,
   ProgressPlugin,
