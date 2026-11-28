@@ -45,7 +45,7 @@ Measured in the cloud container (4 cores, Tesseract 5.3.4 from Ubuntu, `tessdata
 | `lstmtraining`, 300 iterations, `OMP_THREAD_LIMIT=1` | 55 s (about 0.18 s per line) |
 | `lstmtraining`, 300 iterations, 4 threads | 36 s (about 0.12 s per line) |
 
-Tesseract scales every line to a fixed height, so the time per iteration grows with the width-to-height ratio of a line. Lines of a book page at 300 dpi are about twice as wide relative to their height as the synthetic ones, so roughly 0.3–0.4 s per iteration on one core: 10,000 iterations take about an hour on one core, or 20–40 minutes on four threads. Memory stayed below 1 GB. The Ubuntu/Debian package `tesseract-ocr` ships `lstmtraining` and the other training programs, so no extra build is needed. tesstrain downloads its stock unicharsets with `wget` from github.com (`make tesseract-langdata`); behind a proxy that blocks this, fetch them from raw.githubusercontent.com into `data/langdata/`.
+Tesseract scales every line to a fixed height, so the time per iteration grows with the width-to-height ratio of a line. Lines of a book page at 300 dpi are about twice as wide relative to their height as the synthetic ones, so roughly 0.3–0.4 s per iteration on one core: 10,000 iterations take about an hour on one core, or 20–40 minutes on four threads. `lstmtraining` peaked at about 210 MB of memory. The Ubuntu/Debian package `tesseract-ocr` ships `lstmtraining` and the other training programs, so no extra build is needed. tesstrain downloads its stock unicharsets with `wget` from github.com (`make tesseract-langdata`); behind a proxy that blocks this, fetch them from raw.githubusercontent.com into `data/langdata/`.
 
 ## Next
 
