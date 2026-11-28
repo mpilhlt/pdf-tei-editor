@@ -20,7 +20,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from fastapi_jobqueue import Job
+from fastapi_jobqueue import Job, JobManager, Principal
+from fastapi_jobqueue.errors import JobNotFound
 from starlette.background import BackgroundTask
 
 from fastapi_app.lib.core.dependencies import (
@@ -30,7 +31,9 @@ from fastapi_app.lib.core.dependencies import (
     require_session_id,
 )
 from fastapi_app.lib.core.sessions import SessionManager
+from fastapi_app.lib.permissions.acl_utils import user_is_admin
 from fastapi_app.lib.jobs import get_job_manager
+from fastapi_app.lib.jobs.files import job_output_path
 from fastapi_app.lib.core.data_restore import STAGING_DIR, RestoreError, stage_restore
 from fastapi_app.lib.core.worker_recycle import can_recycle_workers, recycle_workers
 from fastapi_app.lib.plugins.plugin_manifest import get_pte_version
@@ -162,6 +165,70 @@ async def start_backup(
     """
     _authorize(BACKUP_ROLE, user)
     return await get_job_manager().submit(BACKUP_JOB_TYPE, None, owner=user["username"])
+
+
+async def _own_backup_job(job_id: str, user: dict[str, Any], manager: JobManager) -> Job:
+    """Resolve a backup job of the user (admins may see all).
+
+    Raises:
+        HTTPException: 404 if the job does not exist or is not a backup job, 403 if the user may not see it
+    """
+    try:
+        job = await manager.get(job_id)
+    except JobNotFound:
+        raise HTTPException(status_code=404, detail="Backup not found")
+    if job.type != BACKUP_JOB_TYPE:
+        raise HTTPException(status_code=404, detail="Backup not found")
+    principal = Principal(id=user["username"], is_admin=user_is_admin(user))
+    if not manager.can_view(principal, job):
+        raise HTTPException(status_code=403, detail="Not your backup")
+    return job
+
+
+# The status, cancel and file routes below are under /api/plugins/, which the plugin session cookie
+# covers, so the page works even if the session header of its fetch() is missing, and the file
+# streams to disk through a navigation instead of being held in the page's memory.
+
+
+@router.get("/backup/{job_id}")
+async def get_backup_status(
+    job_id: str,
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    manager: JobManager = Depends(get_job_manager),
+) -> Job:
+    """The state of a backup job (for the page's polling)."""
+    _authorize(BACKUP_ROLE, user)
+    return await _own_backup_job(job_id, user, manager)
+
+
+@router.post("/backup/{job_id}/cancel")
+async def cancel_backup(
+    job_id: str,
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    manager: JobManager = Depends(get_job_manager),
+) -> Job:
+    """Cancel a backup job."""
+    _authorize(BACKUP_ROLE, user)
+    job = await _own_backup_job(job_id, user, manager)
+    return await manager.cancel(job.id)
+
+
+@router.get("/backup/{job_id}/file")
+async def get_backup_file(
+    job_id: str,
+    user: dict[str, Any] = Depends(require_authenticated_user),
+    manager: JobManager = Depends(get_job_manager),
+) -> FileResponse:
+    """Stream the ZIP of a finished backup job (404 while it is not done)."""
+    _authorize(BACKUP_ROLE, user)
+    job = await _own_backup_job(job_id, user, manager)
+    result = job.result
+    if job.status != "done" or not isinstance(result, dict) or not isinstance(result.get("filename"), str):
+        raise HTTPException(status_code=404, detail="The backup is not finished")
+    path = job_output_path(job.id) / result["filename"]
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="The backup file no longer exists")
+    return FileResponse(path, media_type="application/zip", filename=result["filename"])
 
 
 @router.get("/download")

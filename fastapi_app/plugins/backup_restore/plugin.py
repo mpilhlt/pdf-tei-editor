@@ -123,6 +123,7 @@ class BackupRestorePlugin(Plugin):
                     "label": "Backup & Restore",
                     "description": "Download a backup or restore from a ZIP file",
                     "icon": "archive",
+                    "url_openable": True,
                     "state_params": [],
                 }
             ],

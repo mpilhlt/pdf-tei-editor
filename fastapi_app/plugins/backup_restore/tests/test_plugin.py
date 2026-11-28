@@ -742,8 +742,9 @@ class TestBackupJob(unittest.TestCase):
         users = {
             "alice": {"username": "alice", "roles": ["backup"]},
             "bob": {"username": "bob", "roles": ["restore"]},
+            "carol": {"username": "carol", "roles": ["backup"]},
         }
-        sessions = {"alice-session": users["alice"], "bob-session": users["bob"]}
+        sessions = {"alice-session": users["alice"], "bob-session": users["bob"], "carol-session": users["carol"]}
         session_manager = MagicMock()
         session_manager.is_session_valid.return_value = True
         auth_manager = MagicMock()
@@ -800,6 +801,56 @@ class TestBackupJob(unittest.TestCase):
         self.assertIn("db/users.json", names)
         self.assertNotIn("db/jobs.db", names)
         self.assertFalse([n for n in names if n.startswith("jobs/")])
+
+    def test_plugin_routes_status_and_streamed_file(self):
+        base = "/api/plugins/backup-restore/backup"
+        alice = {"X-Session-ID": "alice-session"}
+        job_id = self.submit().json()["id"]
+        job = self.wait_for(job_id, ("done", "error"))
+        self.assertEqual(job["status"], "done", job)
+
+        status = self.client.get(f"{base}/{job_id}", headers=alice)
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()["status"], "done")
+
+        file = self.client.get(f"{base}/{job_id}/file", headers=alice)
+        self.assertEqual(file.status_code, 200, file.text)
+        self.assertEqual(file.headers["content-type"], "application/zip")
+        self.assertIn(job["result"]["filename"], file.headers["content-disposition"])
+        self.assertEqual(hashlib.sha256(file.content).hexdigest(), job["result"]["sha256"])
+
+        other = {"X-Session-ID": "carol-session"}
+        self.assertEqual(self.client.get(f"{base}/{job_id}/file", headers=other).status_code, 403)
+        self.assertEqual(self.client.get(f"{base}/{job_id}", headers=other).status_code, 403)
+        self.assertEqual(self.client.post(f"{base}/{job_id}/cancel", headers=other).status_code, 403)
+        self.assertEqual(self.client.get(f"{base}/{job_id}/file", headers={"X-Session-ID": "bob-session"}).status_code, 403)
+        self.assertEqual(self.client.get(f"{base}/nonexistent/file", headers=alice).status_code, 404)
+
+    def test_plugin_file_route_unfinished_job_is_404_and_cancel_works(self):
+        import threading
+
+        from fastapi_app.plugins.backup_restore import archive
+
+        started = threading.Event()
+        release = threading.Event()
+        original = archive.snapshot_sqlite
+
+        def slow_snapshot(source: Path, target: Path) -> None:
+            started.set()
+            release.wait(10)
+            original(source, target)
+
+        sqlite3.connect(self.data / "db" / "metadata.db").close()
+        base = "/api/plugins/backup-restore/backup"
+        alice = {"X-Session-ID": "alice-session"}
+        with patch.object(archive, "snapshot_sqlite", slow_snapshot):
+            job_id = self.submit().json()["id"]
+            self.assertTrue(started.wait(10))
+            self.assertEqual(self.client.get(f"{base}/{job_id}/file", headers=alice).status_code, 404)
+            self.assertEqual(self.client.post(f"{base}/{job_id}/cancel", headers=alice).status_code, 200)
+            release.set()
+            job = self.wait_for(job_id, ("cancelled", "done", "error"))
+        self.assertEqual(job["status"], "cancelled")
 
     def test_backup_job_requires_role(self):
         self.assertEqual(self.submit("bob-session").status_code, 403)

@@ -183,7 +183,7 @@
             let job = null;
             for (;;) {
                 const headers = etag ? { 'If-None-Match': etag } : {};
-                const response = await fetch('/api/v1/jobs/' + jobId, { headers });
+                const response = await fetch('/api/plugins/backup-restore/backup/' + jobId, { headers });
                 if (response.status !== 304) {
                     if (!response.ok) throw new Error('Could not read the backup job (' + response.status + ')');
                     etag = response.headers.get('ETag');
@@ -196,22 +196,12 @@
         }
 
         /**
-         * Download the backup ZIP of a finished job. The plugin session cookie does not cover
-         * /api/v1/, so the file is fetched (the page's fetch adds the session) and saved from memory.
-         * @param {{download: string, filename: string}} result
-         * @returns {Promise<void>}
+         * Download the backup ZIP of a finished job by navigating to the plugin route, which the
+         * plugin session cookie authenticates and which streams the file to disk.
+         * @param {string} jobId
          */
-        async function saveBackup(result) {
-            const response = await fetch(result.download);
-            if (!response.ok) throw new Error('Download failed (' + response.status + ')');
-            const url = URL.createObjectURL(await response.blob());
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = result.filename;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
+        function saveBackup(jobId) {
+            window.location.href = '/api/plugins/backup-restore/backup/' + jobId + '/file';
         }
 
         /**
@@ -234,8 +224,9 @@
                 setCancelVisible(true);
                 const job = await waitForJob(submitted.id);
                 if (job.status === 'done') {
-                    await saveBackup(job.result);
-                    setStatus('downloadStatus', 'Download started.', 'success');
+                    setStatus('downloadStatus', 'Downloading...', 'info');
+                    saveBackup(job.id);
+                    setTimeout(() => setStatus('downloadStatus', 'Download started: ' + job.result.filename, 'success'), 1500);
                 } else if (job.status === 'cancelled') {
                     setStatus('downloadStatus', 'Backup cancelled.', 'info');
                 } else {
@@ -257,7 +248,7 @@
             if (!backupJobId) return;
             document.getElementById('cancelBtn').hidden = true;
             setStatus('downloadStatus', 'Cancelling...', 'info');
-            await fetch('/api/v1/jobs/' + backupJobId + '/cancel', { method: 'POST' }).catch(() => {});
+            await fetch('/api/plugins/backup-restore/backup/' + backupJobId + '/cancel', { method: 'POST' }).catch(() => {});
         }
 
         function selectRestoreFile() {
