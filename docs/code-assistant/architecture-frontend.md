@@ -16,6 +16,10 @@ For comprehensive architecture details, see [development/architecture.md](../dev
 - **Templates**: `app/src/templates/` - HTML templates for UI components
 - **Build output**: `app/web/` - Compiled/bundled frontend assets
 
+## Long-Running Jobs
+
+Long-running server work is shown and controlled by the `jobs` plugin (`app/src/plugins/jobs.js`), which wraps `JobClient` (`app/src/modules/job-client.js`), receives job events as SSE event `job` and shows one progress widget per unfinished job. Plugins submit jobs through it and resume client jobs after a reload through the `jobs.resume` extension point; they do not create progress widgets for jobs. `jobs-admin.js` adds the admin dialog. See [Long-Running Jobs](jobs.md).
+
 ## LLM Findings Display
 
 `app/src/modules/llm-findings.js` is the editor-side display of LLM findings `{id, old, new, rationale}`, shared by the `annotation-review` plugin extension and `app/src/plugins/ocr-review.js`. `FindingsDisplay` shows the findings as CodeMirror diagnostics via `lint-utils` (with "Propose fix"/Apply actions), caches them per document in the session (`FindingsCache`) and restores them when a document is reopened. `locateFinding()` finds the exact, unique place of `old` in the document text; `buildModifiedText()` applies a finding. Pass the source name, `getXmleditor`, `getLintUtils`, a `proposeFix` callback and `getDocId` to the constructor.

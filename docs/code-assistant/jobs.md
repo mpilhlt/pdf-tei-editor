@@ -58,6 +58,24 @@ async def run_import(ctx: JobContext, params: ImportParams) -> dict:
 - Blocking work belongs in `asyncio.to_thread()`; from the thread, report with `ctx.report_threadsafe(...)` and check `ctx.check_cancelled()`.
 - An exception fails the job with its message (status 500, or the exception's integer `status_code`). The result must be JSON-serializable.
 
+## Job Types of the Editor
+
+| Type | Driver | Defined in | Notes |
+| --- | --- | --- | --- |
+| `ocr` | server | `fastapi_app/lib/ocr/job_types.py` | Text recognition; `max_concurrent=1`, not resumable, takes the OCR engine lock |
+| `ocr.llm-correction` | server | `fastapi_app/lib/ocr/job_types.py` | LLM correction of a text layer |
+| `ocr.text-corrections` | client | `fastapi_app/lib/ocr/job_types.py` | Written through a route inside `run_request_job` |
+| `ocr.llm-review` | client | `fastapi_app/lib/ocr/job_types.py` | One step per page window, resumed through `jobs.resume` |
+| `extract` | server | `fastapi_app/lib/extraction/job_types.py` | Extraction, including the `ocr` step |
+| `backup-restore.backup` | server | `fastapi_app/plugins/backup_restore/plugin.py` | See below |
+| `test.progress` | server | `fastapi_app/lib/jobs/core_types.py` | For E2E tests of the job UI |
+
+The type names are constants in the modules above (`OCR_JOB_TYPE`, `LLM_CORRECTION_JOB_TYPE`, `TEXT_CORRECTIONS_JOB_TYPE`, `LLM_REVIEW_JOB_TYPE`, `EXTRACT_JOB_TYPE`, `BACKUP_JOB_TYPE`).
+
+### Example: the Backup Job
+
+`POST /api/plugins/backup-restore/backup` (roles `admin` or `backup`) submits `backup-restore.backup` (`max_concurrent=1`) and returns the job (202). The handler writes the ZIP to `job_output_dir(job.id)`; the result is `{download, filename, size, sha256}`. The plugin serves status, cancel and the file under `/api/plugins/backup-restore/backup/{job_id}` (`/cancel`, `/file`) instead of `/api/v1/jobs`, since the plugin session cookie covers `/api/plugins/`, so the file streams to disk through a navigation. These routes accept only backup jobs of the user (admins: all).
+
 ## Resources and Locks
 
 A job lists the files it works on as resources `file:<stable_id>`. `EditorJobHooks` maps them to the editor's file locks (`fastapi_app/lib/core/locking.py`) under the holder id `job:<job id>`:
@@ -99,6 +117,12 @@ async with run_request_job(job_id, principal) as job:  # principal: Depends(curr
 - A client that cannot pass the request (e.g. a validation error before the route runs) leaves the job `queued` without a lease, and it does not expire by itself: the client must cancel it (`jobs.cancel`, which finishes a queued job at once and leaves a finished one as it is). `text-corrections.js` does so for every failed request. It also calls `jobs.wait(id).catch(() => {})`, since the `jobs` plugin notifies the error of a job that this tab does not wait for, and the caller already reports the error of the route.
 - `thread_callbacks(report, check_cancelled)` returns `(progress_callback(current, total, label), cancellation_check() -> bool)` for code with such callbacks (e.g. `update_tei_metadata`). It also works with `ctx.report_threadsafe` / `ctx.check_cancelled` of a server job.
 
+## Event Delivery to the Browser
+
+A browser tab receives job events through the editor's SSE stream (`/api/v1/sse/subscribe`), not through a stream of its own: browsers allow only six connections per host on HTTP/1.1, and every tab already holds one for the SSE stream. `job_sse_bridge()` (`fastapi_app/lib/jobs/sse_bridge.py`, in the app lifespan next to `job_lock_refresher`) subscribes in each worker to the manager's event bus and sends each event as SSE event `job` to the sessions whose SSE stream this worker serves and whose user may see the job (the owner, admins, everyone for visibility `users`; the rule of `JobManager.can_view`). The data is the event JSON of `/api/v1/jobs/events` plus the job's `owner`. If the bridge's queue overflows, it drops events and sends `jobsResync` to all sessions, which then list the jobs again.
+
+`/api/v1/jobs/events` and `/api/v1/jobs/{job_id}/events` remain for the CLI and other clients.
+
 ## Frontend: `JobClient`
 
 `app/src/modules/job-client.js` has no plugin imports. It gets its events either from a `feed` (`{subscribe(listener) -> unsubscribe, connected() -> boolean}`), which the `jobs` plugin passes, or, without a feed, from an EventSource of its own: `{ api, sessionStorage, eventSourceFactory, eventsUrl }` (`eventsUrl` = `/api/v1/jobs/events?mine=true&sessionId=<id>`). `api` is the `ApiClientV1`, whose `jobs*` methods mirror `/api/v1/jobs` (`jobsSubmit` takes an `idempotencyKey` option, sent as `Idempotency-Key` through the `headers` argument of `callApi`).
@@ -111,12 +135,6 @@ async with run_request_job(job_id, principal) as job:  # principal: Depends(curr
 - `formatJobProgress(job, heading?)`: "Recognizing text, pages 12 of 71, about 2 minutes left".
 - `holder`: the tab's lease holder id.
 
-## Event Delivery to the Browser
-
-A browser tab receives job events through the editor's SSE stream (`/api/v1/sse/subscribe`), not through a stream of its own: browsers allow only six connections per host on HTTP/1.1, and every tab already holds one for the SSE stream. `job_sse_bridge()` (`fastapi_app/lib/jobs/sse_bridge.py`, in the app lifespan next to `job_lock_refresher`) subscribes in each worker to the manager's event bus and sends each event as SSE event `job` to the sessions whose SSE stream this worker serves and whose user may see the job (the owner, admins, everyone for visibility `users`; the rule of `JobManager.can_view`). The data is the event JSON of `/api/v1/jobs/events` plus the job's `owner`. If the bridge's queue overflows, it drops events and sends `jobsResync` to all sessions, which then list the jobs again.
-
-`/api/v1/jobs/events` and `/api/v1/jobs/{job_id}/events` remain for the CLI and other clients.
-
 ## Frontend: the `jobs` Plugin
 
 `app/src/plugins/jobs.js` (`getDependency('jobs')`, `window.jobs` in tests) builds the `JobClient` after login, with the `job` events of the `sse` plugin as its feed (it opens no EventSource; `wait()` polls while the SSE stream is not open), rebuilds it when the session changes and drops it on logout. Use it instead of constructing a `JobClient`:
@@ -128,6 +146,9 @@ A browser tab receives job events through the editor's SSE stream (`/api/v1/sse/
 - **Reload**: the list re-creates the widgets. Then the plugin lists the resumable client jobs (`list({mine: true, resumable: true})`): jobs whose lease holder is this tab are resumed without asking, interrupted jobs of other tabs after the user confirmed (otherwise cancelled); active jobs that another tab holds are left alone. Jobs of a type without a `jobs.resume` contribution are cancelled.
 
 ```javascript
+/**
+ * @import { JobResumeContribution } from './jobs.js'
+ */
 import ep from '../extension-points.js'
 
 class MyPlugin extends Plugin {
@@ -139,13 +160,22 @@ class MyPlugin extends Plugin {
    * Delegates to {@link MyPlugin#getResumeContribution}.
    * @returns {JobResumeContribution}
    */
-  [ep.jobs.resume](...args) { return this.getResumeContribution(...args) }
+  [ep.jobs.resume]() { return this.getResumeContribution() }
 
+  /**
+   * Describes how jobs of type `my-plugin.review` are resumed.
+   * @returns {JobResumeContribution}
+   */
   getResumeContribution() {
-    return { type: 'my-plugin.review', resume: (job) => this.#review(job.params, job.id) }
+    return { type: 'my-plugin.review', resume: async (job) => { await this.#review(job.params, job.id) } }
   }
 
-  /** Runs the review; with a `jobId`, resumes it and skips the saved steps. */
+  /**
+   * Runs the review; with a `jobId`, resumes that job and skips the saved steps.
+   * @param {Record<string, unknown>} params - Job parameters
+   * @param {string} [jobId] - Id of an interrupted job to resume
+   * @returns {Promise<unknown>} The job result
+   */
   async #review(params, jobId) {
     return this.getDependency('jobs').runClientJob('my-plugin.review', params, async ({ step, report }) => {
       // ...
@@ -154,7 +184,7 @@ class MyPlugin extends Plugin {
 }
 ```
 
-The E2E tests in `tests/e2e/tests/jobs-progress.spec.js` use the core type `test.progress`.
+The E2E tests in `tests/e2e/tests/jobs-progress.spec.js` use the core type `test.progress`. `ProgressBar` and the `progress*` SSE events (`app/src/plugins/progress.js`, test routes in `fastapi_app/routers/sse.py`) still exist for plugins outside this repository; they are deprecated for new code, which uses jobs.
 
 ## Frontend: the `jobs-admin` Plugin
 

@@ -155,6 +155,10 @@ The index is derived from the TEI files and can be rebuilt (`POST /api/v1/messag
 
 Bookmarks are served by `routers/bookmarks.py` (`/api/v1/bookmarks`); every query is restricted to the current user. A bookmark stores the file (`stable_id`), the element's XPath below `/TEI/text` and its content fingerprint (`app/src/modules/node-anchor.js`); the frontend resolves the anchor when it opens the bookmark. Changes are sent to the user's other sessions as the SSE event `bookmarksChanged`. Bookmarks are deleted with their file: the `file.deleted` handler (`register_bookmark_hooks()`, called at startup) removes them and sends `bookmarksChanged` to their owners. The `bookmarks` GC task removes the bookmarks of files that are deleted or purged without that event (e.g. by synchronization) and of removed users.
 
+### `jobs/` — Long-running jobs
+
+The job manager on fastapi-jobqueue (`manager.py`), the job type registry (`registry.py`), editor authentication and file-lock hooks (`auth.py`, `hooks.py`), request-driven jobs (`request_job.py`), job output files (`files.py`), the SSE bridge to browser sessions (`sse_bridge.py`) and the routes under `/api/v1/jobs` (`routes.py`). Job types are registered by the modules that own the work. See [Long-Running Jobs](jobs.md).
+
 ### `sse/` — Server-Sent Events
 
 | File | Purpose |

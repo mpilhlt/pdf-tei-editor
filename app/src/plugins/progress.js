@@ -5,6 +5,11 @@
  * controlled via SSE (Server-Sent Events). Supports multiple simultaneous
  * progress widgets, each identified by a unique progress_id.
  *
+ * Job widgets (`job-<job id>`) are created by the `jobs` plugin (`app/src/plugins/jobs.js`) from
+ * the `job` SSE events; use jobs for new long-running work (docs/code-assistant/jobs.md).
+ * The `progress*` SSE events below and `show()` are deprecated for new code and remain for
+ * plugins that still use them.
+ *
  * ## SSE Event Types
  *
  * All events include a `progress_id` field to identify the target widget.

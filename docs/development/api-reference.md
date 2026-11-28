@@ -228,6 +228,7 @@ npm run docs:backend:json
 - `validation.py` - XML validation
 - `sync.py` - WebDAV sync
 - `sse.py` - Server-sent events
+- `fastapi_app/lib/jobs/routes.py` - Job queue routes under `/api/v1/jobs` (see [Long-Running Jobs](../code-assistant/jobs.md))
 - `users.py`, `groups.py`, `roles.py` - RBAC management
 
 ## 4. Hand-maintained API Client

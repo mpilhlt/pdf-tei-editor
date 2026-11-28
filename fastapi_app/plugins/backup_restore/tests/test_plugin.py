@@ -192,7 +192,9 @@ class TestDataRestore(unittest.TestCase):
 
             clock.now.return_value = real_datetime(2030, 1, 1)
             apply_pending_restore(self.data, self.logger, now=clock.now)
-        self.assertEqual(read_applied_restore(self.data)["id"], "20300101_000000")
+        applied = read_applied_restore(self.data)
+        assert applied is not None
+        self.assertEqual(applied["id"], "20300101_000000")
 
     def test_nothing_staged(self):
         from fastapi_app.lib.core.data_restore import apply_pending_restore

@@ -223,12 +223,13 @@ async def get_backup_file(
     _authorize(BACKUP_ROLE, user)
     job = await _own_backup_job(job_id, user, manager)
     result = job.result
-    if job.status != "done" or not isinstance(result, dict) or not isinstance(result.get("filename"), str):
+    filename = result.get("filename") if isinstance(result, dict) else None
+    if job.status != "done" or not isinstance(filename, str):
         raise HTTPException(status_code=404, detail="The backup is not finished")
-    path = job_output_path(job.id) / result["filename"]
+    path = job_output_path(job.id) / filename
     if not path.is_file():
         raise HTTPException(status_code=404, detail="The backup file no longer exists")
-    return FileResponse(path, media_type="application/zip", filename=result["filename"])
+    return FileResponse(path, media_type="application/zip", filename=filename)
 
 
 @router.get("/download")
